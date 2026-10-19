@@ -116,6 +116,8 @@ const EXACT: &[(&str, Class)] = &[
     ("place_component_array", Class::Additive),
     ("apply_template", Class::Additive),
     ("run_ngspice", Class::ReadOnly),
+    ("smart_place", Class::Destructive),
+    ("polish_board", Class::Additive),
 ];
 
 const OPEN_WORLD: &[&str] = &[

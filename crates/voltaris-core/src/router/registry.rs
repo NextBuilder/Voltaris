@@ -201,6 +201,12 @@ pub static ALL_TOOLSETS: &[ToolsetMeta] = &[
         tool_count: 1,
     },
     ToolsetMeta {
+        name: "smart_layout",
+        description: "One-call layout engines: route the whole board (A* autorouter with vias and priorities), plan a professional placement, polish the finish (pin labels, pours, stitching, name block) and audit engineering and beauty",
+        category: "pcb",
+        tool_count: 4,
+    },
+    ToolsetMeta {
         name: "visual_review",
         description: "Render the board in 3D from several angles (top, bottom, iso, sides) with a review checklist for what DRC cannot see",
         category: "review",
@@ -268,6 +274,7 @@ fn build_tools_for(name: &str) -> Option<Vec<ToolDef>> {
         "design_history" => Some(design_history::tools()),
         "datasheet" => Some(datasheet::tools()),
         "block_diagram" => Some(block_diagram::tools()),
+        "smart_layout" => Some(smart_layout::tools()),
         "visual_review" => Some(visual_review::tools()),
         "manufacturing" => Some(manufacturing::tools()),
         _ => None,

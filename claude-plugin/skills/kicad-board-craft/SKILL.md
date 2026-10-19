@@ -23,7 +23,13 @@ load_toolset('pcb_board')        # set_board_size add_board_outline add_mounting
 load_toolset('pcb_components')   # move_component rotate_component align_components get_component_pads
 load_toolset('placement')        # score_placement
 load_toolset('visual_review')    # render_board_3d
+load_toolset('smart_layout')     # polish_board audit_layout
 ```
+
+`polish_board` applies most of this skill in one call — pin labels on both sides, the name and
+version block, a bottom brand line, the ground pour on both outer layers and stitching vias —
+and `audit_layout` scores the result. Use the sections below to decide the style and to fix
+what the engines report.
 
 Decide the style at Gate 0 of kicad-pro-workflow, with the user, using suggested options:
 form factor, mask colour and finish, connector standard, and whether labels go on both sides.
@@ -134,6 +140,9 @@ kicad-pro-layout skill has the electrical reasons):
   when someone will debug it.
 
 ## 8. Beauty review
+
+Run `audit_layout` first: its beauty score covers off-angle tracks, width sprawl, unlabelled
+connectors, the name block, corners, mounting holes, stitching and part rotation.
 
 Before Gate 6 of kicad-pro-workflow, render and inspect:
 

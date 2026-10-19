@@ -17,10 +17,23 @@ fn tools_dir() -> PathBuf {
 }
 
 fn tool_sources() -> Vec<(PathBuf, String)> {
-    let mut sources = std::fs::read_dir(tools_dir())
-        .expect("read tools source directory")
-        .flatten()
-        .map(|entry| entry.path())
+    let mut paths = Vec::new();
+    let mut stack = vec![tools_dir()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)
+            .expect("read tools source directory")
+            .flatten()
+        {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                paths.push(path);
+            }
+        }
+    }
+    let mut sources = paths
+        .into_iter()
         .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
         .map(|path| {
             let source = std::fs::read_to_string(&path)

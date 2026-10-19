@@ -135,8 +135,10 @@ load_toolset('engineering')      # calc_impedance list_stackups calc_trace_width
 load_toolset('placement')        # score_placement place_decoupling_caps
 load_toolset('pcb_components')   # move_component rotate_component align_components
 load_toolset('visual_review')    # render_board_3d
+load_toolset('smart_layout')     # smart_place audit_layout
 ```
 
+Start with `smart_place` (dry run, review the moves, apply), then adjust by hand.
 Follow the kicad-pro-layout skill's floor plan and placement order. In short: fixed mechanical parts (connectors at their edges, buttons, mounting
 holes) → RF module with its antenna over the edge/keep-out → MCU → power stage with its input
 loop tight → decoupling beside the pins it serves (`place_decoupling_caps` with the capacitor
@@ -152,20 +154,24 @@ load_toolset('pcb_routing')      # route_trace route_differential_pair add_via a
 load_toolset('integration')      # check_freerouting route_specctra_dsn
 load_toolset('pcb_export')       # refill_zones
 load_toolset('verification')     # run_drc
+load_toolset('smart_layout')     # route_board polish_board audit_layout
 ```
 
 1. By hand first: power input loop and regulator loops (short, wide), USB pair with
    `route_differential_pair`, RF feed, crystal.
 2. Ground: solid pour on the reference layer (`add_copper_pour`), stitching vias along RF and
    board edges.
-3. Remaining signals with Freerouting (kicad-pro-layout skill, section 5), then review its
-   result — never accept it unseen.
+3. Remaining signals with `route_board` (dry run, then apply with its plan_revision), or
+   Freerouting for very dense boards (kicad-pro-layout skill, section 5). Review the result —
+   never accept it unseen.
+   Then `polish_board` for pin labels, the name block, the mirrored pour and stitching vias.
 4. `refill_zones`, then `run_drc`: 0 errors and 0 unconnected items.
 5. `analyze_net_lengths` on every differential pair and matched group: verdict pass.
    ```
    load_toolset('signal_integrity') # analyze_net_lengths
    ```
 6. `run_design_checks` again — board_nets rules (minimum power trace widths) run now.
+7. `audit_layout`: engineering and beauty grades A, or every remaining finding explained.
 
 ## Gate 6 — Independent review
 

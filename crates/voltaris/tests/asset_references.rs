@@ -733,6 +733,7 @@ fn backticked_tool_names_in_prose_exist_in_the_registry() {
         "plan_status",
         "blocking_reasons",
         "plan_blocked",
+        "plan_revision",
         // Placement evidence source value, not a callable tool.
         "live_ipc",
         // Structured schematic-placement response fields, not callable tools.

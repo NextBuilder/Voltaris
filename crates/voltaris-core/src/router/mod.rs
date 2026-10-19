@@ -202,7 +202,8 @@ mod tests {
                         "batch_edit_schematic_components/properties/edits/items/properties/fields" |
                         "copy_routing_pattern/properties/net_map" |
                         "apply_template/properties/net_mappings" |
-                        "generate_enclosure/properties/component_heights"
+                        "generate_enclosure/properties/component_heights" |
+                        "route_board/properties/net_widths"
                     ),
                         "unreviewed open input record: {path}"
                     );

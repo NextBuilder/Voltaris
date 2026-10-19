@@ -470,7 +470,7 @@ callable tools, the fix is to make the *first* listing complete:
 ```
 
 in `voltaris.toml` in the working directory, or a `settings.json` beside the binary. Setting the environment variable `VOLTARIS_EAGER_TOOLSETS=1` does the same; the Claude plugin sets it for you. Every toolset is then loaded at
-startup, so `tools/list` carries all 260 tools from the first call.
+startup, so `tools/list` carries all 264 tools from the first call.
 
 It is off by default because it costs what the router exists to save: roughly
 25K tokens per listing instead of ~2K. Turn it on only if your client needs it.

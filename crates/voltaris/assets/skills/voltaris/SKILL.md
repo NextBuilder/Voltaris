@@ -80,6 +80,8 @@ does not establish that a missing server-side check ran.
 | "Draw the block diagram / architecture" | 2 | `load_toolset("block_diagram")` then `generate_block_diagram` |
 | "Power supply / battery / regulator design" | — | kicad-power-design skill |
 | "Place and route this like a pro" / "clean up the routing" | 1 | kicad-pro-layout skill |
+| "Autoroute the board" / "place it for me" | 1 | `load_toolset("smart_layout")` then `smart_place` / `route_board` (dry run, then apply with plan_revision) |
+| "Make it look finished" / "score my layout" | 1 | `load_toolset("smart_layout")` then `polish_board` / `audit_layout` |
 | "Make it look like an Adafruit / Seeed / Arduino board" / "add Qwiic" / "pin labels" | 1 | kicad-board-craft skill |
 | "ESP32 board" | — | kicad-esp32 skill |
 | "RP2040 / RP2350 / STM32 / nRF52 board" | — | kicad-mcu-design skill |
@@ -113,7 +115,7 @@ unload_toolset("name")  → Remove a toolset when done
 |----------|----------|
 | Project | project |
 | Schematic | sch_components, sch_wiring, sch_bus, sch_analysis, sch_batch, sch_export, sch_hierarchy |
-| PCB | pcb_board, pcb_components, pcb_routing, pcb_export, placement, signal_integrity |
+| PCB | pcb_board, pcb_components, pcb_routing, pcb_export, placement, signal_integrity, smart_layout |
 | Library | library, lcsc_import |
 | Integration | integration (JLCPCB parts, Freerouting installation checks, datasheet URLs), datasheet (PDF reader) |
 | Verification & Review | verification, design_review, design_checks, visual_review, block_diagram |

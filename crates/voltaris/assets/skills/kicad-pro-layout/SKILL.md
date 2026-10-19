@@ -24,7 +24,26 @@ load_toolset('pcb_routing')      # route_trace route_pad_to_pad route_differenti
 load_toolset('engineering')      # calc_trace_width calc_via calc_impedance
 load_toolset('verification')     # run_drc set_design_rules set_predefined_sizes
 load_toolset('visual_review')    # render_board_3d
+load_toolset('smart_layout')     # smart_place route_board polish_board audit_layout
 ```
+
+## The fast path
+
+The smart_layout engines do in one call what the sections below describe by hand. Each one
+dry-runs first and applies only with the plan_revision it returned, as one KiCad undo step:
+
+1. `smart_place` — connectors to edges, ICs centred, decoupling beside its pins, the rest beside
+   what it connects to, rows aligned. Read the moves and the connection-length reduction, then
+   apply.
+2. Route the critical nets by hand (differential pairs, RF feed, crystal, switching loops).
+3. `route_board` — routes everything else in priority order with vias; aim for
+   100 % completion. Nets it cannot finish are listed with the reason.
+4. `polish_board` — pin labels, name block, mirrored ground pour and stitching vias.
+5. `refill_zones`, `run_drc` (live sync), then `audit_layout` — fix every finding it names, using
+   the tool it names, until the engineering and beauty grades are A.
+
+Use the manual method below when an engine reports a problem it cannot solve, and for every
+critical net.
 
 ## The one physical idea
 
@@ -100,10 +119,11 @@ Style rules that are also good engineering:
 
 ## 5. Autorouter, then clean up
 
-Freerouting is fast and useful for the boring 60 %, never for the critical 40 %.
+An autorouter is fast and useful for the boring 60 %, never for the critical 40 %.
 
 1. Route and lock power, critical and matched nets by hand first.
-2. `check_freerouting`, then `export_specctra_dsn` → `route_specctra_dsn` →
+2. `route_board` is the built-in router (no install). For very dense boards, Freerouting is the
+   alternative: `check_freerouting`, then `export_specctra_dsn` → `route_specctra_dsn` →
    `plan_specctra_ses_import` → `apply_specctra_ses`. Locked tracks are preserved.
    ```
    load_toolset(['pcb_export', 'integration', 'pcb_routing'])   # export_specctra_dsn route_specctra_dsn apply_specctra_ses
@@ -124,6 +144,8 @@ Freerouting is fast and useful for the boring 60 %, never for the critical 40 %.
 6. Run the [layout review](references/layout-review.md) and fix what it finds.
 
 ## Speed habits
+
+- Let the engines do the bulk: `smart_place`, `route_board`, `polish_board`, `audit_layout`.
 
 - Batch: place with `set_component_placements`, read pads with `get_component_pads`, route
   pad-to-pad with `route_pad_to_pad`, rather than one move at a time.

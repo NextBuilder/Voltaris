@@ -12,8 +12,8 @@ Compatibility notes for removed or narrowed arguments are recorded in
 
 ## Overview
 
-- **32 toolsets** organized into 14 categories
-- **253 registered tools** + **7 always-visible meta-tools** = **260 total**
+- **33 toolsets** organized into 14 categories
+- **257 registered tools** + **7 always-visible meta-tools** = **264 total**
 - **Discovery pattern**: the server pre-loads only the **starter kit** (`project`, `config`) so baseline `tools/list` costs ~2K tokens instead of ~23K. The LLM reads `list_toolboxes` → calls `load_toolset(name)` to expose additional tools on demand; `unload_toolset(name)` prunes them. `tools/list_changed` is notified on every mutation. If the LLM calls a tool whose toolset isn't loaded, the error names the owning toolset so recovery is a single `load_toolset` hop. `load_toolset` also accepts an array of names to load several toolsets with a single `tools/list` refresh.
 - **Observability**: every `tools/call` is recorded — ring buffer of the last 100 calls + per-tool counters + JSONL at `<voltaris dir>/logs/calls.jsonl`. The LLM self-diagnoses via `get_recent_calls` and `server_stats`.
 
@@ -28,7 +28,7 @@ and Windows servers do not.
 
 | Tool | Purpose |
 |------|---------|
-| `list_toolboxes` | List all 32 toolsets with category, tool count, and whether each is currently loaded. The LLM's starting point. |
+| `list_toolboxes` | List all 33 toolsets with category, tool count, and whether each is currently loaded. The LLM's starting point. |
 | `load_toolset` | Load a toolset by name to expose its tools in `tools/list`. Returns the list of tools added. |
 | `unload_toolset` | Unload a toolset to prune its tools from `tools/list`. Use when switching tasks to keep context small. |
 | `get_active_toolsets` | Return the currently loaded toolsets and how many tools each provides. |
@@ -585,6 +585,19 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 | Tool | Description |
 |------|-------------|
 | `read_datasheet` | By path, URL, MPN or LCSC number: cached download, page-by-page text, and the pin description, absolute maximum ratings, operating conditions, electrical characteristics, typical application, layout, thermal, package and ordering sections with page numbers; query matches and full pages on request. |
+
+### `smart_layout` · 4 tools
+**Purpose:** One-call layout engines that work live on the board open in KiCad. Each mutating tool plans first and applies only with the plan's revision, as one undo step.
+**Source:** [`crates/voltaris-core/src/tools/smart_layout/mod.rs`](../crates/voltaris-core/src/tools/smart_layout/mod.rs)
+
+| Tool | Description |
+|------|-------------|
+| `route_board` | Grid A* autorouter: routes every unrouted connection in priority order (pours, power, fast, signal, ground) on the allowed copper layers with vias, keeps clearance from foreign copper and the edge, prefers 45°/90° paths with few bends, straightens each path and retries failed nets first. Reports completion, vias and length per net. |
+| `smart_place` | Placement planner: connectors flush on an edge, main ICs centred, decoupling capacitors beside the power pin they serve, other parts beside what they connect to (all four rotations tried), grid-snapped, overlap-free and row-aligned; reports every move and the connection length before and after. |
+| `polish_board` | Maker-brand finish: pin labels beside named connector pins on both sides, product name/version block, bottom brand line, ground pour mirrored to the second outer layer, and a grid of ground stitching vias. |
+| `audit_layout` | Engineering and beauty review with scores and grades: unrouted connections, fast vias without a ground return via, fast traces near the edge, far decoupling, thin power copper, acute corners, vias in pads, no ground plane, off-angle tracks, width sprawl, unlabelled connectors, missing name/version, sharp corners, missing holes, sparse stitching. Each finding names the fixing tool. |
+
+---
 
 ### `block_diagram` · 1 tool
 **Purpose:** The real architecture, drawn from the netlist.

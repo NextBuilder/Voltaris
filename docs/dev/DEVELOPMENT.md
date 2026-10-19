@@ -54,7 +54,7 @@ Voltaris/
 │   │           ├── stdio.rs         # Line-by-line JSON-RPC over stdin/stdout (default)
 │   │           └── http.rs          # Streamable HTTP: POST + GET (SSE) on /mcp (transport = "http" / "both")
 │   │
-│   ├── voltaris-core/          # All tool logic (32 toolsets)
+│   ├── voltaris-core/          # All tool logic (33 toolsets)
 │   │   └── src/
 │   │       ├── mcp/
 │   │       │   ├── protocol.rs      # MCP JSON-RPC 2.0 types
@@ -345,7 +345,7 @@ Source: [`crates/voltaris-core/src/observability.rs`](../../crates/voltaris-core
 
 ## Tool Routing (Starter Kit + On-Demand Loading)
 
-The server does NOT expose all 253 tools (260 total with the 7 meta-tools) in `tools/list` by default — that would cost ~23K tokens of context on every listing. Instead:
+The server does NOT expose all 257 tools (264 total with the 7 meta-tools) in `tools/list` by default — that would cost ~23K tokens of context on every listing. Instead:
 
 - **Startup**: only `STARTER_KIT` toolsets are pre-loaded (see `router/registry.rs::STARTER_KIT`). Currently: `project`, `config`. Combined with the 7 meta-tools, baseline `tools/list` is 21 tools ≈ 2K tokens.
 - **On demand**: the LLM reads `list_toolboxes` → calls `load_toolset(name)` to expose a toolset's tools in subsequent `tools/list` responses. `unload_toolset(name)` prunes them when the task shifts.
@@ -430,12 +430,12 @@ direct handler calls still require checked readers for their domain rules.
 
 ## Current Stats
 
-- **32 toolsets, 253 tools** + 7 meta-tools (4 routing + 2 observability + 1 runtime diagnostic — see `TOOLS.md`)
+- **33 toolsets, 257 tools** + 7 meta-tools (4 routing + 2 observability + 1 runtime diagnostic — see `TOOLS.md`)
 - The standalone Unix executable adds one conditional stdio maintenance meta-tool,
   `reload_server`; it is not registered for an embedded server, HTTP, mixed
   transport, or Windows.
 - Baseline `tools/list`: 21 tools / ~2K tokens (starter kit + meta-tools)
-- Full-catalog `tools/list` (all loaded): 260 tools (253 registered + 7 meta) / ~25K tokens
+- Full-catalog `tools/list` (all loaded): 264 tools (257 registered + 7 meta) / ~25K tokens
 - **0 IPC stubs** (all protobuf methods implemented)
 - **0 unimplemented tools**
 - **Specctra DSN/SES are PCB-editor operations**, not `kicad-cli` commands.

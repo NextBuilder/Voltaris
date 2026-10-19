@@ -59,6 +59,7 @@ pub mod schematic_builder;
 mod schematic_placement_tests;
 pub mod signal_integrity;
 pub mod simulation;
+pub mod smart_layout;
 pub mod svg_import;
 pub mod templates;
 pub mod verification;

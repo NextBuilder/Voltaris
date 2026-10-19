@@ -2501,7 +2501,7 @@ fn parse_component_placements(
     Ok(placements)
 }
 
-async fn handle_set_component_placements(
+pub(crate) async fn handle_set_component_placements(
     args: &serde_json::Value,
     ctx: &ToolContext,
 ) -> anyhow::Result<CallToolResult> {
