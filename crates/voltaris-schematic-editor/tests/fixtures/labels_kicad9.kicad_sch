@@ -1,0 +1,49 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "20adca1d-43a1-4784-9682-8b7dd1c7d330")
+	(paper "A3")
+	(title_block
+		(title "TinyTapeout 4/5 Demo Board PRELIM")
+		(date "2023-11-22")
+		(rev "1.0.4")
+		(company "Psychogenic Technologies")
+		(comment 1 "See LICENSE.txt for details")
+		(comment 2 "Licensed under Apache 2.0")
+		(comment 3 "(C) 2023 Pat Deegan")
+	)
+	(lib_symbols)
+	(global_label "out6"
+		(shape input)
+		(at 226.695 151.13 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "0062fe1f-cf41-406e-b703-2262a1b26c41")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 219.4766 151.13 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
+	(label "CC2"
+		(at 144.78 43.18 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "2304f992-0bb1-483c-b141-e6c210b6d83d")
+	)
+)

@@ -1,0 +1,362 @@
+//! Structured tool-call error taxonomy.
+//!
+//! MCP's `CallToolResult` spec only has `content` + `is_error`, with no top-level
+//! `data` field — so structured errors ride inside the text content as JSON:
+//!
+//! ```json
+//! {
+//!   "message": "Tool 'place_component' is in toolset 'pcb_components' …",
+//!   "error": {
+//!     "kind": "toolset_not_loaded",
+//!     "toolset": "pcb_components",
+//!     "tool": "place_component"
+//!   }
+//! }
+//! ```
+//!
+//! Clients that want to branch on error type parse the body and match on
+//! `kind`. Plain clients just render the `message` field as text. The observer
+//! extracts `kind` from structured errors so the JSONL log uses a stable
+//! vocabulary regardless of which handler produced the error.
+//!
+//! ## Adding a new kind
+//!
+//! 1. Add a variant to `ToolErrorKind`. Keep field names `snake_case` — they
+//!    serialize directly.
+//! 2. Add a match arm in `short_code()`.
+//! 3. Use `CallToolResult::error_kind(ToolErrorKind::Foo {...}, "message")` in
+//!    the handler that produces it.
+//! 4. Prefer structured errors for anything the LLM might want to react to
+//!    differently (retry, prompt for input). Leave free-text
+//!    `CallToolResult::error()` for truly one-off messages.
+
+use super::protocol::{CallToolResult, ToolContent};
+use serde::Serialize;
+
+/// Structured error for tool call failures.
+///
+/// Serializes with `kind` as a stable discriminant — the single field a client
+/// or observer needs to match on.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ToolErrorKind {
+    /// The tool exists in the registry but its toolset isn't loaded.
+    /// Client recovers in one hop: `load_toolset(toolset)` then retry.
+    ToolsetNotLoaded { toolset: String, tool: String },
+    /// No tool with this name exists in any registered toolset.
+    UnknownTool { tool: String },
+    /// A required argument is missing or malformed.
+    InvalidArgument { field: String, reason: String },
+    /// A referenced file or discovery directory doesn't exist or can't be read.
+    FileNotFound { path: String },
+    /// A mutation conflicts with filesystem state, or schematic ownership
+    /// cannot be proven uniquely. Paths identify the conflicting evidence.
+    Conflict { paths: Vec<String> },
+    /// More than one observed object identifies a requested target. Clients
+    /// must choose from the returned stable candidates rather than guessing.
+    AmbiguousTarget {
+        target: String,
+        candidates: Vec<String>,
+    },
+    /// The requested document is not the document set observed in the target
+    /// editor, so proceeding would answer about or mutate another file.
+    WrongDocument {
+        requested: String,
+        open_documents: Vec<String>,
+    },
+    /// No open document belongs to the explicitly requested project.
+    WrongProject {
+        requested: String,
+        open_projects: Vec<String>,
+    },
+    /// The requested schematic hierarchy instance is not the instance set
+    /// observed in the exact live schematic editor context.
+    WrongSheetInstance {
+        requested: String,
+        open_sheet_instances: Vec<String>,
+    },
+    /// The caller named a target, but its observed editor or document state
+    /// no longer agrees with the state required to mutate it safely.
+    StaleTarget { target: String, reason: String },
+    /// A valid request produced a plan, but applying that plan would be unsafe
+    /// or would not improve the requested result. The same reasons are exposed
+    /// by dry-run planning so callers can revise the request without guessing.
+    PlanBlocked {
+        operation: String,
+        reasons: Vec<String>,
+    },
+    /// No live editor endpoint is configured or reachable for the requested
+    /// semantic operation.
+    EditorUnavailable { editor: String, reason: String },
+    /// The running KiCad version or the bundled stable protocol does not
+    /// provide a capability the caller requested.
+    UnsupportedCapability {
+        capability: String,
+        kicad_version: Option<String>,
+    },
+    /// KiCad accepted a semantic mutation, but a fresh observation did not
+    /// prove the exact requested post-operation state.
+    ReadbackMismatch {
+        operation: String,
+        requested_kiids: Vec<String>,
+        before_kiids: Vec<String>,
+        after_kiids: Vec<String>,
+    },
+    /// A file mutation committed, but its immediate readback did not prove the
+    /// requested result. Callers must inspect or reload the named document
+    /// before retrying because the operation was not a no-op.
+    MutationOutcomeUncertain {
+        operation: String,
+        path: String,
+        reason: String,
+    },
+    /// Saved KiCad structure cannot prove one exact destination for a
+    /// cross-probe source object.
+    UnresolvedCrossProbeDestination {
+        source_kiid: String,
+        candidates: Vec<String>,
+        reason: String,
+    },
+    /// A board was live earlier in this server process, but IPC is now gone;
+    /// its saved file may be stale relative to lost editor state.
+    UnsafeFileFallback { path: String, reason: String },
+    /// KiCad answered, and its open-document list could not be read as a
+    /// complete set of comparable board identities — so whether it holds this
+    /// board is unknown, and neither a live edit nor a file edit is safe.
+    AmbiguousOpenBoard { path: String },
+    /// A configuration file exists but cannot be used: malformed JSON, a
+    /// non-object root, or an I/O failure other than absence. Defaults are
+    /// never substituted for it, because the next save would persist them
+    /// over the user's own settings (#580). `reason` starts with
+    /// `malformed_json:` or `unreadable:`.
+    InvalidConfiguration { path: String, reason: String },
+    /// Catch-all for handler `anyhow::Error` that hasn't been migrated yet.
+    /// Eventually each variant above subsumes a subset of these.
+    HandlerError { reason: String },
+    /// A delivered IPC request has no confirmed outcome. Retrying may duplicate work.
+    IpcBatchRecovered {
+        board_state: String,
+        drop_confirmed: bool,
+        retry_safe: bool,
+        reason: String,
+    },
+    IpcOutcomeUnknown {
+        board_state: String,
+        retry_safe: bool,
+        reason: String,
+    },
+}
+
+impl ToolErrorKind {
+    /// Short, stable string identifier. Matches the serialized `kind` field.
+    /// Used by the observer so JSONL logs carry a canonical vocabulary no
+    /// matter where the error originated.
+    pub fn short_code(&self) -> &'static str {
+        match self {
+            Self::ToolsetNotLoaded { .. } => "toolset_not_loaded",
+            Self::UnknownTool { .. } => "unknown_tool",
+            Self::InvalidArgument { .. } => "invalid_argument",
+            Self::FileNotFound { .. } => "file_not_found",
+            Self::Conflict { .. } => "conflict",
+            Self::AmbiguousTarget { .. } => "ambiguous_target",
+            Self::WrongDocument { .. } => "wrong_document",
+            Self::WrongProject { .. } => "wrong_project",
+            Self::WrongSheetInstance { .. } => "wrong_sheet_instance",
+            Self::StaleTarget { .. } => "stale_target",
+            Self::PlanBlocked { .. } => "plan_blocked",
+            Self::EditorUnavailable { .. } => "editor_unavailable",
+            Self::UnsupportedCapability { .. } => "unsupported_capability",
+            Self::ReadbackMismatch { .. } => "readback_mismatch",
+            Self::MutationOutcomeUncertain { .. } => "mutation_outcome_uncertain",
+            Self::UnresolvedCrossProbeDestination { .. } => "unresolved_cross_probe_destination",
+            Self::UnsafeFileFallback { .. } => "unsafe_file_fallback",
+            Self::AmbiguousOpenBoard { .. } => "ambiguous_open_board",
+            Self::InvalidConfiguration { .. } => "invalid_configuration",
+            Self::HandlerError { .. } => "handler_error",
+            Self::IpcOutcomeUnknown { .. } => "ipc_outcome_unknown",
+            Self::IpcBatchRecovered { .. } => "ipc_batch_recovered",
+        }
+    }
+}
+
+impl CallToolResult {
+    /// Build a structured error result: JSON body with `message` + `error: {...}`.
+    /// Preferred over `CallToolResult::error(text)` whenever the error has a
+    /// stable kind the client / LLM might want to branch on.
+    pub fn error_kind(kind: ToolErrorKind, message: impl Into<String>) -> Self {
+        let body = serde_json::json!({
+            "message": message.into(),
+            "error": kind,
+        });
+        CallToolResult {
+            content: vec![ToolContent::Text {
+                text: body.to_string(),
+            }],
+            is_error: true,
+        }
+    }
+}
+
+/// Extract the `kind` discriminant from a structured error result, if any.
+///
+/// Returns `None` for success results. Returns `Some("handler_error")` as a
+/// fallback for legacy plain-text errors so the observer's JSONL column is
+/// always populated.
+pub fn extract_error_kind(result: &CallToolResult) -> Option<String> {
+    if !result.is_error {
+        return None;
+    }
+    for c in &result.content {
+        if let ToolContent::Text { text } = c {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
+                if let Some(k) = v
+                    .get("error")
+                    .and_then(|e| e.get("kind"))
+                    .and_then(|k| k.as_str())
+                {
+                    return Some(k.to_string());
+                }
+            }
+        }
+    }
+    // Legacy plain-text error — known-unknown category.
+    Some("handler_error".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_kind_round_trips_through_extract() {
+        let r = CallToolResult::error_kind(
+            ToolErrorKind::ToolsetNotLoaded {
+                toolset: "pcb_board".into(),
+                tool: "add_zone".into(),
+            },
+            "Toolset not loaded.",
+        );
+        assert!(r.is_error);
+        assert_eq!(
+            extract_error_kind(&r).as_deref(),
+            Some("toolset_not_loaded")
+        );
+    }
+
+    #[test]
+    fn plain_text_error_extracts_as_handler_error() {
+        let r = CallToolResult::error("something blew up");
+        assert_eq!(extract_error_kind(&r).as_deref(), Some("handler_error"));
+    }
+
+    #[test]
+    fn success_result_extracts_as_none() {
+        let r = CallToolResult::text("ok");
+        assert_eq!(extract_error_kind(&r), None);
+    }
+
+    #[test]
+    fn ambiguous_target_preserves_candidates_through_the_observer() {
+        let result = CallToolResult::error_kind(
+            ToolErrorKind::AmbiguousTarget {
+                target: "component U1".into(),
+                candidates: vec!["uuid-a".into(), "uuid-b".into()],
+            },
+            "Component U1 is ambiguous.",
+        );
+        assert_eq!(
+            extract_error_kind(&result).as_deref(),
+            Some("ambiguous_target")
+        );
+        let ToolContent::Text { text } = &result.content[0] else {
+            panic!("structured error must be text JSON");
+        };
+        let body: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(body["error"]["target"], "component U1");
+        assert_eq!(
+            body["error"]["candidates"],
+            serde_json::json!(["uuid-a", "uuid-b"])
+        );
+    }
+
+    #[test]
+    fn short_code_matches_serialized_kind_field() {
+        // If these ever drift, clients that match on the `kind` string will
+        // silently break. Pin them here.
+        let kinds = [
+            ToolErrorKind::ToolsetNotLoaded {
+                toolset: "x".into(),
+                tool: "y".into(),
+            },
+            ToolErrorKind::UnknownTool { tool: "x".into() },
+            ToolErrorKind::InvalidArgument {
+                field: "f".into(),
+                reason: "r".into(),
+            },
+            ToolErrorKind::FileNotFound { path: "p".into() },
+            ToolErrorKind::Conflict {
+                paths: vec!["p".into()],
+            },
+            ToolErrorKind::AmbiguousTarget {
+                target: "t".into(),
+                candidates: vec!["a".into(), "b".into()],
+            },
+            ToolErrorKind::WrongDocument {
+                requested: "p".into(),
+                open_documents: vec!["a".into()],
+            },
+            ToolErrorKind::WrongProject {
+                requested: "p".into(),
+                open_projects: vec!["a".into()],
+            },
+            ToolErrorKind::WrongSheetInstance {
+                requested: "/root/child".into(),
+                open_sheet_instances: vec!["/root/other".into()],
+            },
+            ToolErrorKind::StaleTarget {
+                target: "p".into(),
+                reason: "r".into(),
+            },
+            ToolErrorKind::PlanBlocked {
+                operation: "place".into(),
+                reasons: vec!["outside board".into()],
+            },
+            ToolErrorKind::EditorUnavailable {
+                editor: "pcb".into(),
+                reason: "closed".into(),
+            },
+            ToolErrorKind::UnsupportedCapability {
+                capability: "activate_sheet".into(),
+                kicad_version: Some("10.0.5".into()),
+            },
+            ToolErrorKind::ReadbackMismatch {
+                operation: "add".into(),
+                requested_kiids: vec!["b".into()],
+                before_kiids: vec!["a".into()],
+                after_kiids: vec!["a".into()],
+            },
+            ToolErrorKind::MutationOutcomeUncertain {
+                operation: "edit".into(),
+                path: "p".into(),
+                reason: "r".into(),
+            },
+            ToolErrorKind::UnresolvedCrossProbeDestination {
+                source_kiid: "sym".into(),
+                candidates: vec!["fp-a".into(), "fp-b".into()],
+                reason: "ambiguous".into(),
+            },
+            ToolErrorKind::UnsafeFileFallback {
+                path: "p".into(),
+                reason: "r".into(),
+            },
+            ToolErrorKind::AmbiguousOpenBoard { path: "p".into() },
+            ToolErrorKind::HandlerError { reason: "r".into() },
+        ];
+        for kind in kinds {
+            let code = kind.short_code();
+            let json = serde_json::to_value(&kind).unwrap();
+            let serialized_kind = json.get("kind").and_then(|v| v.as_str()).unwrap();
+            assert_eq!(code, serialized_kind, "drift for {:?}", kind);
+        }
+    }
+}

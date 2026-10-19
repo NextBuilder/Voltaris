@@ -1,0 +1,10 @@
+* text=auto
+*.png binary
+*.ico binary
+*.icns binary
+
+# KiCad-authored fixtures are byte-evidence: never eol-normalize them.
+crates/voltaris-sexp/tests/fixtures/** -text
+crates/voltaris-core/tests/fixtures/** -text
+crates/voltaris-ipc/tests/fixtures/** -text
+crates/voltaris-schematic-editor/tests/fixtures/** -text

@@ -1,0 +1,48 @@
+# cargo-deny configuration — dependency license gate.
+#
+# Voltaris is AGPL-3.0, so every dependency's license must be AGPL-compatible.
+# MPL-2.0 (resvg's family) is file-level copyleft: fine to link; noted in
+# docs/THIRD_PARTY.md.
+#
+# Run locally: cargo deny check licenses
+
+[licenses]
+allow = [
+    # The project's own license (workspace members).
+    "AGPL-3.0-only",
+    "MIT",
+    # MIT No Attribution is MIT-equivalent and permits commercial redistribution.
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "BSL-1.0",
+    # Mozilla's root-CA certificate data (webpki-root-certs via reqwest).
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+# Workspace members carry the project's own AGPL-3.0-only; they are not
+# published to crates.io and are exempted from the allow list above.
+ignore = true
+
+[advisories]
+# Advisory auditing is a separate concern from license gating; keep the gate
+# focused so a new RUSTSEC entry cannot block an unrelated license check.
+# Dependabot covers version currency.
+version = 2
+yanked = "warn"
+
+[bans]
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

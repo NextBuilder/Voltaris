@@ -1,0 +1,25 @@
+{
+  "name": "voltaris",
+  "displayName": "Voltaris",
+  "version": "0.13.0",
+  "description": "Design professional PCBs in KiCad 10 with Claude: schematic, layout, ERC/DRC, your own design-rule checks, datasheets, simulation, manufacturing files and firmware bring-up.",
+  "author": {
+    "name": "Next Builder",
+    "url": "https://github.com/NextBuilder"
+  },
+  "homepage": "https://github.com/NextBuilder/Voltaris",
+  "repository": "https://github.com/NextBuilder/Voltaris",
+  "license": "AGPL-3.0-only",
+  "keywords": [
+    "kicad",
+    "pcb",
+    "electronics",
+    "eda",
+    "schematic",
+    "jlcpcb",
+    "esp32",
+    "stm32",
+    "rp2040",
+    "nrf52"
+  ]
+}

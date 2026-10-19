@@ -1,0 +1,77 @@
+(pcb "specctra_two_resistors_locked_arc.native-kicad-10.dsn"
+  (parser
+    (string_quote ")
+    (space_in_quoted_tokens on)
+    (host_cad "KiCad's Pcbnew")
+    (host_version "10.0.5")
+  )
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu
+      (type signal)
+      (property
+        (index 0)
+      )
+    )
+    (layer B.Cu
+      (type signal)
+      (property
+        (index 1)
+      )
+    )
+    (boundary
+      (path pcb 0  130000 -70000  80000 -70000  80000 -30000  130000 -30000
+            130000 -70000)
+    )
+    (via "Via[0-1]_600:300_um")
+    (rule
+      (width 200)
+      (clearance 200)
+      (clearance 50 (type smd_smd))
+    )
+  )
+  (placement
+    (component Resistor_SMD:R_0402
+      (place R1 100000 -50000 front 0 (PN 10k))
+      (place R2 110000 -50000 front 0 (PN 4.7k))
+    )
+  )
+  (library
+    (image Resistor_SMD:R_0402
+      (pin Rect[T]Pad_600.000000x500.000000_um 1 -500 0)
+      (pin Rect[T]Pad_600.000000x500.000000_um 2 500 0)
+    )
+    (padstack Rect[T]Pad_600.000000x500.000000_um
+      (shape (rect F.Cu -300 -250 300 250))
+      (attach off)
+    )
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600))
+      (shape (circle B.Cu 600))
+      (attach off)
+    )
+  )
+  (network
+    (net VCC
+      (pins R1-1 R2-2)
+    )
+    (net GND
+      (pins R1-2 R2-1)
+    )
+    (class kicad_default GND VCC
+      (circuit
+        (use_via "Via[0-1]_600:300_um")
+      )
+      (rule
+        (width 200)
+        (clearance 200)
+      )
+    )
+  )
+  (wiring
+    (wire (path F.Cu 250  99500 -50000  95000 -50000)(net VCC)(type fix))
+    (wire (path F.Cu 250  100500 -50000  105000 -50000)(net GND)(type fix))
+    (via "Via[0-1]_600:300_um"  105000 -50000 (net GND)(type fix))
+  )
+)

@@ -1,0 +1,20 @@
+{
+  "identifier": "com.github.nextbuilder.voltaris",
+  "name": "Voltaris",
+  "description": "Voltaris: AI PCB design for KiCad 10 with Claude.",
+  "runtime": {
+    "type": "exec"
+  },
+  "actions": [
+    {
+      "identifier": "start-server",
+      "name": "Voltaris",
+      "description": "Start the Voltaris AI design server",
+      "entrypoint": "bin/voltaris.exe",
+      "show-button": true,
+      "scopes": [
+        "pcb"
+      ]
+    }
+  ]
+}

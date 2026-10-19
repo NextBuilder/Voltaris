@@ -1,0 +1,1776 @@
+[
+  {
+    "id": "usb_c_usb2_device",
+    "name": "USB-C USB 2.0 Device Port (power + data, ESD, fuse)",
+    "description": "16-pin USB-C receptacle wired as a USB 2.0 sink: 5.1 kΩ CC pull-downs, USBLC6-2SC6 ESD on D+/D− and VBUS, 500 mA polyfuse and VBUS bulk capacitor. Feeds native-USB MCUs (ESP32-S3/C3/C6) or a USB-UART bridge.",
+    "category": "connectivity/usb",
+    "tags": [
+      "usb-c",
+      "usb2",
+      "esd",
+      "power",
+      "sink",
+      "native-usb",
+      "esp32"
+    ],
+    "components": [
+      {
+        "role": "J_USB",
+        "ref_prefix": "J",
+        "lib_id": "Connector:USB_C_Receptacle_USB2.0_16P",
+        "value": "USB_C",
+        "footprint": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+        "mpn": "HRO TYPE-C-31-M-12",
+        "notes": "Common JLCPCB-assembled 16-pin mid-profile receptacle; any 16P USB 2.0 receptacle with the same pad names fits"
+      },
+      {
+        "role": "R_CC1",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "5.1k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "CC1 pull-down (Rd) — 5.1 kΩ ±1% identifies the port as a sink; one per CC pin, never shared"
+      },
+      {
+        "role": "R_CC2",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "5.1k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "CC2 pull-down (Rd)"
+      },
+      {
+        "role": "U_ESD",
+        "ref_prefix": "U",
+        "lib_id": "Power_Protection:USBLC6-2SC6",
+        "value": "USBLC6-2SC6",
+        "footprint": "Package_TO_SOT_SMD:SOT-23-6",
+        "mpn": "USBLC6-2SC6",
+        "notes": "Low-capacitance ESD array; route D+/D− through pins 1–6 and 3–4 (flow-through)"
+      },
+      {
+        "role": "F_VBUS",
+        "ref_prefix": "F",
+        "lib_id": "Device:Polyfuse",
+        "value": "500mA",
+        "footprint": "Fuse:Fuse_1206_3216Metric",
+        "package": "1206",
+        "notes": "Resettable fuse, 500 mA hold, ≥6 V rating — size hold current to your load"
+      },
+      {
+        "role": "C_VBUS",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "VBUS bulk, X5R ≥10 V. USB limits total VBUS capacitance at attach to 10 µF"
+      }
+    ],
+    "nets": {
+      "VBUS_RAW": [
+        "J_USB:A4",
+        "J_USB:A9",
+        "J_USB:B4",
+        "J_USB:B9",
+        "F_VBUS:1"
+      ],
+      "VBUS": [
+        "F_VBUS:2",
+        "C_VBUS:1",
+        "U_ESD:5"
+      ],
+      "GND": [
+        "J_USB:A1",
+        "J_USB:A12",
+        "J_USB:B1",
+        "J_USB:B12",
+        "J_USB:SH",
+        "R_CC1:2",
+        "R_CC2:2",
+        "U_ESD:2",
+        "C_VBUS:2"
+      ],
+      "CC1": [
+        "J_USB:A5",
+        "R_CC1:1"
+      ],
+      "CC2": [
+        "J_USB:B5",
+        "R_CC2:1"
+      ],
+      "USB_DP": [
+        "J_USB:A6",
+        "J_USB:B6",
+        "U_ESD:1",
+        "U_ESD:6"
+      ],
+      "USB_DN": [
+        "J_USB:A7",
+        "J_USB:B7",
+        "U_ESD:3",
+        "U_ESD:4"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "VBUS"
+    ],
+    "no_connect": [
+      "J_USB:A8",
+      "J_USB:B8"
+    ],
+    "design_notes": "Both D+ pins (A6, B6) and both D− pins (A7, B7) must be joined — that is what makes the plug reversible. Never tie CC1 and CC2 to one resistor. Shield is tied straight to GND here; for EMC-sensitive products use 1 MΩ ∥ 4.7 nF to GND instead. SBU1/SBU2 are unused for USB 2.0.",
+    "layout_notes": "Route D+/D− as a 90 Ω differential pair (use calc_impedance), keep them length-matched within 0.15 mm and away from the board edge. Place the ESD array within 5 mm of the connector, between the connector and everything else. Give VBUS/GND short, wide traces.",
+    "references": [
+      "USB Type-C Specification Rev 2.x, §4.5.1.2 (Rd = 5.1 kΩ)",
+      "ST USBLC6-2 datasheet, typical application"
+    ]
+  },
+  {
+    "id": "ldo_ap2112k_3v3",
+    "name": "3.3 V 600 mA LDO (AP2112K-3.3)",
+    "description": "AP2112K-3.3 LDO in SOT-23-5 with enable tied to input, ceramic input/output capacitors. Good for ESP32 modules from USB 5 V or a single Li-ion cell at moderate load.",
+    "category": "power/regulator",
+    "tags": [
+      "ldo",
+      "3v3",
+      "regulator",
+      "ap2112",
+      "esp32",
+      "power"
+    ],
+    "components": [
+      {
+        "role": "U_LDO",
+        "ref_prefix": "U",
+        "lib_id": "Regulator_Linear:AP2112K-3.3",
+        "value": "AP2112K-3.3",
+        "footprint": "Package_TO_SOT_SMD:SOT-23-5",
+        "mpn": "AP2112K-3.3TRG1",
+        "notes": "600 mA, ~250 mV typical dropout at 600 mA"
+      },
+      {
+        "role": "C_IN",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Input, X5R ≥10 V (datasheet minimum 1 µF)"
+      },
+      {
+        "role": "C_OUT",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Output, X5R ≥6.3 V (datasheet minimum 1 µF); 10 µF holds the rail through Wi-Fi TX bursts"
+      },
+      {
+        "role": "C_BYP",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "High-frequency bypass on the output"
+      }
+    ],
+    "nets": {
+      "VIN": [
+        "U_LDO:1",
+        "U_LDO:3",
+        "C_IN:1"
+      ],
+      "+3V3": [
+        "U_LDO:5",
+        "C_OUT:1",
+        "C_BYP:1"
+      ],
+      "GND": [
+        "U_LDO:2",
+        "C_IN:2",
+        "C_OUT:2",
+        "C_BYP:2"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "no_connect": [
+      "U_LDO:4"
+    ],
+    "design_notes": "Check dissipation with calc_regulator_thermal: from 5 V at 500 mA the LDO burns 0.85 W, far beyond what SOT-23-5 can shed — use a buck converter above ~250 mA from 5 V. From a Li-ion cell, the output drops out of regulation once the cell falls below ~3.55 V at full load.",
+    "layout_notes": "Put C_IN and C_OUT within 2 mm of their pins with a direct ground return; widen VIN/VOUT traces per calc_trace_width; add copper on the GND pin for heat.",
+    "references": [
+      "Diodes Inc. AP2112 datasheet, Typical Application"
+    ]
+  },
+  {
+    "id": "esp32s3_wroom1_core",
+    "name": "ESP32-S3-WROOM-1 Core (EN reset, BOOT, native USB)",
+    "description": "ESP32-S3-WROOM-1 module with Espressif's recommended EN RC delay (10 kΩ / 1 µF), RESET and BOOT buttons, GPIO0 pull-up, supply decoupling, and reserved 22 Ω series resistors on the native USB lines (GPIO19 = D−, GPIO20 = D+). Pair with usb_c_usb2_device and a 3.3 V regulator.",
+    "category": "mcu/esp32",
+    "tags": [
+      "esp32",
+      "esp32-s3",
+      "wroom",
+      "wifi",
+      "ble",
+      "native-usb",
+      "mcu",
+      "module"
+    ],
+    "components": [
+      {
+        "role": "U_MCU",
+        "ref_prefix": "U",
+        "lib_id": "RF_Module:ESP32-S3-WROOM-1",
+        "value": "ESP32-S3-WROOM-1",
+        "footprint": "RF_Module:ESP32-S3-WROOM-1",
+        "mpn": "ESP32-S3-WROOM-1-N16R8",
+        "notes": "Pick the flash/PSRAM variant you need; R8 (octal PSRAM) variants reserve GPIO35–37"
+      },
+      {
+        "role": "C_BULK",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Bulk at the module 3V3 pin for Wi-Fi TX current peaks (X5R ≥6.3 V)"
+      },
+      {
+        "role": "C_DEC",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "High-frequency decoupling at the 3V3 pin"
+      },
+      {
+        "role": "R_EN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN pull-up (RC delay, Espressif recommendation)"
+      },
+      {
+        "role": "C_EN",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "1uF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN delay capacitor — never leave EN floating"
+      },
+      {
+        "role": "SW_RST",
+        "ref_prefix": "SW",
+        "lib_id": "Switch:SW_Push",
+        "value": "RESET",
+        "footprint": "Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
+        "notes": "Pulls EN low"
+      },
+      {
+        "role": "R_BOOT",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "GPIO0 pull-up (strapping: 1 = SPI boot)"
+      },
+      {
+        "role": "SW_BOOT",
+        "ref_prefix": "SW",
+        "lib_id": "Switch:SW_Push",
+        "value": "BOOT",
+        "footprint": "Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
+        "notes": "Hold while pressing RESET to enter download mode"
+      },
+      {
+        "role": "R_DN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "22",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Reserved USB D− series resistor, place close to the module"
+      },
+      {
+        "role": "R_DP",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "22",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Reserved USB D+ series resistor, place close to the module"
+      }
+    ],
+    "nets": {
+      "+3V3": [
+        "U_MCU:2",
+        "C_BULK:1",
+        "C_DEC:1",
+        "R_EN:1",
+        "R_BOOT:1"
+      ],
+      "GND": [
+        "U_MCU:1",
+        "U_MCU:40",
+        "U_MCU:41",
+        "C_BULK:2",
+        "C_DEC:2",
+        "C_EN:2",
+        "SW_RST:2",
+        "SW_BOOT:2"
+      ],
+      "EN": [
+        "U_MCU:3",
+        "R_EN:2",
+        "C_EN:1",
+        "SW_RST:1"
+      ],
+      "BOOT": [
+        "U_MCU:27",
+        "R_BOOT:2",
+        "SW_BOOT:1"
+      ],
+      "USB_DN": [
+        "R_DN:1"
+      ],
+      "USB_DP": [
+        "R_DP:1"
+      ],
+      "USB_DN_MCU": [
+        "R_DN:2",
+        "U_MCU:13"
+      ],
+      "USB_DP_MCU": [
+        "R_DP:2",
+        "U_MCU:14"
+      ],
+      "U0TXD": [
+        "U_MCU:37"
+      ],
+      "U0RXD": [
+        "U_MCU:36"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "design_notes": "Strapping pins: GPIO0 (pulled up here), GPIO3, GPIO45 and GPIO46. Keep GPIO45 low at reset: unless the VDD_SPI eFuse has been burned, GPIO45 = 1 selects 1.8 V VDD_SPI and a module with 3.3 V flash will not boot. Keep GPIO46 low at reset. Do not hang large capacitance on GPIO0. With octal-PSRAM (R8) modules GPIO35, GPIO36 and GPIO37 are not available. GPIO19/GPIO20 are taken by native USB when it is used. Add a 499 Ω series resistor on U0TXD if it leaves the board. Supply needs ≥500 mA headroom.",
+    "layout_notes": "Put the antenna at or past the board edge with no copper, traces or components under it on any layer — follow the module datasheet's keep-out drawing exactly. Place C_BULK/C_DEC at pin 2, the EN RC close to pin 3, and stitch the module ground pad to the ground plane with many vias.",
+    "references": [
+      "Espressif ESP32-S3 Hardware Design Guidelines — Schematic Checklist (docs.espressif.com, retrieved 2026-10-18)",
+      "ESP32-S3-WROOM-1 datasheet, Peripheral Schematics"
+    ]
+  },
+  {
+    "id": "esp32c3_wroom02_core",
+    "name": "ESP32-C3-WROOM-02 Core (EN reset, BOOT, strapping, native USB)",
+    "description": "ESP32-C3-WROOM-02 module with EN RC delay, RESET/BOOT buttons, pull-ups on all three strapping pins (GPIO2, GPIO8, GPIO9) per Espressif's checklist, decoupling, and reserved 22 Ω series resistors on native USB (GPIO18 = D−, GPIO19 = D+).",
+    "category": "mcu/esp32",
+    "tags": [
+      "esp32",
+      "esp32-c3",
+      "wroom",
+      "risc-v",
+      "wifi",
+      "ble",
+      "native-usb",
+      "mcu",
+      "module"
+    ],
+    "components": [
+      {
+        "role": "U_MCU",
+        "ref_prefix": "U",
+        "lib_id": "RF_Module:ESP32-C3-WROOM-02",
+        "value": "ESP32-C3-WROOM-02",
+        "footprint": "RF_Module:ESP32-C3-WROOM-02",
+        "mpn": "ESP32-C3-WROOM-02-N4",
+        "notes": "4 MB flash variant"
+      },
+      {
+        "role": "C_BULK",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Bulk at 3V3"
+      },
+      {
+        "role": "C_DEC",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Decoupling at 3V3"
+      },
+      {
+        "role": "R_EN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN pull-up"
+      },
+      {
+        "role": "C_EN",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "1uF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN delay"
+      },
+      {
+        "role": "SW_RST",
+        "ref_prefix": "SW",
+        "lib_id": "Switch:SW_Push",
+        "value": "RESET",
+        "footprint": "Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
+        "notes": "Pulls EN low"
+      },
+      {
+        "role": "R_IO9",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "GPIO9 pull-up (1 = SPI boot)"
+      },
+      {
+        "role": "SW_BOOT",
+        "ref_prefix": "SW",
+        "lib_id": "Switch:SW_Push",
+        "value": "BOOT",
+        "footprint": "Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
+        "notes": "Pulls GPIO9 low for download mode"
+      },
+      {
+        "role": "R_IO8",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "GPIO8 pull-up — must be 1 for download boot"
+      },
+      {
+        "role": "R_IO2",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "GPIO2 pull-up — Espressif recommends it to avoid boot glitches"
+      },
+      {
+        "role": "R_DN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "22",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Reserved USB D− series resistor"
+      },
+      {
+        "role": "R_DP",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "22",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Reserved USB D+ series resistor"
+      }
+    ],
+    "nets": {
+      "+3V3": [
+        "U_MCU:1",
+        "C_BULK:1",
+        "C_DEC:1",
+        "R_EN:1",
+        "R_IO9:1",
+        "R_IO8:1",
+        "R_IO2:1"
+      ],
+      "GND": [
+        "U_MCU:9",
+        "U_MCU:19",
+        "C_BULK:2",
+        "C_DEC:2",
+        "C_EN:2",
+        "SW_RST:2",
+        "SW_BOOT:2"
+      ],
+      "EN": [
+        "U_MCU:2",
+        "R_EN:2",
+        "C_EN:1",
+        "SW_RST:1"
+      ],
+      "BOOT": [
+        "U_MCU:8",
+        "R_IO9:2",
+        "SW_BOOT:1"
+      ],
+      "STRAP_IO8": [
+        "U_MCU:7",
+        "R_IO8:2"
+      ],
+      "STRAP_IO2": [
+        "U_MCU:16",
+        "R_IO2:2"
+      ],
+      "USB_DN": [
+        "R_DN:1"
+      ],
+      "USB_DP": [
+        "R_DP:1"
+      ],
+      "USB_DN_MCU": [
+        "R_DN:2",
+        "U_MCU:13"
+      ],
+      "USB_DP_MCU": [
+        "R_DP:2",
+        "U_MCU:14"
+      ],
+      "U0TXD": [
+        "U_MCU:12"
+      ],
+      "U0RXD": [
+        "U_MCU:11"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "design_notes": "Boot modes: SPI boot needs GPIO2 = 1 and GPIO9 = 1; download boot needs GPIO2 = 1, GPIO8 = 1, GPIO9 = 0. Anything you attach to GPIO2/8/9 must not override these levels at reset. No large capacitors on GPIO9. GPIO18/GPIO19 are used by native USB.",
+    "layout_notes": "PCB-antenna keep-out per the module datasheet: antenna at the board edge, no copper beneath it on any layer. Decoupling at pin 1; stitch ground pins with vias.",
+    "references": [
+      "Espressif ESP32-C3 Hardware Design Guidelines — Schematic Checklist (docs.espressif.com, retrieved 2026-10-18)"
+    ]
+  },
+  {
+    "id": "esp32c6_mini1_core",
+    "name": "ESP32-C6-MINI-1 Core (Wi-Fi 6, EN reset, BOOT, native USB)",
+    "description": "ESP32-C6-MINI-1 module with EN RC delay, RESET/BOOT buttons, GPIO9 and GPIO8 strapping pull-ups, decoupling, and reserved 22 Ω series resistors on native USB (GPIO12 = D−, GPIO13 = D+).",
+    "category": "mcu/esp32",
+    "tags": [
+      "esp32",
+      "esp32-c6",
+      "wifi6",
+      "thread",
+      "zigbee",
+      "ble",
+      "native-usb",
+      "mcu",
+      "module"
+    ],
+    "components": [
+      {
+        "role": "U_MCU",
+        "ref_prefix": "U",
+        "lib_id": "RF_Module:ESP32-C6-MINI-1",
+        "value": "ESP32-C6-MINI-1",
+        "footprint": "RF_Module:ESP32-C6-MINI-1",
+        "mpn": "ESP32-C6-MINI-1-N4",
+        "notes": "4 MB flash variant"
+      },
+      {
+        "role": "C_BULK",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Bulk at 3V3"
+      },
+      {
+        "role": "C_DEC",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Decoupling at 3V3"
+      },
+      {
+        "role": "R_EN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN pull-up"
+      },
+      {
+        "role": "C_EN",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "1uF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN delay"
+      },
+      {
+        "role": "SW_RST",
+        "ref_prefix": "SW",
+        "lib_id": "Switch:SW_Push",
+        "value": "RESET",
+        "footprint": "Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
+        "notes": "Pulls EN low"
+      },
+      {
+        "role": "R_IO9",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "GPIO9 pull-up (1 = SPI boot)"
+      },
+      {
+        "role": "SW_BOOT",
+        "ref_prefix": "SW",
+        "lib_id": "Switch:SW_Push",
+        "value": "BOOT",
+        "footprint": "Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
+        "notes": "Pulls GPIO9 low for download mode"
+      },
+      {
+        "role": "R_IO8",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "GPIO8 pull-up — GPIO8 = 0 with GPIO9 = 0 is an invalid boot state"
+      },
+      {
+        "role": "R_DN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "22",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Reserved USB D− series resistor"
+      },
+      {
+        "role": "R_DP",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "22",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Reserved USB D+ series resistor"
+      }
+    ],
+    "nets": {
+      "+3V3": [
+        "U_MCU:3",
+        "C_BULK:1",
+        "C_DEC:1",
+        "R_EN:1",
+        "R_IO9:1",
+        "R_IO8:1"
+      ],
+      "GND": [
+        "U_MCU:1",
+        "U_MCU:2",
+        "U_MCU:11",
+        "U_MCU:14",
+        "U_MCU:36",
+        "U_MCU:37",
+        "U_MCU:38",
+        "U_MCU:39",
+        "U_MCU:40",
+        "U_MCU:41",
+        "U_MCU:42",
+        "U_MCU:43",
+        "U_MCU:44",
+        "U_MCU:45",
+        "U_MCU:46",
+        "U_MCU:47",
+        "U_MCU:48",
+        "U_MCU:49",
+        "U_MCU:50",
+        "U_MCU:51",
+        "U_MCU:52",
+        "U_MCU:53",
+        "C_BULK:2",
+        "C_DEC:2",
+        "C_EN:2",
+        "SW_RST:2",
+        "SW_BOOT:2"
+      ],
+      "EN": [
+        "U_MCU:8",
+        "R_EN:2",
+        "C_EN:1",
+        "SW_RST:1"
+      ],
+      "BOOT": [
+        "U_MCU:23",
+        "R_IO9:2",
+        "SW_BOOT:1"
+      ],
+      "STRAP_IO8": [
+        "U_MCU:22",
+        "R_IO8:2"
+      ],
+      "USB_DN": [
+        "R_DN:1"
+      ],
+      "USB_DP": [
+        "R_DP:1"
+      ],
+      "USB_DN_MCU": [
+        "R_DN:2",
+        "U_MCU:17"
+      ],
+      "USB_DP_MCU": [
+        "R_DP:2",
+        "U_MCU:18"
+      ],
+      "U0TXD": [
+        "U_MCU:31"
+      ],
+      "U0RXD": [
+        "U_MCU:30"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "no_connect": [
+      "U_MCU:4",
+      "U_MCU:7",
+      "U_MCU:21",
+      "U_MCU:32",
+      "U_MCU:33",
+      "U_MCU:34",
+      "U_MCU:35"
+    ],
+    "design_notes": "Strapping pins are GPIO8, GPIO9, GPIO15, MTMS and MTDI; check the ESP32-C6 datasheet's Boot Configurations chapter before using GPIO15/MTMS/MTDI at reset. GPIO12/GPIO13 are used by native USB. No large capacitors on GPIO9.",
+    "layout_notes": "Antenna keep-out per the module datasheet. The many ground pins form the module's thermal/ground pad: tie them to a solid plane with a via array.",
+    "references": [
+      "Espressif ESP32-C6 Hardware Design Guidelines — Schematic Checklist (docs.espressif.com, retrieved 2026-10-18)"
+    ]
+  },
+  {
+    "id": "ch340c_usb_uart_autoprogram",
+    "name": "CH340C USB-UART with ESP32 Auto-Program",
+    "description": "CH340C USB-to-serial bridge (internal oscillator, no crystal) running at 3.3 V, plus the classic two-transistor DTR/RTS auto-program circuit that drives EN and BOOT so esptool can flash without button presses. For ESP32 parts without native USB (classic ESP32, ESP8266) or to keep native USB free.",
+    "category": "connectivity/usb",
+    "tags": [
+      "ch340",
+      "ch340c",
+      "usb-uart",
+      "serial",
+      "auto-program",
+      "auto-reset",
+      "esp32",
+      "esptool"
+    ],
+    "components": [
+      {
+        "role": "U_UART",
+        "ref_prefix": "U",
+        "lib_id": "Interface_USB:CH340C",
+        "value": "CH340C",
+        "footprint": "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm",
+        "mpn": "CH340C",
+        "notes": "Built-in oscillator; at 3.3 V supply V3 is tied to VCC"
+      },
+      {
+        "role": "C_VCC",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Decoupling at VCC/V3"
+      },
+      {
+        "role": "Q_EN",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_BJT:MMBT3904",
+        "value": "MMBT3904",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "MMBT3904",
+        "notes": "Drives EN low"
+      },
+      {
+        "role": "Q_BOOT",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_BJT:MMBT3904",
+        "value": "MMBT3904",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "MMBT3904",
+        "notes": "Drives BOOT (GPIO0/GPIO9) low"
+      },
+      {
+        "role": "R_QEN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Q_EN base resistor, from DTR"
+      },
+      {
+        "role": "R_QBOOT",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Q_BOOT base resistor, from RTS"
+      }
+    ],
+    "nets": {
+      "+3V3": [
+        "U_UART:16",
+        "U_UART:4",
+        "C_VCC:1"
+      ],
+      "GND": [
+        "U_UART:1",
+        "C_VCC:2"
+      ],
+      "USB_DP": [
+        "U_UART:5"
+      ],
+      "USB_DN": [
+        "U_UART:6"
+      ],
+      "U0RXD": [
+        "U_UART:2"
+      ],
+      "U0TXD": [
+        "U_UART:3"
+      ],
+      "UART_DTR": [
+        "U_UART:13",
+        "R_QEN:1",
+        "Q_BOOT:2"
+      ],
+      "UART_RTS": [
+        "U_UART:14",
+        "R_QBOOT:1",
+        "Q_EN:2"
+      ],
+      "QEN_BASE": [
+        "R_QEN:2",
+        "Q_EN:1"
+      ],
+      "QBOOT_BASE": [
+        "R_QBOOT:2",
+        "Q_BOOT:1"
+      ],
+      "EN": [
+        "Q_EN:3"
+      ],
+      "BOOT": [
+        "Q_BOOT:3"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "no_connect": [
+      "U_UART:7",
+      "U_UART:8",
+      "U_UART:9",
+      "U_UART:10",
+      "U_UART:11",
+      "U_UART:12",
+      "U_UART:15"
+    ],
+    "design_notes": "CH340 TXD (pin 2) drives the MCU's U0RXD and CH340 RXD (pin 3) receives U0TXD — the net names here already cross them. Each transistor's emitter goes to the other line, so asserting only one of DTR/RTS pulls its target low while asserting both does nothing — this is what lets a terminal program open the port without resetting the board. Keep the MCU core template's EN RC; the transistors simply override it. If the CH340C runs from 5 V instead, put a 100 nF from V3 to GND and do not tie V3 to VCC.",
+    "layout_notes": "Route USB_DP/USB_DN as a 90 Ω pair from the connector's ESD array. Keep the CH340C close to the USB connector.",
+    "references": [
+      "WCH CH340 datasheet (3.3 V operation, V3 pin)",
+      "Espressif ESP32-DevKitC V4 schematic (auto-program circuit)"
+    ]
+  },
+  {
+    "id": "li_ion_charger_tp4056",
+    "name": "1-Cell Li-ion Charger (TP4056) with Status LEDs",
+    "description": "TP4056 linear charger (ESOP-8) for a single 4.2 V Li-ion/LiPo cell from USB 5 V: programmable charge current (2 kΩ → ~580 mA), charging and done LEDs, input and battery capacitors.",
+    "category": "power/battery",
+    "tags": [
+      "li-ion",
+      "lipo",
+      "18650",
+      "charger",
+      "tp4056",
+      "battery",
+      "usb"
+    ],
+    "components": [
+      {
+        "role": "U_CHG",
+        "ref_prefix": "U",
+        "lib_id": "Battery_Management:TP4056-42-ESOP8",
+        "value": "TP4056",
+        "footprint": "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm_ThermalVias",
+        "mpn": "TP4056-42-ESOP8",
+        "notes": "4.2 V termination; exposed pad must be soldered to ground copper"
+      },
+      {
+        "role": "R_PROG",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "2k",
+        "footprint": "Resistor_SMD:R_0603_1608Metric",
+        "package": "0603",
+        "notes": "Charge current per datasheet table: 10k≈130 mA, 5k≈250 mA, 3k≈400 mA, 2k≈580 mA, 1.5k≈780 mA, 1.2k≈1000 mA. Never exceed 1C of the cell"
+      },
+      {
+        "role": "C_IN",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Input capacitor, ≥10 V"
+      },
+      {
+        "role": "C_BAT",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Battery capacitor"
+      },
+      {
+        "role": "R_LCHG",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "1k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Charging LED resistor"
+      },
+      {
+        "role": "D_CHRG",
+        "ref_prefix": "D",
+        "lib_id": "Device:LED",
+        "value": "RED",
+        "footprint": "LED_SMD:LED_0603_1608Metric",
+        "package": "0603",
+        "notes": "On while charging (CHRG low)"
+      },
+      {
+        "role": "R_LSTB",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "1k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Done LED resistor"
+      },
+      {
+        "role": "D_STDBY",
+        "ref_prefix": "D",
+        "lib_id": "Device:LED",
+        "value": "GREEN",
+        "footprint": "LED_SMD:LED_0603_1608Metric",
+        "package": "0603",
+        "notes": "On when charge is complete (STDBY low)"
+      }
+    ],
+    "nets": {
+      "VBUS": [
+        "U_CHG:4",
+        "U_CHG:8",
+        "C_IN:1",
+        "R_LCHG:1",
+        "R_LSTB:1"
+      ],
+      "GND": [
+        "U_CHG:3",
+        "U_CHG:9",
+        "U_CHG:1",
+        "R_PROG:2",
+        "C_IN:2",
+        "C_BAT:2"
+      ],
+      "BAT+": [
+        "U_CHG:5",
+        "C_BAT:1"
+      ],
+      "CHG_PROG": [
+        "U_CHG:2",
+        "R_PROG:1"
+      ],
+      "CHG_LED_R_A": [
+        "R_LCHG:2",
+        "D_CHRG:2"
+      ],
+      "CHG_CHRG_N": [
+        "D_CHRG:1",
+        "U_CHG:7"
+      ],
+      "CHG_LED_G_A": [
+        "R_LSTB:2",
+        "D_STDBY:2"
+      ],
+      "CHG_STDBY_N": [
+        "D_STDBY:1",
+        "U_CHG:6"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "VBUS"
+    ],
+    "design_notes": "TEMP is tied to GND here, which disables the battery-temperature check; for a product, fit a 10 kΩ NTC divider on TEMP as the datasheet shows. CE is tied to VBUS (always enabled). The TP4056 has no protection against over-discharge or short circuit — add li_ion_protection_dw01a unless the cell has its own protection board. Charging from 5 V to a 3.0 V cell at 1 A dissipates ~2 W; the chip throttles current thermally, so budget copper.",
+    "layout_notes": "Solder the exposed pad to a large ground pour with thermal vias to the opposite side. Keep R_PROG close to pin 2. Use wide traces for VBUS and BAT+ (calc_trace_width).",
+    "references": [
+      "NanJing Top Power TP4056 datasheet, RPROG table and typical application"
+    ]
+  },
+  {
+    "id": "li_ion_protection_dw01a",
+    "name": "1-Cell Li-ion Protection (DW01A + 2× AO3400A)",
+    "description": "DW01A protection IC with two discrete N-MOSFETs in common-drain configuration: over-charge, over-discharge, over-current and short-circuit protection for a single Li-ion/LiPo cell. The pack negative (PACK−) becomes the system ground.",
+    "category": "power/battery",
+    "tags": [
+      "li-ion",
+      "lipo",
+      "18650",
+      "protection",
+      "dw01a",
+      "battery",
+      "overdischarge"
+    ],
+    "components": [
+      {
+        "role": "U_PROT",
+        "ref_prefix": "U",
+        "lib_id": "Battery_Management:DW01A",
+        "value": "DW01A",
+        "footprint": "Package_TO_SOT_SMD:SOT-23-6",
+        "mpn": "DW01A",
+        "notes": "Protection controller"
+      },
+      {
+        "role": "Q_DSG",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_FET:AO3400A",
+        "value": "AO3400A",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "AO3400A",
+        "notes": "Discharge-control FET (gate from OD); source on cell negative"
+      },
+      {
+        "role": "Q_CHG",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_FET:AO3400A",
+        "value": "AO3400A",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "AO3400A",
+        "notes": "Charge-control FET (gate from OC); source on PACK−"
+      },
+      {
+        "role": "R_VCC",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "100",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Supply filter resistor (datasheet R1)"
+      },
+      {
+        "role": "C_VCC",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Supply filter capacitor (datasheet C1)"
+      },
+      {
+        "role": "R_CS",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "1k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Current-sense resistor to PACK− (datasheet R2)"
+      }
+    ],
+    "nets": {
+      "BAT+": [
+        "R_VCC:1"
+      ],
+      "PROT_VCC": [
+        "R_VCC:2",
+        "U_PROT:5",
+        "C_VCC:1"
+      ],
+      "BAT-": [
+        "U_PROT:6",
+        "C_VCC:2",
+        "Q_DSG:2"
+      ],
+      "PROT_DRAIN": [
+        "Q_DSG:3",
+        "Q_CHG:3"
+      ],
+      "GND": [
+        "Q_CHG:2",
+        "R_CS:2"
+      ],
+      "PROT_CS": [
+        "U_PROT:2",
+        "R_CS:1"
+      ],
+      "PROT_OD": [
+        "U_PROT:1",
+        "Q_DSG:1"
+      ],
+      "PROT_OC": [
+        "U_PROT:3",
+        "Q_CHG:1"
+      ]
+    },
+    "power_nets": [
+      "GND"
+    ],
+    "no_connect": [
+      "U_PROT:4"
+    ],
+    "design_notes": "BAT− is the cell's negative terminal only — nothing else connects there. GND here is PACK−: the charger, regulator and the rest of the board return to it. The over-current trip point is set by the FETs' on-resistance (DW01A senses ~150 mV across both), so two AO3400A (~30 mΩ each at 4.5 V gate) trip around 2.5 A; fit lower-RDS(on) FETs for more current. A dual-FET FS8205A is the common integrated alternative.",
+    "layout_notes": "Keep the BAT−→FET→PACK− path short and wide; it carries the full battery current. Place C_VCC right at pin 5.",
+    "references": [
+      "DW01A datasheet (hmsemi.com), typical application circuit"
+    ]
+  },
+  {
+    "id": "power_path_usb_battery",
+    "name": "USB / Battery Load-Sharing Power Path",
+    "description": "Automatic switchover between USB 5 V and a Li-ion cell: a Schottky feeds the system from USB, and a P-MOSFET connects the battery whenever USB is absent. Lets the board run while the charger charges the cell.",
+    "category": "power/battery",
+    "tags": [
+      "power-path",
+      "load-sharing",
+      "battery",
+      "usb",
+      "li-ion",
+      "pmos",
+      "switchover"
+    ],
+    "components": [
+      {
+        "role": "Q_PATH",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_FET:AO3401A",
+        "value": "AO3401A",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "AO3401A",
+        "notes": "P-MOSFET: drain on battery, source on system rail"
+      },
+      {
+        "role": "D_PATH",
+        "ref_prefix": "D",
+        "lib_id": "Diode:SS34",
+        "value": "SS34",
+        "footprint": "Diode_SMD:D_SMA",
+        "mpn": "SS34",
+        "notes": "Schottky from USB to the system rail"
+      },
+      {
+        "role": "R_GATE",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "100k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Pulls the gate low (FET on) when USB is absent"
+      },
+      {
+        "role": "C_SYS",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "10uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "System rail bulk"
+      }
+    ],
+    "nets": {
+      "VBUS": [
+        "D_PATH:2",
+        "Q_PATH:1",
+        "R_GATE:1"
+      ],
+      "GND": [
+        "R_GATE:2",
+        "C_SYS:2"
+      ],
+      "VSYS": [
+        "D_PATH:1",
+        "Q_PATH:2",
+        "C_SYS:1"
+      ],
+      "BAT+": [
+        "Q_PATH:3"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "VBUS"
+    ],
+    "design_notes": "USB present: the gate sits at 5 V, the FET is off and VSYS ≈ VBUS − 0.4 V. USB absent: R_GATE pulls the gate to 0 V and the battery drives VSYS through the FET. The FET's body diode points from battery to VSYS, so the system rail can never back-charge the cell. VSYS ranges ~3.0–4.7 V — feed it to a regulator rated for that input.",
+    "layout_notes": "Size the Schottky and FET traces for the full system current.",
+    "references": [
+      "Classic load-sharing circuit used on Adafruit/SparkFun Li-ion boards"
+    ]
+  },
+  {
+    "id": "ws2812b_led_chain_5v",
+    "name": "WS2812B Addressable LED with 3.3 V → 5 V Level Shift",
+    "description": "First WS2812B of a chain at 5 V, driven from a 3.3 V MCU through a 74AHCT1G125 level shifter (TTL input thresholds) and a 330 Ω data resistor, with per-LED and bulk decoupling.",
+    "category": "misc/led",
+    "tags": [
+      "ws2812b",
+      "neopixel",
+      "addressable",
+      "rgb",
+      "led",
+      "level-shifter",
+      "esp32"
+    ],
+    "components": [
+      {
+        "role": "U_LVL",
+        "ref_prefix": "U",
+        "lib_id": "74xGxx:74AHCT1G125",
+        "value": "74AHCT1G125",
+        "footprint": "Package_TO_SOT_SMD:SOT-23-5",
+        "mpn": "74AHCT1G125",
+        "notes": "5 V buffer with 2.0 V VIH — accepts 3.3 V logic"
+      },
+      {
+        "role": "C_LVL",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Buffer decoupling"
+      },
+      {
+        "role": "R_DATA",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "330",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Data series resistor, place next to the first LED"
+      },
+      {
+        "role": "D_LED1",
+        "ref_prefix": "D",
+        "lib_id": "LED:WS2812B",
+        "value": "WS2812B",
+        "footprint": "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm",
+        "mpn": "WS2812B",
+        "notes": "First LED; repeat D_LED/C_LED pairs down the chain"
+      },
+      {
+        "role": "C_LED1",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "One per LED, at its VDD pin"
+      },
+      {
+        "role": "C_BULK",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Bulk at the chain's power entry; add 470–1000 µF for long strips"
+      }
+    ],
+    "nets": {
+      "+5V": [
+        "U_LVL:5",
+        "C_LVL:1",
+        "D_LED1:1",
+        "C_LED1:1",
+        "C_BULK:1"
+      ],
+      "GND": [
+        "U_LVL:1",
+        "U_LVL:3",
+        "C_LVL:2",
+        "D_LED1:3",
+        "C_LED1:2",
+        "C_BULK:2"
+      ],
+      "LED_DATA_3V3": [
+        "U_LVL:2"
+      ],
+      "LED_DATA_5V": [
+        "U_LVL:4",
+        "R_DATA:1"
+      ],
+      "LED_DIN1": [
+        "R_DATA:2",
+        "D_LED1:4"
+      ],
+      "LED_DOUT1": [
+        "D_LED1:2"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+5V"
+    ],
+    "design_notes": "WS2812B needs VIH ≥ 0.7·VDD = 3.5 V at 5 V, so a bare 3.3 V GPIO is out of spec — hence the 74AHCT buffer (its ~OE is grounded, so it is always enabled). Each LED draws up to ~60 mA at full white: budget 5 V supply and trace width per LED count (calc_trace_width).",
+    "layout_notes": "Keep the data line short from the buffer to the first LED; put each 100 nF right at its LED's VDD pin.",
+    "references": [
+      "Worldsemi WS2812B datasheet (VIH, typical circuit)",
+      "Nexperia 74AHCT1G125 datasheet"
+    ]
+  },
+  {
+    "id": "sht30_i2c_sensor",
+    "name": "SHT30 Temperature & Humidity Sensor (I2C)",
+    "description": "Sensirion SHT30-DIS on I2C at address 0x44 (ADDR to GND), with decoupling and a reset pull-up. Add one pair of bus pull-ups per bus (calc_passive kind 'i2c' or the i2c_pullups template).",
+    "category": "sensor/environment",
+    "tags": [
+      "sht30",
+      "humidity",
+      "temperature",
+      "i2c",
+      "sensor",
+      "air-quality"
+    ],
+    "components": [
+      {
+        "role": "U_SNS",
+        "ref_prefix": "U",
+        "lib_id": "Sensor_Humidity:SHT30-DIS",
+        "value": "SHT30-DIS",
+        "footprint": "Sensor_Humidity:Sensirion_DFN-8-1EP_2.5x2.5mm_P0.5mm_EP1.1x1.7mm",
+        "mpn": "SHT30-DIS-B",
+        "notes": "I2C address 0x44 with ADDR low (0x45 with ADDR high)"
+      },
+      {
+        "role": "C_DEC",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Decoupling at VDD"
+      },
+      {
+        "role": "R_RST",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "nRESET pull-up"
+      }
+    ],
+    "nets": {
+      "+3V3": [
+        "U_SNS:5",
+        "C_DEC:1",
+        "R_RST:1"
+      ],
+      "GND": [
+        "U_SNS:8",
+        "U_SNS:9",
+        "U_SNS:2",
+        "U_SNS:7",
+        "C_DEC:2"
+      ],
+      "SDA": [
+        "U_SNS:1"
+      ],
+      "SCL": [
+        "U_SNS:4"
+      ],
+      "SNS_RESET_N": [
+        "U_SNS:6",
+        "R_RST:2"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "no_connect": [
+      "U_SNS:3"
+    ],
+    "design_notes": "Pin 7 (R) has no electrical function and is tied to VSS per the datasheet. ALERT is left unconnected; route it to a GPIO if you use the alert mode.",
+    "layout_notes": "Self-heating ruins humidity readings: keep the sensor away from the regulator, MCU and Wi-Fi module, ideally on a slotted tongue at the board edge with no copper pour around it, and vent the enclosure.",
+    "references": [
+      "Sensirion SHT3x-DIS datasheet, pin assignment and typical application"
+    ]
+  },
+  {
+    "id": "buck_tps563200_3v3",
+    "name": "3.3 V 3 A Buck Converter (TPS563200)",
+    "description": "TI TPS563200 synchronous buck, 4.5–17 V in, 3.3 V out up to 3 A at 650 kHz, with the datasheet's recommended feedback divider (33.2 kΩ / 10 kΩ), inductor and output capacitance. Replaces an LDO when dissipation is too high (e.g. 5 V/12 V to 3.3 V for an ESP32 with peripherals).",
+    "category": "power/switching",
+    "tags": [
+      "buck",
+      "step-down",
+      "3v3",
+      "tps563200",
+      "switching",
+      "regulator",
+      "power",
+      "esp32"
+    ],
+    "components": [
+      {
+        "role": "U_BUCK",
+        "ref_prefix": "U",
+        "lib_id": "Regulator_Switching:TPS563200",
+        "value": "TPS563200",
+        "footprint": "Package_TO_SOT_SMD:SOT-23-6",
+        "mpn": "TPS563200DDCR",
+        "notes": "VFB 0.765 V, 650 kHz"
+      },
+      {
+        "role": "C_IN",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_1206_3216Metric",
+        "package": "1206",
+        "notes": "Input, X5R/X7R rated ≥25 V (datasheet: >10 µF ceramic) — place at VIN/GND pins"
+      },
+      {
+        "role": "C_HF",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Optional high-frequency input bypass (datasheet)"
+      },
+      {
+        "role": "R_EN",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "100k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "EN pull-up to VIN (EN has ~450 kΩ to GND inside)"
+      },
+      {
+        "role": "C_BST",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "100nF",
+        "footprint": "Capacitor_SMD:C_0402_1005Metric",
+        "package": "0402",
+        "notes": "Bootstrap, VBST to SW (datasheet: 0.1 µF)"
+      },
+      {
+        "role": "L_BUCK",
+        "ref_prefix": "L",
+        "lib_id": "Device:L",
+        "value": "2.2uH",
+        "footprint": "Inductor_SMD:L_Bourns-SRN6028",
+        "notes": "Datasheet range for 3.3 V: 1.5–2.2 µH. Saturation current above your peak (calc_buck); match the footprint to the part you buy"
+      },
+      {
+        "role": "C_OUT1",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Output (datasheet: 20–68 µF total), X5R ≥10 V"
+      },
+      {
+        "role": "C_OUT2",
+        "ref_prefix": "C",
+        "lib_id": "Device:C",
+        "value": "22uF",
+        "footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "package": "0805",
+        "notes": "Second output capacitor"
+      },
+      {
+        "role": "R_FBT",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "33.2k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Feedback top (datasheet R2), 1%: Vout = 0.765 × (1 + 33.2/10) = 3.30 V"
+      },
+      {
+        "role": "R_FBB",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Feedback bottom (datasheet R3), 1%"
+      }
+    ],
+    "nets": {
+      "VIN": [
+        "U_BUCK:3",
+        "C_IN:1",
+        "C_HF:1",
+        "R_EN:1"
+      ],
+      "GND": [
+        "U_BUCK:1",
+        "C_IN:2",
+        "C_HF:2",
+        "C_OUT1:2",
+        "C_OUT2:2",
+        "R_FBB:2"
+      ],
+      "BUCK_EN": [
+        "U_BUCK:5",
+        "R_EN:2"
+      ],
+      "BUCK_SW": [
+        "U_BUCK:2",
+        "C_BST:2",
+        "L_BUCK:1"
+      ],
+      "BUCK_BST": [
+        "U_BUCK:6",
+        "C_BST:1"
+      ],
+      "+3V3": [
+        "L_BUCK:2",
+        "C_OUT1:1",
+        "C_OUT2:1",
+        "R_FBT:1"
+      ],
+      "BUCK_FB": [
+        "U_BUCK:4",
+        "R_FBT:2",
+        "R_FBB:1"
+      ]
+    },
+    "power_nets": [
+      "GND",
+      "+3V3"
+    ],
+    "design_notes": "For 5 V output the datasheet gives R2 = 54.9 kΩ with R3 = 10 kΩ and 2.2–3.3 µH. Input ceramic capacitance shrinks with DC bias: at 12 V use a 25 V or higher part. Check the inductor with calc_buck for your input range and load.",
+    "layout_notes": "Keep the C_IN → VIN/GND loop as small as possible on the top layer, the SW node short and compact, and route BUCK_FB from the output capacitor away from the inductor and SW. Solid ground under the regulator with vias at C_IN and C_OUT grounds.",
+    "references": [
+      "TI TPS563200 datasheet, Table 8-4 (recommended component values) and Application section, retrieved 2026-10-18"
+    ]
+  },
+  {
+    "id": "i2c_level_shifter_bss138",
+    "name": "Bidirectional I2C Level Shifter (2× BSS138)",
+    "description": "Classic two-channel bidirectional open-drain level shifter between a low-voltage bus (e.g. 3.3 V ESP32) and a high-voltage bus (e.g. 5 V sensor), one BSS138 N-MOSFET and two pull-ups per line.",
+    "category": "connectivity/i2c",
+    "tags": [
+      "i2c",
+      "level-shifter",
+      "bss138",
+      "3v3",
+      "5v",
+      "bidirectional"
+    ],
+    "components": [
+      {
+        "role": "Q_SDA",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_FET:BSS138",
+        "value": "BSS138",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "BSS138",
+        "notes": "Gate to LV rail, source on LV side, drain on HV side"
+      },
+      {
+        "role": "Q_SCL",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_FET:BSS138",
+        "value": "BSS138",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "BSS138",
+        "notes": "Same as Q_SDA"
+      },
+      {
+        "role": "R_SDA_LV",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "LV-side SDA pull-up"
+      },
+      {
+        "role": "R_SCL_LV",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "LV-side SCL pull-up"
+      },
+      {
+        "role": "R_SDA_HV",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "HV-side SDA pull-up"
+      },
+      {
+        "role": "R_SCL_HV",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "HV-side SCL pull-up"
+      }
+    ],
+    "nets": {
+      "+3V3": [
+        "Q_SDA:1",
+        "Q_SCL:1",
+        "R_SDA_LV:1",
+        "R_SCL_LV:1"
+      ],
+      "+5V": [
+        "R_SDA_HV:1",
+        "R_SCL_HV:1"
+      ],
+      "SDA": [
+        "Q_SDA:2",
+        "R_SDA_LV:2"
+      ],
+      "SCL": [
+        "Q_SCL:2",
+        "R_SCL_LV:2"
+      ],
+      "SDA_5V": [
+        "Q_SDA:3",
+        "R_SDA_HV:2"
+      ],
+      "SCL_5V": [
+        "Q_SCL:3",
+        "R_SCL_HV:2"
+      ]
+    },
+    "power_nets": [
+      "+3V3",
+      "+5V"
+    ],
+    "design_notes": "Works for open-drain buses (I2C, SMBus, 1-Wire) up to about 400 kHz with modest capacitance; 10 kΩ pull-ups are slow — lower them (calc_passive kind 'i2c') for fast mode or long buses. Remove any duplicate pull-ups on sensor modules. Not for push-pull signals such as SPI — use a buffer like 74LVC1T45 there.",
+    "layout_notes": "Place the MOSFETs near the HV connector so the LV bus stays short.",
+    "references": [
+      "NXP AN10441, Level shifting techniques in I2C-bus design"
+    ]
+  },
+  {
+    "id": "reverse_polarity_pmos",
+    "name": "Reverse-Polarity Protection (P-MOSFET ideal diode)",
+    "description": "Low-loss reverse-polarity protection for a DC input up to about 20 V: AO3401A P-MOSFET in the positive rail with gate pull-down and a 10 V zener gate clamp. Drops millivolts instead of a Schottky's ~0.4 V.",
+    "category": "power/protection",
+    "tags": [
+      "reverse-polarity",
+      "protection",
+      "pmos",
+      "dc-input",
+      "ao3401"
+    ],
+    "components": [
+      {
+        "role": "Q_RP",
+        "ref_prefix": "Q",
+        "lib_id": "Transistor_FET:AO3401A",
+        "value": "AO3401A",
+        "footprint": "Package_TO_SOT_SMD:SOT-23",
+        "mpn": "AO3401A",
+        "notes": "30 V, ~4 A P-MOSFET; drain to input, source to protected rail"
+      },
+      {
+        "role": "R_GATE",
+        "ref_prefix": "R",
+        "lib_id": "Device:R",
+        "value": "10k",
+        "footprint": "Resistor_SMD:R_0402_1005Metric",
+        "package": "0402",
+        "notes": "Gate pull-down; also limits zener current"
+      },
+      {
+        "role": "D_CLAMP",
+        "ref_prefix": "D",
+        "lib_id": "Device:D_Zener",
+        "value": "10V",
+        "footprint": "Diode_SMD:D_SOD-123",
+        "notes": "Keeps |Vgs| under the AO3401A's 12 V limit; optional when the input never exceeds ~9 V"
+      }
+    ],
+    "nets": {
+      "VIN_RAW": [
+        "Q_RP:3"
+      ],
+      "VIN": [
+        "Q_RP:2",
+        "D_CLAMP:1"
+      ],
+      "RP_GATE": [
+        "Q_RP:1",
+        "R_GATE:1",
+        "D_CLAMP:2"
+      ],
+      "GND": [
+        "R_GATE:2"
+      ]
+    },
+    "power_nets": [
+      "GND"
+    ],
+    "design_notes": "Correct polarity: the body diode conducts first, the gate is pulled 0 V below the source and the FET turns fully on. Reversed: the body diode blocks and the gate is at or above the source, so the FET stays off. Size the MOSFET for the load current and check its dissipation (I² × RDS(on)) with the datasheet's on-resistance at your gate voltage. Add a TVS after the FET for hot-plug transients.",
+    "layout_notes": "Wide traces for VIN_RAW and VIN (calc_trace_width); the FET carries the full input current.",
+    "references": [
+      "Common P-MOSFET reverse-battery protection topology; Alpha & Omega AO3401A datasheet (VGS ±12 V)"
+    ]
+  }
+]

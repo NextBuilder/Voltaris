@@ -1,0 +1,79 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "100a05b6-67e5-4694-a14e-de586cef7862")
+	(paper "A4")
+	(lib_symbols)
+	(sheet
+		(at 101.6 101.6)
+		(size 50.8 30.48)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "7cb7c270-62a3-4a00-84f5-50affff7004c")
+		(property "Sheetname" "child"
+			(at 101.6 100.965 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "child.kicad_sch"
+			(at 101.6 132.715 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "A" passive
+			(at 101.6 106.68 180)
+			(uuid "360b29e9-e3c5-41a6-8d74-63af497c8e4e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "B" passive
+			(at 152.4 106.68 0)
+			(uuid "03769c4c-bea0-454a-a382-167dce8b70dc")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "sheet_pin_edges"
+				(path "/100a05b6-67e5-4694-a14e-de586cef7862"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

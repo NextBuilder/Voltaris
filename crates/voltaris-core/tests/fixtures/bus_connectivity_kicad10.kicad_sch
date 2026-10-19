@@ -1,0 +1,74 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "5ea55328-2c02-41aa-b1f8-f331e163e7a2")
+	(paper "A4")
+	(lib_symbols)
+	(bus_entry
+		(at 100.33 80.01)
+		(size 2.54 2.54)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8a919207-c113-49ca-86c9-40c553667094")
+	)
+	(wire
+		(pts
+			(xy 102.87 82.55) (xy 120.65 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "17d6351b-9304-4c7a-b32f-dea2cbbd6801")
+	)
+	(bus
+		(pts
+			(xy 90.17 80.01) (xy 110.49 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "70d06578-0e9b-49b5-b2ba-58658a0d4fcb")
+	)
+	(label "D[0..3]"
+		(at 95.25 80.01 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "428bb11b-ec09-4379-a061-29ec42dfc0ba")
+	)
+	(global_label "D0"
+		(shape input)
+		(at 120.65 82.55 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "0b236b85-472a-4c17-ac90-c80fd22bad3a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 120.65 82.55 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

@@ -1,0 +1,297 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Pre-tag release smoke: run the exact build/package/real-KiCad graph against
+  # a candidate ref without creating a GitHub release.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Synthetic package version used by the non-publishing dry run
+        required: false
+        default: '0.0.0'
+        type: string
+
+# Job-level permissions only: the build jobs never need write access, so the
+# `release` job below is the sole holder of contents: write.
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: voltaris
+  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+  RELEASE_ARTIFACT_LABEL: ${{ github.event_name == 'workflow_dispatch' && format('v{0}-smoke', inputs.version) || github.ref_name }}
+  # Embedded into get_installation_info so release artifacts identify the
+  # exact source commit even when built outside a Git working tree.
+  VOLTARIS_BUILD_COMMIT: ${{ github.sha }}
+
+jobs:
+  real-kicad-acceptance:
+    name: Real KiCAD acceptance
+    permissions:
+      contents: read
+    uses: ./.github/workflows/e2e-kicad.yml
+
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # rust-toolchain.toml overrides the action-installed stable with the
+      # pinned toolchain, which only has the host target — cross targets
+      # (x86_64-apple-darwin on arm64 runners) must be added to the ACTIVE
+      # toolchain explicitly or the build dies with E0463 (v0.2.1 lesson).
+      - name: Add matrix target to the pinned toolchain
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        with:
+          tool: protoc@3.23.4
+          fallback: none
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }} -p voltaris
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ env.BINARY_NAME }}-${{ env.RELEASE_ARTIFACT_LABEL }}-${{ matrix.target }}.tar.gz ${{ env.BINARY_NAME }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+          Compress-Archive -Path "${{ env.BINARY_NAME }}.exe" -DestinationPath "../../../${{ env.BINARY_NAME }}-${{ env.RELEASE_ARTIFACT_LABEL }}-${{ matrix.target }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.target }}
+          path: ${{ env.BINARY_NAME }}-${{ env.RELEASE_ARTIFACT_LABEL }}-${{ matrix.target }}.*
+
+  pcm-package:
+    name: KiCAD PCM plugin package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+          - platform: macos
+            os: macos-latest
+          - platform: linux
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # macOS packages ship a universal binary so one download serves both
+      # Apple Silicon and Intel — PCM has no architecture dimension, only
+      # platform, so an arm64-only "macos" package would break Intel Macs.
+      - name: Add x86_64 target (macOS universal)
+        if: matrix.platform == 'macos'
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        with:
+          tool: protoc@3.23.4
+          fallback: none
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: pcm-package-${{ matrix.platform }}
+
+      # Tauri 2 needs the GTK/WebKit stack to compile on Linux. Without
+      # these the viewer build fails on glib-sys and (before the require
+      # gate below existed) the Linux zip silently shipped without the
+      # viewer — true of every release up to and including v0.2.0.
+      - name: Install viewer system deps (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Build server binary
+        if: matrix.platform != 'macos'
+        run: cargo build --release --locked -p voltaris
+
+      - name: Build schematic viewer (optional)
+        if: matrix.platform != 'macos'
+        continue-on-error: true
+        run: cargo build --release --locked --manifest-path crates/schematic-viewer/Cargo.toml
+
+      # continue-on-error above keeps partial logs useful, but a release
+      # artifact must not silently ship without the viewer — the PCM scripts
+      # omit a missing viewer binary without failing.
+      - name: Require viewer binary (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "crates/schematic-viewer/target/release/schematic-viewer.exe")) {
+            Write-Error "schematic-viewer build failed - refusing to package without it"
+            exit 1
+          }
+      - name: Require viewer binary (Linux)
+        if: matrix.platform == 'linux'
+        run: test -f crates/schematic-viewer/target/release/schematic-viewer
+
+      - name: Build universal binaries (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          set -euo pipefail
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked -p voltaris --target "$target"
+          done
+          mkdir -p dist/universal
+          lipo -create -output dist/universal/voltaris \
+            target/aarch64-apple-darwin/release/voltaris \
+            target/x86_64-apple-darwin/release/voltaris
+          lipo -info dist/universal/voltaris
+
+      - name: Build universal schematic viewer (macOS, optional)
+        if: matrix.platform == 'macos'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --manifest-path crates/schematic-viewer/Cargo.toml --target "$target"
+          done
+          lipo -create -output dist/universal/schematic-viewer \
+            crates/schematic-viewer/target/aarch64-apple-darwin/release/schematic-viewer \
+            crates/schematic-viewer/target/x86_64-apple-darwin/release/schematic-viewer
+          lipo -info dist/universal/schematic-viewer
+
+      - name: Require viewer binary (macOS)
+        if: matrix.platform == 'macos'
+        run: test -f dist/universal/schematic-viewer
+
+      - name: Assemble PCM package (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $version = "${{ env.RELEASE_VERSION }}".TrimStart('v')
+          ./packaging/build-pcm.ps1 -Version $version `
+            -BinaryPath target/release/voltaris.exe `
+            -ViewerPath crates/schematic-viewer/target/release/schematic-viewer.exe `
+            -Platform windows `
+            -OutDir dist
+
+      - name: Assemble PCM package (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          version="${RELEASE_VERSION#v}"
+          ./packaging/build-pcm.sh --version "$version" \
+            --binary dist/universal/voltaris \
+            --viewer dist/universal/schematic-viewer \
+            --platform macos --out dist
+
+      - name: Assemble PCM package (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          version="${RELEASE_VERSION#v}"
+          ./packaging/build-pcm.sh --version "$version" \
+            --binary target/release/voltaris \
+            --viewer crates/schematic-viewer/target/release/schematic-viewer \
+            --platform linux --out dist
+
+      # Gate: the package must declare the platform it carries, and the bundled
+      # binary must actually be that platform's executable format.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Validate PCM package against KiCAD schema (release gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install jsonschema
+          version="${RELEASE_VERSION#v}"
+          python packaging/validate-pcm.py \
+            --zip "dist/voltaris-pcm-v$version-${{ matrix.platform }}.zip"
+
+      # One-click Claude Desktop extension (.mcpb) carrying the same binary.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Assemble Claude Desktop extension (.mcpb)
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_VERSION#v}"
+          case "${{ matrix.platform }}" in
+            windows) bin=target/release/voltaris.exe; plat=win32 ;;
+            macos) bin=dist/universal/voltaris; plat=darwin ;;
+            linux) bin=target/release/voltaris; plat=linux ;;
+          esac
+          ./packaging/build-mcpb.sh --version "$version" --binary "$bin" --platform "$plat" --out dist
+          if [ "${{ matrix.platform }}" = linux ]; then python packaging/build-skills.py --out dist; fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: voltaris-pcm-${{ matrix.platform }}
+          path: |
+            dist/voltaris-pcm-*.zip
+            dist/*.mcpb
+            dist/skills/*.zip
+
+  release:
+    name: Create Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [real-kicad-acceptance, build, pcm-package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

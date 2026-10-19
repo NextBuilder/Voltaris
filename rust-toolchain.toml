@@ -1,0 +1,8 @@
+# Pin the toolchain so CI and local builds compile with the same rustc.
+# Without this, `dtolnay/rust-toolchain@stable` floats: every 6-week Rust
+# release changes the compiler under CI, and `clippy -D warnings` turns red
+# on unrelated PRs whenever a new lint ships. Bump deliberately, in its own
+# commit, after running the full local gate on the new version.
+[toolchain]
+channel = "1.96.0"
+components = ["clippy", "rustfmt"]

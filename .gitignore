@@ -1,0 +1,61 @@
+/target/
+/result
+/result-*
+crates/*/target/
+crates/schematic-viewer/target/
+*.exe
+*.dll
+*.so
+*.dylib
+*.tmp
+*.bak
+.voltaris-transaction-*.json
+.voltaris-transaction-*.abandoned.json
+dist/
+
+# Python bytecode. The plugin and packaging scripts are Python; running
+# them (or the plugin tests) writes caches next to the sources, and three
+# .pyc files had been committed.
+__pycache__/
+*.py[cod]
+
+# Files KiCad writes beside any board it opens. Running the live IPC suite
+# means opening a board in KiCad, so every reviewer who does grows a set of
+# these, and `git add -A` will otherwise sweep them in — a `.history/` gitlink
+# and a lock file naming the developer's host and username both reached a
+# commit that way.
+#
+#   .history/     KiCad 10 Local History: an embedded git repo of automatic
+#                 snapshots, per-machine (Preferences > Common > Project Backup)
+#   *.lck         transient board lock; contains {hostname, username}
+#   *.kicad_prl   per-user local project settings, never shared
+#   *.kicad_pro   generated on open for a bare .kicad_pcb fixture
+#
+# .kicad_pro takes three layers, because "generated" and "intentional" are
+# both real and are distinguishable by name:
+#
+#   1. ignored everywhere by default — it is usually a machine dropping;
+#   2. re-opened under tests/fixtures — the netclass tools (create_netclass,
+#      assign_net_to_class) write to the sibling project file by design, so a
+#      fixture exercising them needs one tracked on purpose, and a blanket
+#      ignore would make `git add` skip it in silence: the same failure this
+#      block exists to prevent, only inverted;
+#   3. re-closed by name for the projects KiCad auto-generates beside the
+#      tracked bare-board fixtures. Those names are predictable — KiCad writes
+#      <board>.kicad_pro next to any bare <board>.kicad_pcb it opens — and
+#      those exact files are always droppings, never intentional.
+#
+# So an intentional project fixture just needs a name of its own
+# (netclass.kicad_pro, say) and is trackable with no edit here at all.
+#
+# .history/, *.lck and *.kicad_prl stay ignored everywhere, fixtures included:
+# those must never be tracked even deliberately.
+.history/
+*.lck
+*.kicad_prl
+*.kicad_pro
+!crates/*/tests/fixtures/*.kicad_pro
+# Auto-generated beside the tracked bare boards (git ls-files '*.kicad_pcb').
+# Order matters: last match wins, so these must follow the negation.
+crates/voltaris-ipc/tests/fixtures/live_ipc.kicad_pro
+crates/voltaris-core/tests/fixtures/test.kicad_pro

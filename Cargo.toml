@@ -1,0 +1,113 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/voltaris",
+    "crates/voltaris-core",
+    "crates/voltaris-sexp",
+    "crates/voltaris-ipc",
+    "crates/voltaris-schematic-editor",
+    "crates/voltaris-render",
+    "crates/voltaris-vcs",
+    "xtask",
+]
+exclude = [
+    "crates/schematic-viewer",  # Tauri app — built separately with `cargo tauri build`
+]
+
+[workspace.package]
+version = "0.13.0"
+edition = "2021"
+authors = ["Voltaris contributors"]
+license = "AGPL-3.0-only"
+# Minimum supported Rust version. Set to the pinned toolchain
+# (rust-toolchain.toml) — the only version the gate actually verifies.
+# Lower it only after genuinely building and testing on the older compiler.
+rust-version = "1.96"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
+jsonschema = { version = "0.58", default-features = false }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+
+# HTTP/SSE transport
+axum = { version = "0.8", features = ["macros"] }
+
+# S-expression parsing
+nom = "8"
+
+# Specctra DSN/SES syntax. Voltaris owns the KiCad lowering and manifest;
+# Topola supplies the format AST and serializer/parser used for parity checks.
+topola_specctra = "0.1.0"
+
+# NNG for KiCAD 10 IPC (nanomsg-next-gen, replaces ZeroMQ)
+nng = "1"
+prost = "0.13"
+prost-types = "0.13"
+
+# Config
+toml = "1.1"
+
+# HTTP client (JLCPCB, datasheets)
+reqwest = { version = "0.13", features = ["json", "stream"] }
+pdf-extract = "0.12"
+
+# SQLite (JLCPCB database)
+rusqlite = { version = "0.40", features = ["bundled"] }
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+fs4 = "1.1"
+sha2 = "0.10"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# UUID generation
+uuid = { version = "1", features = ["v4"] }
+
+# Base64 (image encoding for view tools)
+base64 = "0.23"
+
+# Platform directories (home dir, config dir)
+dirs = "7"
+winreg = "0.56"
+
+# SVG parsing (import_svg_logo)
+usvg = "0.48"
+
+# Rasterization for the visual-feedback tools (voltaris-render). resvg and
+# tiny-skia are pinned EXACTLY: visual baselines compare pixel output across
+# machines, so a silent renderer bump must be a deliberate decision.
+resvg = "=0.48.1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Pure-Rust git for the vcs toolset (voltaris-vcs). No libgit2, no C.
+# Default features for now — the T2.1 spike trims to the plumbing actually
+# used once the API surface is settled (default-features=false breaks
+# gix-hash's backend selection).
+gix = { version = "0.87", features = ["status", "worktree-mutation"] }
+
+# Internal crates
+voltaris-sexp = { path = "crates/voltaris-sexp" }
+voltaris-ipc = { path = "crates/voltaris-ipc" }
+voltaris-core = { path = "crates/voltaris-core" }
+voltaris-schematic-editor = { path = "crates/voltaris-schematic-editor" }
+voltaris-render = { path = "crates/voltaris-render" }
+voltaris-vcs = { path = "crates/voltaris-vcs" }
+
+# The S-expression parser is ~25x slower unoptimized. The installed-demo
+# tests parse 185 MB of KiCad boards, and debug servers parse real boards.
+[profile.dev.package.voltaris-sexp]
+opt-level = 3
+
+[profile.dev.package.nom]
+opt-level = 3

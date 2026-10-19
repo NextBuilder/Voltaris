@@ -1,0 +1,36 @@
+(kicad_sch
+  (version 20260306)
+  (generator "eeschema")
+  (uuid "root")
+  (lib_symbols
+    (symbol "power:GND"
+      (power global)
+      (symbol "GND_1_1"
+        (pin power_in line (at 0 0 270) (length 0) (name "") (number "1"))
+      )
+    )
+    (symbol "Device:R"
+      (symbol "R_1_1"
+        (pin passive line (at 0 3.81 270) (length 1.27) (name "~") (number "1"))
+        (pin passive line (at 0 -3.81 90) (length 1.27) (name "~") (number "2"))
+      )
+    )
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 100 100 0)
+    (unit 1)
+    (uuid "r1")
+    (property "Reference" "R1" (at 100 100 0))
+    (property "Value" "10k" (at 100 100 0))
+  )
+  (symbol
+    (lib_id "power:GND")
+    (at 100 103.81 0)
+    (unit 1)
+    (uuid "p1")
+    (property "Reference" "#PWR01" (at 100 103.81 0))
+    (property "Value" "GND" (at 100 103.81 0))
+  )
+  (sheet_instances (path "/" (page "1")))
+)

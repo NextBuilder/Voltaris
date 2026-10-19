@@ -1,0 +1,32 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v1",
+  "name": "Voltaris",
+  "description": "AI PCB design for KiCad 10 with Claude: schematic, layout, ERC/DRC, design-rule checks, datasheets, simulation, manufacturing files and firmware bring-up.",
+  "description_full": "Voltaris connects Claude to KiCad 10 on your computer. Describe a board and Claude researches parts, draws the schematic, places and routes the PCB, checks it with ERC, DRC, your own plain-English rules and datasheet requirements, and exports Gerbers, BOM and placement files for JLCPCB and other fabs. It includes engineering calculators (trace width, impedance, vias, regulator thermals), a verified circuit library, circuit simulation, signal-integrity checks, LCSC part import, snapshots and diffs, block diagrams, a 3D-printable enclosure generator, and firmware pin maps for ESP32, RP2040/RP2350, STM32 and nRF52. Works with your Claude plan; runs locally.",
+  "identifier": "com.github.nextbuilder.voltaris",
+  "type": "plugin",
+  "author": {
+    "name": "Next Builder",
+    "contact": {
+      "web": "https://github.com/NextBuilder"
+    }
+  },
+  "license": "open-source",
+  "resources": {
+    "homepage": "https://github.com/NextBuilder/Voltaris"
+  },
+  "versions": [
+    {
+      "version": "0.13.0",
+      "status": "stable",
+      "kicad_version": "10.0",
+      "kicad_version_max": "10.99"
+    }
+  ],
+  "maintainer": {
+    "name": "Kishan Pratap Singh",
+    "contact": {
+      "web": "https://github.com/NextBuilder"
+    }
+  }
+}

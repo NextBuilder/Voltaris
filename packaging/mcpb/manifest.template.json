@@ -1,0 +1,47 @@
+{
+  "manifest_version": "0.3",
+  "name": "voltaris",
+  "display_name": "Voltaris",
+  "version": "{{VERSION}}",
+  "description": "Design professional PCBs in KiCad 10 by talking to Claude: schematic, layout, checks, simulation, manufacturing files and firmware.",
+  "long_description": "Voltaris connects Claude Desktop to KiCad 10 on your computer. Claude reads and edits schematics and boards, runs ERC/DRC, checks your own plain-English design rules, reads datasheets, draws block diagrams, simulates circuits, calculates trace widths and impedance, imports LCSC parts, snapshots and diffs designs, exports Gerbers, BOM and placement files for JLCPCB and other fabs, generates an enclosure, and writes firmware pin maps and bring-up sketches for ESP32, RP2040/RP2350, STM32 and nRF52. It runs entirely on your machine with your Claude plan — no API key. Built on Voltaris (AGPL-3.0).",
+  "author": {
+    "name": "Next Builder",
+    "url": "https://github.com/NextBuilder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NextBuilder/Voltaris"
+  },
+  "homepage": "https://github.com/NextBuilder/Voltaris",
+  "documentation": "https://github.com/NextBuilder/Voltaris#readme",
+  "support": "https://github.com/NextBuilder/Voltaris/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/{{BIN}}",
+    "mcp_config": {
+      "command": "${__dirname}/server/{{BIN}}",
+      "args": [],
+      "env": {
+        "KICAD_CLI": "${user_config.kicad_cli}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true,
+  "user_config": {
+    "kicad_cli": {
+      "type": "file",
+      "title": "kicad-cli executable (optional)",
+      "description": "Leave empty to find KiCad 10 automatically. Set it only if KiCad is installed in an unusual folder, e.g. C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe.",
+      "required": false
+    }
+  },
+  "keywords": ["kicad", "pcb", "electronics", "eda", "schematic", "jlcpcb", "esp32", "rp2040", "stm32", "nrf52", "hardware"],
+  "license": "AGPL-3.0-only",
+  "privacy_policies": ["https://github.com/NextBuilder/Voltaris/blob/main/PRIVACY.md"],
+  "compatibility": {
+    "platforms": ["{{PLATFORM}}"]
+  }
+}

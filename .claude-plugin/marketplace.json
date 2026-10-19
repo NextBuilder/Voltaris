@@ -1,0 +1,17 @@
+{
+  "name": "next-builder",
+  "owner": {
+    "name": "Next Builder",
+    "url": "https://github.com/NextBuilder"
+  },
+  "metadata": {
+    "description": "Next Builder's open-source plugins for electronics design with Claude."
+  },
+  "plugins": [
+    {
+      "name": "voltaris",
+      "source": "./claude-plugin",
+      "description": "Design professional PCBs in KiCad 10 with Claude: schematic, layout, ERC/DRC, your own design-rule checks, datasheets, simulation, manufacturing files and firmware bring-up."
+    }
+  ]
+}

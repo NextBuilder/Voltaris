@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Voltaris Schematic Viewer",
+  "version": "0.13.0",
+  "identifier": "com.github.nextbuilder.voltaris.viewer",
+  "build": {
+    "frontendDist": "frontend"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Schematic Viewer — Voltaris",
+        "width": 1280,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

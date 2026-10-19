@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs><filter id="ish" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0A4BD6" flood-opacity="0.28"/></filter>
+    <linearGradient id="sbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3FD8FF"/>
+      <stop offset="0.5" stop-color="#0A84FF"/>
+      <stop offset="1" stop-color="#6E4BFF"/>
+    </linearGradient>
+    <linearGradient id="sgloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sbolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset="1" stop-color="#6E4BFF"/>
+    </linearGradient>
+    <linearGradient id="ssky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FCFDFF"/>
+      <stop offset="1" stop-color="#EAF1FC"/>
+    </linearGradient>
+    <radialGradient id="saura" cx="0.5" cy="0.36" r="0.55">
+      <stop offset="0" stop-color="#0A84FF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#6E4BFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#ssky)"/>
+  <rect width="1280" height="640" fill="url(#saura)"/>
+  <g filter="url(#ish)"><g transform="translate(560 96) scale(0.15625)">
+    <path d="M229 0H795C921 0 1024 103 1024 229V795C1024 921 921 1024 795 1024H229C103 1024 0 921 0 795V229C0 103 103 0 229 0Z" fill="url(#sbg)"/>
+    <path d="M229 0H795C921 0 1024 103 1024 229V795C1024 921 921 1024 795 1024H229C103 1024 0 921 0 795V229C0 103 103 0 229 0Z" fill="url(#sgloss)"/>
+    <g opacity="0.16" transform="translate(0 18)">
+      <path d="M300 286V420L512 632M724 286V420L512 632" fill="none" stroke="#001A4D" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="512" cy="724" r="96" fill="#001A4D"/>
+    </g>
+    <path d="M300 286V420L512 632M724 286V420L512 632" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M512 632V640" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round"/>
+    <circle cx="300" cy="286" r="62" fill="#FFFFFF"/>
+    <circle cx="724" cy="286" r="62" fill="#FFFFFF"/>
+    <circle cx="300" cy="286" r="24" fill="#2C7CFF"/>
+    <circle cx="724" cy="286" r="24" fill="#2C7CFF"/>
+    <circle cx="512" cy="724" r="96" fill="#FFFFFF"/>
+    <path d="M526 650L470 734H514L494 800L556 710H512Z" fill="url(#sbolt)"/></g></g>
+  <text x="640" y="380" text-anchor="middle" font-family="Inter Display, Inter, -apple-system, SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="104" font-weight="700" letter-spacing="-2.5" fill="#0B1B3F">Voltaris</text>
+  <text x="640" y="440" text-anchor="middle" font-family="Inter Display, Inter, -apple-system, SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="32" font-weight="500" fill="#5B6B86">AI PCB design for KiCad 10, powered by Claude.</text>
+  <text x="640" y="560" text-anchor="middle" font-family="Inter Display, Inter, -apple-system, SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="500" fill="#8A97AD">github.com/NextBuilder/Voltaris</text>
+</svg>

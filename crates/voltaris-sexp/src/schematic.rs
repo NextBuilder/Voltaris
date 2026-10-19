@@ -1,0 +1,1787 @@
+//! Higher-level schematic helpers built on the parser and writer.
+//!
+//! Provides typed query functions used by the tool implementations.
+
+use crate::geometry::{transform_pin, PinTransform};
+use crate::parser::{parse_sexp, SexpNode};
+use crate::writer::read_consistent;
+use crate::SexpError;
+use std::path::Path;
+
+// ─── Schematic file I/O ───────────────────────────────────────────────────────
+
+/// Create a minimal standalone schematic with a fresh root UUID, on A4.
+#[must_use]
+pub fn format_blank_schematic() -> String {
+    format_blank_schematic_with_paper("A4", false)
+}
+
+/// Same, on the given KiCad paper size. The caller validates the name: an
+/// unknown one makes KiCad reject the file.
+#[must_use]
+pub fn format_blank_schematic_with_paper(size: &str, portrait: bool) -> String {
+    let orientation = if portrait { " portrait" } else { "" };
+    format!(
+        "(kicad_sch\n\t(version 20250610)\n\t(generator \"voltaris\")\n\t(generator_version \"10.0\")\n\t(uuid \"{}\")\n\t(paper \"{size}\"{orientation})\n\t(lib_symbols\n\t)\n)\n",
+        crate::writer::new_uuid()
+    )
+}
+
+pub fn read_schematic(path: &Path) -> Result<(String, SexpNode), SexpError> {
+    let content = read_consistent(path)?;
+    let tree = parse_sexp(&content)?;
+    Ok((content, tree))
+}
+
+// ─── Coordinate helpers ───────────────────────────────────────────────────────
+
+/// Parse `(at X Y [ROT])` from a node.
+pub fn parse_at(node: &SexpNode) -> Option<(f64, f64, f64)> {
+    let at = node.find("at")?;
+    let x = at.get_f64(1)?;
+    let y = at.get_f64(2)?;
+    let rot = at.get_f64(3).unwrap_or(0.0);
+    Some((x, y, rot))
+}
+
+/// Parse `(start X Y)` from a node.
+pub fn parse_start(node: &SexpNode) -> Option<(f64, f64)> {
+    let s = node.find("start")?;
+    Some((s.get_f64(1)?, s.get_f64(2)?))
+}
+
+/// Parse `(end X Y)` from a node.
+pub fn parse_end(node: &SexpNode) -> Option<(f64, f64)> {
+    let e = node.find("end")?;
+    Some((e.get_f64(1)?, e.get_f64(2)?))
+}
+
+// ─── Wire ─────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct Wire {
+    pub x1: f64,
+    pub y1: f64,
+    pub x2: f64,
+    pub y2: f64,
+    pub uuid: Option<String>,
+}
+
+/// Extract all wires from a parsed schematic tree.
+/// Handles both KiCAD 8/9 format `(start)(end)` and KiCAD 10 format `(pts (xy)(xy))`.
+pub fn extract_wires(tree: &SexpNode) -> Vec<Wire> {
+    extract_schematic_lines(tree, "wire")
+}
+
+/// Extract all bus segments using the same point representation as wires.
+pub fn extract_buses(tree: &SexpNode) -> Vec<Wire> {
+    extract_schematic_lines(tree, "bus")
+}
+
+/// The two authored vectors that define one schematic bus entry.
+///
+/// KiCad stores one corner in `(at x y)` and the diagonal to the other in
+/// `(size dx dy)`. Both are optional here on purpose: analyzers must retain a
+/// malformed entry as malformed evidence rather than drop it and later invent
+/// a direction from a calling convention.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BusEntry {
+    pub at: Option<(f64, f64)>,
+    pub size: Option<(f64, f64)>,
+    pub uuid: Option<String>,
+}
+
+impl BusEntry {
+    /// The authored `(at)` corner and its `(at + size)` corner, when both
+    /// vectors are finite. Absence means the saved geometry cannot establish
+    /// connectivity and callers must fail conservatively.
+    pub fn endpoints(&self) -> Option<((f64, f64), (f64, f64))> {
+        let ((x, y), (dx, dy)) = (self.at?, self.size?);
+        if ![x, y, dx, dy].into_iter().all(f64::is_finite) {
+            return None;
+        }
+        Some(((x, y), (x + dx, y + dy)))
+    }
+}
+
+/// Extract every top-level bus entry, including malformed entries whose
+/// `(at)` or `(size)` vector cannot be decoded. Keeping those records and their
+/// UUIDs lets higher layers abstain or diagnose without guessing a wire side.
+pub fn extract_bus_entries(tree: &SexpNode) -> Vec<BusEntry> {
+    tree.find_all("bus_entry")
+        .into_iter()
+        .map(|node| {
+            let pair = |tag: &str| {
+                let child = node.find(tag)?;
+                Some((child.get_f64(1)?, child.get_f64(2)?))
+            };
+            BusEntry {
+                at: pair("at"),
+                size: pair("size"),
+                uuid: node.find_str("uuid").map(String::from),
+            }
+        })
+        .collect()
+}
+
+fn extract_schematic_lines(tree: &SexpNode, kind: &str) -> Vec<Wire> {
+    tree.find_all(kind)
+        .iter()
+        .filter_map(|node| {
+            // Try KiCAD 10 format first: (pts (xy X Y) (xy X Y))
+            let (x1, y1, x2, y2) = if let Some(pts) = node.find("pts") {
+                let xy_nodes = pts.find_all("xy");
+                if xy_nodes.len() >= 2 {
+                    let x1 = xy_nodes[0].get_f64(1)?;
+                    let y1 = xy_nodes[0].get_f64(2)?;
+                    let x2 = xy_nodes[1].get_f64(1)?;
+                    let y2 = xy_nodes[1].get_f64(2)?;
+                    (x1, y1, x2, y2)
+                } else {
+                    return None;
+                }
+            } else {
+                // Fall back to KiCAD 8/9 format: (start X Y) (end X Y)
+                let (x1, y1) = parse_start(node)?;
+                let (x2, y2) = parse_end(node)?;
+                (x1, y1, x2, y2)
+            };
+            let uuid = node
+                .find("uuid")
+                .and_then(|u| u.get(1))
+                .and_then(|u| u.as_str())
+                .map(String::from);
+            Some(Wire {
+                x1,
+                y1,
+                x2,
+                y2,
+                uuid,
+            })
+        })
+        .collect()
+}
+
+/// Extract all junction dot positions from a parsed schematic tree.
+pub fn extract_junctions(tree: &SexpNode) -> Vec<(f64, f64)> {
+    at_positions(tree.find_all("junction"))
+}
+
+/// Extract all no-connect flag positions from a parsed schematic tree.
+pub fn extract_no_connects(tree: &SexpNode) -> Vec<(f64, f64)> {
+    at_positions(tree.find_all("no_connect"))
+}
+
+/// Extract every hierarchical sheet pin position. A wire terminating on one
+/// leaves the sheet rather than dangling.
+pub fn extract_sheet_pins(tree: &SexpNode) -> Vec<(f64, f64)> {
+    at_positions(
+        tree.find_all("sheet")
+            .iter()
+            .flat_map(|sheet| sheet.find_all("pin"))
+            .collect(),
+    )
+}
+
+/// The `(at x y …)` position of each node that has one.
+fn at_positions(nodes: Vec<&SexpNode>) -> Vec<(f64, f64)> {
+    nodes
+        .iter()
+        .filter_map(|node| {
+            let at = node.find("at")?;
+            Some((at.get_f64(1)?, at.get_f64(2)?))
+        })
+        .collect()
+}
+
+// ─── Net label ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelKind {
+    NetLabel,
+    GlobalLabel,
+    HierarchicalLabel,
+    PowerSymbol,
+}
+
+/// The `justify` token a label needs so its text reads away from its anchor.
+///
+/// A label's `(at … ROT)` orients the connection arrow; it is `(justify …)`
+/// inside `(effects)` that decides which way the *text* runs. Get them out of
+/// step and the label attaches correctly but renders backwards, over whatever
+/// it points at. eeschema always writes both, and the pairing is exactly:
+/// rotation 0/90 → `left`, 180/270 → `right` (confirmed against 692 labels in
+/// KiCAD 10-authored schematics: 0→left ×297, 90→left ×6, 180→right ×298,
+/// 270→right ×5, with no counter-examples).
+pub fn label_justify(rotation: f64) -> &'static str {
+    // Normalize: KiCAD stores 0/90/180/270, but tolerate 360, negatives, and
+    // the f64 the tool layer hands us.
+    let deg = ((rotation % 360.0) + 360.0) % 360.0;
+    if deg < 180.0 {
+        "left"
+    } else {
+        "right"
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Label {
+    pub kind: LabelKind,
+    pub net: String,
+    pub x: f64,
+    pub y: f64,
+    pub rotation: f64,
+    pub uuid: Option<String>,
+}
+
+pub fn extract_labels(tree: &SexpNode) -> Vec<Label> {
+    let mut labels = Vec::new();
+
+    // KiCAD's tag for a plain net label is `label` — there is no `net_label`
+    // in the .kicad_sch format, so matching that name found nothing in any
+    // real schematic (and hid every plain label from the net graph).
+    for (kind_str, kind) in &[
+        ("label", LabelKind::NetLabel),
+        ("global_label", LabelKind::GlobalLabel),
+        ("hierarchical_label", LabelKind::HierarchicalLabel),
+    ] {
+        for node in tree.find_all(kind_str) {
+            let net = node
+                .get(1)
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            let (x, y, rotation) = parse_at(node).unwrap_or((0.0, 0.0, 0.0));
+            let uuid = node
+                .find("uuid")
+                .and_then(|u| u.get(1))
+                .and_then(|u| u.as_str())
+                .map(String::from);
+            labels.push(Label {
+                kind: *kind,
+                net,
+                x,
+                y,
+                rotation,
+                uuid,
+            });
+        }
+    }
+
+    labels
+}
+
+// ─── Symbol instance ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct SymbolInstance {
+    pub reference: String,
+    pub value: String,
+    pub footprint: String,
+    /// Name of the `lib_symbols` entry this instance actually resolves through,
+    /// when KiCAD wrote a `(lib_name …)` because the sheet carries a locally
+    /// edited copy of the library symbol. Resolve with
+    /// [`SymbolInstance::lib_symbol_name`] or [`find_lib_symbol`] — matching on
+    /// `lib_id` alone picks the wrong definition, or none (#143).
+    pub lib_name: Option<String>,
+    pub lib_id: String,
+    pub x: f64,
+    pub y: f64,
+    pub rotation: f64,
+    pub mirror_x: bool,
+    pub mirror_y: bool,
+    pub uuid: Option<String>,
+    /// Selected unit of a multi-unit symbol (`(unit N)`, 1-based). Defaults
+    /// to 1 when the instance carries no unit — eeschema always writes one.
+    pub unit: u32,
+}
+
+impl SymbolInstance {
+    /// The `lib_symbols` entry name this instance resolves through: `lib_name`
+    /// when KiCAD wrote one, otherwise `lib_id`. Mirrors eeschema's
+    /// `SCH_SYMBOL::GetSchSymbolLibraryName()`.
+    pub fn lib_symbol_name(&self) -> &str {
+        self.lib_name.as_deref().unwrap_or(&self.lib_id)
+    }
+
+    pub fn pin_transform(&self) -> PinTransform {
+        PinTransform {
+            comp_x: self.x,
+            comp_y: self.y,
+            rotation_deg: self.rotation,
+            mirror_x: self.mirror_x,
+            mirror_y: self.mirror_y,
+        }
+    }
+}
+
+/// Axis-aligned schematic-space bounds of a placed symbol's non-text drawings
+/// and pins. Property fields and free library text are deliberately excluded:
+/// their font layout is a separate concern, while callers use these bounds for
+/// component placement and body-collision checks. Explicit `text_box` geometry
+/// is included because KiCad gives it exact corners.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SymbolBounds {
+    pub min_x: f64,
+    pub min_y: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+}
+
+impl SymbolBounds {
+    fn point(x: f64, y: f64) -> Self {
+        Self {
+            min_x: x,
+            min_y: y,
+            max_x: x,
+            max_y: y,
+        }
+    }
+
+    fn include(&mut self, x: f64, y: f64) {
+        if !x.is_finite() || !y.is_finite() {
+            return;
+        }
+        self.min_x = self.min_x.min(x);
+        self.min_y = self.min_y.min(y);
+        self.max_x = self.max_x.max(x);
+        self.max_y = self.max_y.max(y);
+    }
+
+    pub fn width(self) -> f64 {
+        self.max_x - self.min_x
+    }
+
+    pub fn height(self) -> f64 {
+        self.max_y - self.min_y
+    }
+
+    /// Intersection depth on each axis. Touching edges return zero; separated
+    /// boxes return a negative value on at least one axis.
+    pub fn overlap_depth(self, other: Self) -> (f64, f64) {
+        (
+            self.max_x.min(other.max_x) - self.min_x.max(other.min_x),
+            self.max_y.min(other.max_y) - self.min_y.max(other.min_y),
+        )
+    }
+}
+
+fn include_point(bounds: &mut Option<SymbolBounds>, x: f64, y: f64) {
+    if !x.is_finite() || !y.is_finite() {
+        return;
+    }
+    match bounds {
+        Some(bounds) => bounds.include(x, y),
+        None => *bounds = Some(SymbolBounds::point(x, y)),
+    }
+}
+
+fn include_xy_children(bounds: &mut Option<SymbolBounds>, node: &SexpNode) {
+    if let Some(points) = node.find("pts") {
+        for point in points.find_all("xy") {
+            if let (Some(x), Some(y)) = (point.get_f64(1), point.get_f64(2)) {
+                include_point(bounds, x, y);
+            }
+        }
+    }
+}
+
+fn ccw_delta(from: f64, to: f64) -> f64 {
+    (to - from).rem_euclid(std::f64::consts::TAU)
+}
+
+/// Include the exact cardinal extrema of the circular arc through three KiCad
+/// points. Collinear or malformed arcs safely fall back to the three points.
+fn include_arc(bounds: &mut Option<SymbolBounds>, arc: &SexpNode) {
+    let point = |tag| {
+        let node = arc.find(tag)?;
+        Some((node.get_f64(1)?, node.get_f64(2)?))
+    };
+    let (Some(start), Some(mid), Some(end)) = (point("start"), point("mid"), point("end")) else {
+        return;
+    };
+    for (x, y) in [start, mid, end] {
+        include_point(bounds, x, y);
+    }
+
+    let (x1, y1) = start;
+    let (x2, y2) = mid;
+    let (x3, y3) = end;
+    let divisor = 2.0 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+    if divisor.abs() < 1e-12 {
+        return;
+    }
+    let square = |x: f64, y: f64| x * x + y * y;
+    let center_x =
+        (square(x1, y1) * (y2 - y3) + square(x2, y2) * (y3 - y1) + square(x3, y3) * (y1 - y2))
+            / divisor;
+    let center_y =
+        (square(x1, y1) * (x3 - x2) + square(x2, y2) * (x1 - x3) + square(x3, y3) * (x2 - x1))
+            / divisor;
+    let radius = (x1 - center_x).hypot(y1 - center_y);
+    if !center_x.is_finite() || !center_y.is_finite() || !radius.is_finite() {
+        return;
+    }
+
+    let angle = |(x, y): (f64, f64)| (y - center_y).atan2(x - center_x);
+    let start_angle = angle(start);
+    let mid_angle = angle(mid);
+    let end_angle = angle(end);
+    let ccw = ccw_delta(start_angle, mid_angle) <= ccw_delta(start_angle, end_angle) + 1e-12;
+    for candidate in [
+        0.0,
+        std::f64::consts::FRAC_PI_2,
+        std::f64::consts::PI,
+        3.0 * std::f64::consts::FRAC_PI_2,
+    ] {
+        let on_arc = if ccw {
+            ccw_delta(start_angle, candidate) <= ccw_delta(start_angle, end_angle) + 1e-12
+        } else {
+            ccw_delta(end_angle, candidate) <= ccw_delta(end_angle, start_angle) + 1e-12
+        };
+        if on_arc {
+            include_point(
+                bounds,
+                center_x + radius * candidate.cos(),
+                center_y + radius * candidate.sin(),
+            );
+        }
+    }
+}
+
+fn collect_direct_symbol_geometry(node: &SexpNode, bounds: &mut Option<SymbolBounds>) {
+    for rectangle in node
+        .find_all("rectangle")
+        .into_iter()
+        .chain(node.find_all("text_box"))
+    {
+        for tag in ["start", "end"] {
+            if let Some(point) = rectangle.find(tag) {
+                if let (Some(x), Some(y)) = (point.get_f64(1), point.get_f64(2)) {
+                    include_point(bounds, x, y);
+                }
+            }
+        }
+    }
+    for shape in node
+        .find_all("polyline")
+        .into_iter()
+        .chain(node.find_all("bezier"))
+    {
+        // Bezier control points enclose the complete curve, so their box is a
+        // conservative placement bound without flattening the curve.
+        include_xy_children(bounds, shape);
+    }
+    for circle in node.find_all("circle") {
+        let Some(center) = circle.find("center") else {
+            continue;
+        };
+        let (Some(x), Some(y), Some(radius)) = (
+            center.get_f64(1),
+            center.get_f64(2),
+            circle.find_f64("radius"),
+        ) else {
+            continue;
+        };
+        include_point(bounds, x - radius, y - radius);
+        include_point(bounds, x + radius, y + radius);
+    }
+    for arc in node.find_all("arc") {
+        include_arc(bounds, arc);
+    }
+    for pin in node.find_all("pin") {
+        let Some(pin) = parse_lib_pin(pin) else {
+            continue;
+        };
+        include_point(bounds, pin.local_x, pin.local_y);
+        let angle = pin.rotation.to_radians();
+        include_point(
+            bounds,
+            pin.local_x + pin.length * angle.cos(),
+            pin.local_y + pin.length * angle.sin(),
+        );
+    }
+}
+
+fn collect_symbol_geometry_recursive(node: &SexpNode, bounds: &mut Option<SymbolBounds>) {
+    collect_direct_symbol_geometry(node, bounds);
+    for child in node.find_all("symbol") {
+        collect_symbol_geometry_recursive(child, bounds);
+    }
+}
+
+/// Bounds of the selected unit in library-local, Y-up coordinates.
+///
+/// KiCad stores common graphics in `Name_0_M` and unit-specific graphics and
+/// pins in `Name_N_M`. The selection mirrors [`extract_lib_pins_for_unit`]:
+/// common nodes, the requested unit, and un-suffixed nested nodes participate;
+/// other units do not.
+pub fn symbol_local_bounds_for_unit(sym_node: &SexpNode, unit: u32) -> Option<SymbolBounds> {
+    let mut bounds = None;
+    collect_direct_symbol_geometry(sym_node, &mut bounds);
+    for child in sym_node.find_all("symbol") {
+        let child_unit = child
+            .get(1)
+            .and_then(|node| node.as_str())
+            .and_then(parse_subsymbol_unit);
+        if !matches!(child_unit, Some(child_unit) if child_unit != 0 && child_unit != unit) {
+            collect_symbol_geometry_recursive(child, &mut bounds);
+        }
+    }
+    bounds
+}
+
+/// Transform a selected library unit's bounds into schematic coordinates for
+/// one placed instance, including rotation and mirroring.
+pub fn symbol_bounds_for_instance(
+    sym_node: &SexpNode,
+    instance: &SymbolInstance,
+) -> Option<SymbolBounds> {
+    let local = symbol_local_bounds_for_unit(sym_node, instance.unit)?;
+    let transform = instance.pin_transform();
+    let mut placed = None;
+    for (x, y) in [
+        (local.min_x, local.min_y),
+        (local.min_x, local.max_y),
+        (local.max_x, local.min_y),
+        (local.max_x, local.max_y),
+    ] {
+        let (x, y) = transform_pin(x, y, transform);
+        include_point(&mut placed, x, y);
+    }
+    placed
+}
+
+#[cfg(test)]
+mod symbol_bounds_tests {
+    use super::*;
+
+    /// Reduced from KiCad 10's stock `Device:R` definition. KiCad prefixes the
+    /// root name when embedding it in a schematic; retained graphic and pin
+    /// nodes are otherwise the library output.
+    const DEVICE_R: &str = r#"(symbol "Device:R"
+	(symbol "R_0_1"
+		(rectangle
+			(start -1.016 -2.54)
+			(end 1.016 2.54)
+			(stroke (width 0.254) (type default))
+			(fill (type none))
+		)
+	)
+	(symbol "R_1_1"
+		(pin passive line
+			(at 0 3.81 270)
+			(length 1.27)
+			(name "" (effects (font (size 1.27 1.27))))
+			(number "1" (effects (font (size 1.27 1.27))))
+		)
+		(pin passive line
+			(at 0 -3.81 90)
+			(length 1.27)
+			(name "" (effects (font (size 1.27 1.27))))
+			(number "2" (effects (font (size 1.27 1.27))))
+		)
+	)
+)"#;
+
+    fn resistor_instance(rotation: f64) -> SymbolInstance {
+        SymbolInstance {
+            reference: "R1".into(),
+            value: "10k".into(),
+            footprint: String::new(),
+            lib_name: None,
+            lib_id: "Device:R".into(),
+            x: 100.0,
+            y: 50.0,
+            rotation,
+            mirror_x: false,
+            mirror_y: false,
+            uuid: None,
+            unit: 1,
+        }
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() < 1e-9, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn stock_resistor_bounds_include_body_and_pin_tips() {
+        let symbol = parse_sexp(DEVICE_R).unwrap();
+        let bounds = symbol_local_bounds_for_unit(&symbol, 1).unwrap();
+
+        assert_eq!(
+            bounds,
+            SymbolBounds {
+                min_x: -1.016,
+                min_y: -3.81,
+                max_x: 1.016,
+                max_y: 3.81,
+            }
+        );
+    }
+
+    #[test]
+    fn placed_bounds_follow_schematic_rotation_and_y_axis() {
+        let symbol = parse_sexp(DEVICE_R).unwrap();
+        let vertical = symbol_bounds_for_instance(&symbol, &resistor_instance(0.0)).unwrap();
+        assert_close(vertical.min_x, 98.984);
+        assert_close(vertical.max_x, 101.016);
+        assert_close(vertical.min_y, 46.19);
+        assert_close(vertical.max_y, 53.81);
+
+        let horizontal = symbol_bounds_for_instance(&symbol, &resistor_instance(90.0)).unwrap();
+        assert_close(horizontal.min_x, 96.19);
+        assert_close(horizontal.max_x, 103.81);
+        assert_close(horizontal.min_y, 48.984);
+        assert_close(horizontal.max_y, 51.016);
+    }
+
+    #[test]
+    fn another_units_graphics_do_not_expand_the_selected_unit() {
+        let symbol = parse_sexp(
+            r#"(symbol "Amplifier_Operational:DUAL"
+	(symbol "DUAL_0_1" (circle (center 0 0) (radius 1)))
+	(symbol "DUAL_1_1" (rectangle (start -2 -3) (end 2 3)))
+	(symbol "DUAL_2_1" (rectangle (start -20 -30) (end 20 30)))
+)"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            symbol_local_bounds_for_unit(&symbol, 1).unwrap(),
+            SymbolBounds {
+                min_x: -2.0,
+                min_y: -3.0,
+                max_x: 2.0,
+                max_y: 3.0,
+            }
+        );
+    }
+
+    #[test]
+    fn arc_bounds_include_cardinal_extrema_on_the_selected_sweep() {
+        let upper = parse_sexp("(symbol \"Arc\" (arc (start -1 0) (mid 0 1) (end 1 0)))").unwrap();
+        let bounds = symbol_local_bounds_for_unit(&upper, 1).unwrap();
+        assert_close(bounds.min_x, -1.0);
+        assert_close(bounds.max_x, 1.0);
+        assert_close(bounds.min_y, 0.0);
+        assert_close(bounds.max_y, 1.0);
+    }
+}
+
+pub fn extract_symbol_instances(tree: &SexpNode) -> Vec<SymbolInstance> {
+    tree.find_all("symbol")
+        .iter()
+        .filter_map(|node| {
+            // Top-level symbols only have lib_id and at; filter out library definitions
+            let lib_id = node.find("lib_id")?.get(1)?.as_str()?.to_string();
+            let lib_name = node
+                .find("lib_name")
+                .and_then(|n| n.get(1))
+                .and_then(|n| n.as_str())
+                .map(String::from);
+            let (x, y, rotation) = parse_at(node)?;
+
+            let mirror_node = node.find("mirror");
+            let mirror_x = mirror_node
+                .and_then(|m| m.get(1))
+                .and_then(|m| m.as_str())
+                .map(|s| s == "x" || s == "xy")
+                .unwrap_or(false);
+            let mirror_y = mirror_node
+                .and_then(|m| m.get(1))
+                .and_then(|m| m.as_str())
+                .map(|s| s == "y" || s == "xy")
+                .unwrap_or(false);
+
+            let prop = |name: &str| -> String {
+                node.find_all("property")
+                    .iter()
+                    .find(|p| p.get(1).and_then(|n| n.as_str()) == Some(name))
+                    .and_then(|p| p.get(2))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            };
+
+            let uuid = node
+                .find("uuid")
+                .and_then(|u| u.get(1))
+                .and_then(|u| u.as_str())
+                .map(String::from);
+
+            let unit = node.find_f64("unit").map(|u| u as u32).unwrap_or(1);
+
+            Some(SymbolInstance {
+                reference: prop("Reference"),
+                value: prop("Value"),
+                footprint: prop("Footprint"),
+                lib_name,
+                lib_id,
+                x,
+                y,
+                rotation,
+                mirror_x,
+                mirror_y,
+                uuid,
+                unit,
+            })
+        })
+        .collect()
+}
+
+/// Resolve an instance's embedded `lib_symbols` definition the way KiCAD does:
+/// by `lib_name` when the instance carries one, otherwise by `lib_id`.
+///
+/// `lib_syms` is the `find_all("symbol")` list of the sheet's `lib_symbols`
+/// node. Matching on `lib_id` alone silently returns the *base* definition for
+/// a locally edited symbol — whose pins can sit at different coordinates — or
+/// nothing at all when the base was never embedded (#143).
+pub fn find_lib_symbol<'a>(
+    lib_syms: &[&'a SexpNode],
+    inst: &SymbolInstance,
+) -> Option<&'a SexpNode> {
+    let want = inst.lib_symbol_name();
+    lib_syms
+        .iter()
+        .copied()
+        .find(|n| n.get(1).and_then(|c| c.as_str()) == Some(want))
+}
+
+/// Every net-naming item on the sheet: [`extract_labels`] plus
+/// [`extract_power_symbol_labels`]. This is what a net graph wants.
+pub fn extract_all_net_labels(tree: &SexpNode) -> Vec<Label> {
+    let mut labels = extract_labels(tree);
+    labels.extend(extract_power_symbol_labels(tree));
+    labels
+}
+
+/// Every power symbol on the sheet, as the [`Label`] it electrically is.
+///
+/// A `power:GND` symbol names the net it touches exactly as a label does —
+/// KiCAD takes the name from the placed symbol's `Value`, which is why editing
+/// that field re-rails the connection. Feed these to the net graph alongside
+/// [`extract_labels`] or the rails come back unnamed.
+///
+/// Only `power_in` pins name a net, which is eeschema's own rule and what keeps
+/// `PWR_FLAG` — a power symbol whose pin is `power_out` — from renaming the rail
+/// it flags. Symbols whose definition is not embedded in `lib_symbols` are
+/// skipped: without it there is no pin to place the label on.
+pub fn extract_power_symbol_labels(tree: &SexpNode) -> Vec<Label> {
+    let lib_syms = tree
+        .find("lib_symbols")
+        .map(|n| n.find_all("symbol"))
+        .unwrap_or_default();
+
+    let mut labels = Vec::new();
+    for inst in extract_symbol_instances(tree) {
+        if inst.value.is_empty() {
+            continue;
+        }
+        let Some(sym) = find_lib_symbol(&lib_syms, &inst) else {
+            continue;
+        };
+        // KiCAD marks a power symbol with `(power)` — `(power global)` or
+        // `(power local)` since KiCAD 9.
+        if sym.find("power").is_none() {
+            continue;
+        }
+        let t = inst.pin_transform();
+        for pin in extract_lib_pins_for_unit(sym, inst.unit) {
+            if pin.electrical_type != "power_in" {
+                continue;
+            }
+            let (x, y) = pin_endpoint(&pin, t);
+            labels.push(Label {
+                kind: LabelKind::PowerSymbol,
+                net: inst.value.clone(),
+                x,
+                y,
+                rotation: inst.rotation,
+                uuid: inst.uuid.clone(),
+            });
+        }
+    }
+    labels
+}
+
+// ─── Pin in library symbol ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct LibPin {
+    pub number: String,
+    pub name: String,
+    /// KiCAD's electrical type — `power_in`, `passive`, `no_connect`, … — read
+    /// from `(pin <type> <style> …)`. Empty when the pin declares none.
+    pub electrical_type: String,
+    /// Position in symbol-local Y-up space (mm).
+    pub local_x: f64,
+    pub local_y: f64,
+    pub rotation: f64,
+    pub length: f64,
+}
+
+/// Parse pins from a library symbol definition node.
+/// Extract every pin of a library symbol, including pins nested inside unit
+/// sub-symbols. KiCAD stores pins under children like `(symbol "Device:R_1_1"
+/// (pin …))`, so a direct-children-only scan finds ZERO pins for standard
+/// library parts — the bug the first real-KiCAD e2e run caught in
+/// `connect_pins` ("Pin '2' not found on 'R1'").
+pub fn extract_lib_pins(sym_node: &SexpNode) -> Vec<LibPin> {
+    let mut out = Vec::new();
+    collect_pins_recursive(sym_node, &mut out);
+    out
+}
+
+/// Unit-aware variant of [`extract_lib_pins`] for multi-unit symbols (#35).
+///
+/// KiCAD names unit sub-symbols `Name_N_M` where `N` is the unit number
+/// (`0` = drawn on every unit) and `M` is the body style. The unit-agnostic
+/// [`extract_lib_pins`] superimposes every unit's pins onto one placement —
+/// for an LM2904 that reports both op-amps' pins at the same instance. This
+/// variant keeps only pins from sub-symbols where `N == 0` or `N == unit`
+/// (pins directly on the symbol node, or in sub-symbols without the `_N_M`
+/// suffix, are always kept).
+pub fn extract_lib_pins_for_unit(sym_node: &SexpNode, unit: u32) -> Vec<LibPin> {
+    let mut out = Vec::new();
+    for pin in sym_node.find_all("pin") {
+        if let Some(lib_pin) = parse_lib_pin(pin) {
+            out.push(lib_pin);
+        }
+    }
+    for sub in sym_node.find_all("symbol") {
+        let sub_unit = sub
+            .get(1)
+            .and_then(|n| n.as_str())
+            .and_then(parse_subsymbol_unit);
+        match sub_unit {
+            Some(n) if n != 0 && n != unit => {} // another unit's pins: skip
+            // n == 0 (common), n == unit, or an un-suffixed name: keep all.
+            _ => collect_pins_recursive(sub, &mut out),
+        }
+    }
+    out
+}
+
+/// Parse the unit number `N` out of a `Name_N_M` sub-symbol name. Returns
+/// `None` when the name doesn't end in two `_`-separated integers (base names
+/// may themselves contain underscores and digits, e.g. `R_Small_1_1` → 1).
+pub fn parse_subsymbol_unit(name: &str) -> Option<u32> {
+    let mut it = name.rsplitn(3, '_');
+    let _style: u32 = it.next()?.parse().ok()?;
+    let unit: u32 = it.next()?.parse().ok()?;
+    it.next()?; // a base name must exist before the suffix
+    Some(unit)
+}
+
+fn collect_pins_recursive(node: &SexpNode, out: &mut Vec<LibPin>) {
+    for pin in node.find_all("pin") {
+        if let Some(lib_pin) = parse_lib_pin(pin) {
+            out.push(lib_pin);
+        }
+    }
+    // Recurse into unit/body-style sub-symbols ("R_1_1", "R_1_0", …).
+    for sub in node.find_all("symbol") {
+        collect_pins_recursive(sub, out);
+    }
+}
+
+fn parse_lib_pin(node: &SexpNode) -> Option<LibPin> {
+    let (x, y, rotation) = parse_at(node)?;
+    let length = node
+        .find("length")
+        .and_then(|l| l.get_f64(1))
+        .unwrap_or(0.0);
+    let number = node
+        .find("number")
+        .and_then(|n| n.get(1))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    let name = node
+        .find("name")
+        .and_then(|n| n.get(1))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    let electrical_type = node
+        .get(1)
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some(LibPin {
+        number,
+        name,
+        electrical_type,
+        local_x: x,
+        local_y: y,
+        rotation,
+        length,
+    })
+}
+
+/// Compute the schematic-space pin endpoint (where wires connect) for a lib pin
+/// given a component's placement transform.
+pub fn pin_endpoint(pin: &LibPin, t: PinTransform) -> (f64, f64) {
+    // In the KiCAD symbol format the pin's (at x y angle) IS the electrical
+    // connection point: the angle points from that tip TOWARD the symbol body,
+    // and the drawn pin line extends `length` mm inward. Adding length here
+    // would land on the body-attachment end — 1 pin-length away from where
+    // KiCAD actually joins wires (eeschema's ERC reports pin positions at the
+    // (at) point, and pin tips land exactly on the body outline only after
+    // adding length — verified against Device:R in the KiCAD 10 libraries).
+    transform_pin(pin.local_x, pin.local_y, t)
+}
+
+/// The on-screen direction leading *away* from the symbol body at this pin —
+/// where a label or wire stub belongs. One of 0/90/180/270.
+///
+/// A KiCad pin's own angle points from its tip toward the body (see
+/// [`pin_endpoint`]), so outward is the opposite; [`transform_direction`]
+/// then applies the instance's rotation and mirror.
+pub fn pin_outward_direction(pin: &LibPin, t: PinTransform) -> f64 {
+    crate::geometry::transform_direction(pin.rotation + 180.0, t)
+}
+
+/// The rotation a label at this pin's endpoint needs so its text reads away
+/// from the symbol body instead of across it. Pairs with [`label_justify`].
+///
+/// Horizontal pins take the outward direction — not our convention: across the
+/// 115 KiCad 10 demo schematics all 249 labels on a horizontal pin do this,
+/// with no counter-examples (32 of 33 on mirrored instances included).
+///
+/// Vertical pins keep the text horizontal, since that corpus never rotates a
+/// pin-anchored label to 90 or 270. It splits 6/4 on *which* horizontal, so
+/// `0` is our tie-break, not eeschema's.
+pub fn pin_label_rotation(pin: &LibPin, t: PinTransform) -> f64 {
+    horizontal_label_rotation(pin_outward_direction(pin, t))
+}
+
+/// Keep a label's text horizontal: pass 0/180 through, fold 90/270 to 0.
+///
+/// Shared with the wire-stub paths, whose `direction` argument can also ask
+/// for an up/down stub. See [`pin_label_rotation`] for the corpus evidence.
+pub fn horizontal_label_rotation(direction: f64) -> f64 {
+    if direction.rem_euclid(360.0) == 180.0 {
+        180.0
+    } else {
+        0.0
+    }
+}
+
+// ─── T-Junction detection ─────────────────────────────────────────────────────
+
+use crate::geometry::point_on_segment;
+
+/// Given a set of wires, return all positions where a wire endpoint lies
+/// strictly in the middle of another wire (T-junction), excluding existing
+/// endpoints. These positions require a junction dot.
+pub fn find_t_junctions(wires: &[Wire], tol: f64) -> Vec<(f64, f64)> {
+    let mut junctions = Vec::new();
+
+    for w1 in wires {
+        // Check both endpoints of w1 against all other wires
+        for (px, py) in [(w1.x1, w1.y1), (w1.x2, w1.y2)] {
+            for w2 in wires {
+                if std::ptr::eq(w1, w2) {
+                    continue;
+                }
+                // Point is on w2 but NOT at its endpoints
+                let at_endpoint = crate::geometry::points_coincident(px, py, w2.x1, w2.y1, tol)
+                    || crate::geometry::points_coincident(px, py, w2.x2, w2.y2, tol);
+                if !at_endpoint && point_on_segment(px, py, w2.x1, w2.y1, w2.x2, w2.y2, tol) {
+                    // Avoid duplicate junction positions
+                    if !junctions.iter().any(|(jx, jy): &(f64, f64)| {
+                        crate::geometry::points_coincident(px, py, *jx, *jy, tol)
+                    }) {
+                        junctions.push((px, py));
+                    }
+                }
+            }
+        }
+    }
+
+    junctions
+}
+
+// ─── S-expression formatters for new elements ─────────────────────────────────
+
+pub fn format_wire(x1: f64, y1: f64, x2: f64, y2: f64) -> String {
+    format_schematic_line("wire", x1, y1, x2, y2)
+}
+
+pub fn format_bus(x1: f64, y1: f64, x2: f64, y2: f64) -> String {
+    format_schematic_line("bus", x1, y1, x2, y2)
+}
+
+fn format_schematic_line(kind: &str, x1: f64, y1: f64, x2: f64, y2: f64) -> String {
+    let uuid = crate::writer::new_uuid();
+    format!(
+        "({kind}\n\t\t(pts\n\t\t\t(xy {x1} {y1}) (xy {x2} {y2})\n\t\t)\n\t\t(stroke\n\t\t\t(width 0)\n\t\t\t(type default)\n\t\t)\n\t\t(uuid \"{uuid}\")\n\t)"
+    )
+}
+
+pub fn format_junction(x: f64, y: f64) -> String {
+    let uuid = crate::writer::new_uuid();
+    format!(
+        "\n  (junction\n    (at {x} {y})\n    (diameter 0)\n    (color 0 0 0 0)\n    (uuid \"{uuid}\")\n  )"
+    )
+}
+
+pub fn format_no_connect(x: f64, y: f64) -> String {
+    let uuid = crate::writer::new_uuid();
+    format!("\n  (no_connect\n    (at {x} {y})\n    (uuid \"{uuid}\")\n  )")
+}
+
+/// Orientation of a graphical wire-to-bus entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BusEntryDirection {
+    DownRight,
+    DownLeft,
+    UpRight,
+    UpLeft,
+}
+
+impl BusEntryDirection {
+    #[must_use]
+    pub const fn size(self) -> (f64, f64) {
+        match self {
+            Self::DownRight => (2.54, 2.54),
+            Self::DownLeft => (-2.54, 2.54),
+            Self::UpRight => (2.54, -2.54),
+            Self::UpLeft => (-2.54, -2.54),
+        }
+    }
+
+    #[must_use]
+    pub const fn rotated_clockwise(self) -> Self {
+        match self {
+            Self::DownRight => Self::DownLeft,
+            Self::DownLeft => Self::UpLeft,
+            Self::UpLeft => Self::UpRight,
+            Self::UpRight => Self::DownRight,
+        }
+    }
+}
+
+pub fn format_bus_entry(x: f64, y: f64, direction: BusEntryDirection) -> String {
+    let uuid = crate::writer::new_uuid();
+    let (width, height) = direction.size();
+    format!(
+        "\n  (bus_entry\n    (at {x} {y})\n    (size {width} {height})\n    (stroke\n      (width 0)\n      (type default)\n    )\n    (uuid \"{uuid}\")\n  )"
+    )
+}
+
+/// Data required for one parent-side hierarchical sheet reference.
+#[derive(Debug, Clone, Copy)]
+pub struct HierarchicalSheetSpec<'a> {
+    pub name: &'a str,
+    pub file: &'a str,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub project_name: &'a str,
+    pub parent_instance_path: &'a str,
+    pub page: &'a str,
+}
+
+pub fn format_hierarchical_sheet(spec: HierarchicalSheetSpec<'_>) -> String {
+    let uuid = crate::writer::new_uuid();
+    let name = escape_quoted_text(spec.name);
+    let file = escape_quoted_text(spec.file);
+    let project_name = escape_quoted_text(spec.project_name);
+    let parent_instance_path = escape_quoted_text(spec.parent_instance_path);
+    let page = escape_quoted_text(spec.page);
+    let name_y = spec.y - 0.635;
+    let file_y = spec.y + spec.height + 0.635;
+    format!(
+        r#"
+  (sheet
+    (at {x} {y})
+    (size {width} {height})
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke (width 0.1524) (type solid))
+    (fill (color 0 0 0 0.0))
+    (uuid "{uuid}")
+    (property "Sheetname" "{name}"
+      (at {x} {name_y} 0)
+      (show_name no)
+      (do_not_autoplace no)
+      (effects (font (size 1.27 1.27)) (justify left bottom))
+    )
+    (property "Sheetfile" "{file}"
+      (at {x} {file_y} 0)
+      (show_name no)
+      (do_not_autoplace no)
+      (effects (font (size 1.27 1.27)) (justify left top))
+    )
+    (instances
+      (project "{project_name}"
+        (path "{parent_instance_path}" (page "{page}"))
+      )
+    )
+  )"#,
+        x = spec.x,
+        y = spec.y,
+        width = spec.width,
+        height = spec.height,
+    )
+}
+
+/// Electrical direction of a hierarchical-sheet pin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SheetPinType {
+    Input,
+    Output,
+    Bidirectional,
+    TriState,
+    Passive,
+}
+
+impl SheetPinType {
+    #[must_use]
+    pub const fn keyword(self) -> &'static str {
+        match self {
+            Self::Input => "input",
+            Self::Output => "output",
+            Self::Bidirectional => "bidirectional",
+            Self::TriState => "tri_state",
+            Self::Passive => "passive",
+        }
+    }
+
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Input => Self::Output,
+            Self::Output => Self::Bidirectional,
+            Self::Bidirectional => Self::TriState,
+            Self::TriState => Self::Passive,
+            Self::Passive => Self::Input,
+        }
+    }
+}
+
+pub fn format_sheet_pin(
+    name: &str,
+    pin_type: SheetPinType,
+    x: f64,
+    y: f64,
+    rotation: f64,
+) -> String {
+    let name = escape_quoted_text(name);
+    let uuid = crate::writer::new_uuid();
+    format!(
+        "(pin \"{name}\" {}\n\t(at {x} {y} {rotation})\n\t(uuid \"{uuid}\")\n)",
+        pin_type.keyword()
+    )
+}
+
+fn escape_quoted_text(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+pub fn format_net_label(net: &str, x: f64, y: f64, rotation: f64) -> String {
+    let uuid = crate::writer::new_uuid();
+    let net = escape_quoted_text(net);
+    // The tag must be `label`: KiCAD has no `net_label` in its schematic
+    // format and refuses to load a file containing one ("Failed to load
+    // schematic"), so emitting that made the whole schematic unopenable.
+    //
+    // justify must follow the rotation, or the text renders backwards across
+    // whatever the label points at. Plain labels also carry `bottom`, which
+    // lifts the text off the wire it annotates.
+    let justify = label_justify(rotation);
+    format!(
+        r#"
+  (label "{net}"
+    (at {x} {y} {rotation})
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify {justify} bottom))
+    (uuid "{uuid}")
+  )"#
+    )
+}
+
+#[cfg(test)]
+mod power_symbol_tests {
+    use super::*;
+
+    /// A sheet holding a `power:GND`, a `PWR_FLAG` (power symbol too, but with
+    /// a `power_out` pin) and a plain `Device:R` that must be ignored for not
+    /// being a power symbol at all. Library bodies are shaped like KiCAD 10's
+    /// own — `(power global)`, pin in a `_1_1` sub-symbol at the anchor.
+    fn sheet() -> SexpNode {
+        let power_lib = |name: &str, pin_type: &str| {
+            format!(
+                "(symbol \"power:{name}\"\n  (power global)\n  (symbol \"{name}_1_1\"\n    (pin {pin_type} line (at 0 0 270) (length 0)\n      (name \"\") (number \"1\")\n    )\n  )\n)"
+            )
+        };
+        let placed = |lib_id: &str, reference: &str, value: &str, x: f64| {
+            format!(
+                "(symbol\n  (lib_id \"{lib_id}\")\n  (at {x} 60 0)\n  (unit 1)\n  (uuid \"{reference}\")\n  (property \"Reference\" \"{reference}\" (at {x} 60 0))\n  (property \"Value\" \"{value}\" (at {x} 60 0))\n)"
+            )
+        };
+        let sch = format!(
+            "(kicad_sch\n  (lib_symbols\n    {}\n    {}\n    (symbol \"Device:R\"\n      (symbol \"R_1_1\"\n        (pin passive line (at 0 3.81 270) (length 1.27)\n          (name \"~\") (number \"1\")\n        )\n      )\n    )\n  )\n  {}\n  {}\n  {}\n)",
+            power_lib("GND", "power_in"),
+            power_lib("PWR_FLAG", "power_out"),
+            placed("power:GND", "#PWR01", "GND", 50.0),
+            placed("power:PWR_FLAG", "#FLG01", "PWR_FLAG", 70.0),
+            placed("Device:R", "R1", "10k", 90.0),
+        );
+        parse_sexp(&sch).unwrap()
+    }
+
+    #[test]
+    fn power_symbols_become_labels_at_their_pin() {
+        let labels = extract_power_symbol_labels(&sheet());
+        assert_eq!(labels.len(), 1, "only the GND symbol names a net");
+        let l = &labels[0];
+        assert_eq!(l.net, "GND");
+        assert_eq!(l.kind, LabelKind::PowerSymbol);
+        // The pin sits at the symbol anchor, so the label lands on the point a
+        // wire connects to.
+        assert_eq!((l.x, l.y), (50.0, 60.0));
+    }
+
+    #[test]
+    fn pwr_flag_never_names_the_rail_it_flags() {
+        // It is a power symbol, and its Value is "PWR_FLAG" — taking that as a
+        // net name would rename whatever rail it is attached to. Its pin is
+        // power_out, which is exactly how eeschema tells the two apart.
+        let labels = extract_power_symbol_labels(&sheet());
+        assert!(labels.iter().all(|l| l.net != "PWR_FLAG"));
+    }
+
+    #[test]
+    fn rotation_carries_the_pin_around_the_anchor() {
+        // GND rotated 90° with the pin 2.54 mm off the anchor: the label must
+        // follow the pin, not the placement point.
+        let sch = "(kicad_sch\n  (lib_symbols\n    (symbol \"power:GND\"\n      (power global)\n      (symbol \"GND_1_1\"\n        (pin power_in line (at 0 2.54 270) (length 0) (name \"\") (number \"1\"))\n      )\n    )\n  )\n  (symbol\n    (lib_id \"power:GND\")\n    (at 50 60 90)\n    (unit 1)\n    (uuid \"p1\")\n    (property \"Reference\" \"#PWR01\" (at 50 60 0))\n    (property \"Value\" \"GND\" (at 50 60 0))\n  )\n)";
+        let labels = extract_power_symbol_labels(&parse_sexp(sch).unwrap());
+        assert_eq!(labels.len(), 1);
+        assert_eq!((labels[0].x, labels[0].y), (47.46, 60.0));
+    }
+
+    #[test]
+    fn a_symbol_without_its_library_body_is_skipped() {
+        let sch = "(kicad_sch\n  (lib_symbols)\n  (symbol\n    (lib_id \"power:GND\")\n    (at 50 60 0)\n    (unit 1)\n    (uuid \"p1\")\n    (property \"Reference\" \"#PWR01\" (at 50 60 0))\n    (property \"Value\" \"GND\" (at 50 60 0))\n  )\n)";
+        assert!(extract_power_symbol_labels(&parse_sexp(sch).unwrap()).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod unit_pin_tests {
+    use super::*;
+
+    /// A 2-unit op-amp shaped like LM2904: unit 1 has pins 1-3, unit 2 has
+    /// pins 5-7, and the power pins 4/8 live in a `_0_1` sub-symbol common to
+    /// all units.
+    fn two_unit_symbol() -> SexpNode {
+        let pin = |num: &str, y: f64| {
+            format!(
+                "(pin passive line (at -7.62 {y} 0) (length 2.54)\n  (name \"~\" (effects (font (size 1.27 1.27))))\n  (number \"{num}\" (effects (font (size 1.27 1.27))))\n)"
+            )
+        };
+        let sch = format!(
+            "(kicad_symbol_lib\n  (symbol \"OP_DUAL\"\n    (symbol \"OP_DUAL_0_1\"\n      {}{}\n    )\n    (symbol \"OP_DUAL_1_1\"\n      {}{}{}\n    )\n    (symbol \"OP_DUAL_2_1\"\n      {}{}{}\n    )\n  )\n)",
+            pin("4", -10.16),
+            pin("8", 10.16),
+            pin("1", 0.0),
+            pin("2", 2.54),
+            pin("3", 5.08),
+            pin("5", 0.0),
+            pin("6", 2.54),
+            pin("7", 5.08),
+        );
+        parse_sexp(&sch).unwrap()
+    }
+
+    fn numbers(pins: &[LibPin]) -> Vec<String> {
+        let mut n: Vec<String> = pins.iter().map(|p| p.number.clone()).collect();
+        n.sort();
+        n
+    }
+
+    #[test]
+    fn for_unit_keeps_own_and_common_pins_only() {
+        let root = two_unit_symbol();
+        let sym = root.find("symbol").unwrap();
+
+        let u1 = extract_lib_pins_for_unit(sym, 1);
+        assert_eq!(
+            numbers(&u1),
+            vec!["1", "2", "3", "4", "8"],
+            "unit 1 = its own pins + the _0_1 commons"
+        );
+
+        let u2 = extract_lib_pins_for_unit(sym, 2);
+        assert_eq!(
+            numbers(&u2),
+            vec!["4", "5", "6", "7", "8"],
+            "unit 2 = its own pins + the _0_1 commons"
+        );
+
+        // The signal pin sets are disjoint — before this function, both units
+        // reported all 8 pins superimposed (#35).
+        assert!(!numbers(&u1).contains(&"5".to_string()));
+        assert!(!numbers(&u2).contains(&"1".to_string()));
+    }
+
+    #[test]
+    fn unit_agnostic_extraction_still_returns_everything() {
+        let root = two_unit_symbol();
+        let sym = root.find("symbol").unwrap();
+        assert_eq!(
+            numbers(&extract_lib_pins(sym)),
+            vec!["1", "2", "3", "4", "5", "6", "7", "8"]
+        );
+    }
+
+    #[test]
+    fn extraction_preserves_the_electrical_pin_type() {
+        let root = parse_sexp(
+            r#"(kicad_symbol_lib
+  (symbol "TEST"
+    (pin no_connect line (at 0 0 0) (length 0)
+      (name "NC" (effects (font (size 1.27 1.27))))
+      (number "1" (effects (font (size 1.27 1.27)))))))"#,
+        )
+        .unwrap();
+        let pin = extract_lib_pins(root.find("symbol").unwrap())
+            .into_iter()
+            .next()
+            .unwrap();
+
+        assert_eq!(pin.electrical_type, "no_connect");
+    }
+
+    #[test]
+    fn underscored_base_names_parse_their_unit_suffix() {
+        assert_eq!(parse_subsymbol_unit("R_Small_1_1"), Some(1));
+        assert_eq!(parse_subsymbol_unit("OP_DUAL_2_1"), Some(2));
+        assert_eq!(parse_subsymbol_unit("X_0_1"), Some(0));
+        // No trailing _N_M suffix → None (pins are then always kept).
+        assert_eq!(parse_subsymbol_unit("R"), None);
+        assert_eq!(parse_subsymbol_unit("R_1"), None);
+        assert_eq!(parse_subsymbol_unit("Name_A_1"), None);
+    }
+}
+
+#[cfg(test)]
+mod pin_endpoint_tests {
+    use super::*;
+
+    fn device_r_pin(number: &str, local_y: f64, rotation: f64) -> LibPin {
+        // Device:R in the KiCAD 10 libraries: (pin ... (at 0 3.81 270) (length 1.27))
+        // and (at 0 -3.81 90) — the (at) point is the electrical tip; the angle
+        // points toward the body.
+        LibPin {
+            number: number.to_string(),
+            name: "~".to_string(),
+            electrical_type: "passive".to_string(),
+            local_x: 0.0,
+            local_y,
+            rotation,
+            length: 1.27,
+        }
+    }
+
+    fn placed(comp_x: f64, comp_y: f64, rotation_deg: f64) -> PinTransform {
+        PinTransform {
+            comp_x,
+            comp_y,
+            rotation_deg,
+            mirror_x: false,
+            mirror_y: false,
+        }
+    }
+
+    #[test]
+    fn endpoint_is_the_electrical_tip_not_the_body_end() {
+        // R placed at (100.33, 80.01), rotation 0. eeschema's own ERC reports
+        // these pins at y = 76.20 and 83.82 — the (at)-derived tips.
+        let (x1, y1) = pin_endpoint(&device_r_pin("1", 3.81, 270.0), placed(100.33, 80.01, 0.0));
+        assert!((x1 - 100.33).abs() < 1e-9);
+        assert!(
+            (y1 - 76.20).abs() < 1e-9,
+            "pin 1 tip must be at 76.20 (got {y1}); 77.47 would be the body end"
+        );
+
+        let (x2, y2) = pin_endpoint(&device_r_pin("2", -3.81, 90.0), placed(100.33, 80.01, 0.0));
+        assert!((x2 - 100.33).abs() < 1e-9);
+        assert!(
+            (y2 - 83.82).abs() < 1e-9,
+            "pin 2 tip must be at 83.82 (got {y2}); 82.55 would be the body end"
+        );
+    }
+
+    #[test]
+    fn endpoint_respects_rotation() {
+        // Same resistor rotated 90°: the pin tips swing onto the X axis.
+        let (x, y) = pin_endpoint(&device_r_pin("1", 3.81, 270.0), placed(100.0, 80.0, 90.0));
+        assert!((y - 80.0).abs() < 1e-9);
+        assert!(
+            (x - 96.19).abs() < 1e-9 || (x - 103.81).abs() < 1e-9,
+            "rotated tip must sit 3.81 mm from center on the X axis, got {x}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod label_tag_tests {
+    use super::*;
+
+    #[test]
+    fn format_no_connect_emits_a_parseable_uuid_item() {
+        let sexp = format_no_connect(12.7, 25.4);
+        let tree = parse_sexp(&format!("(kicad_sch{sexp}\n)")).unwrap();
+        let item = tree.find("no_connect").expect("no-connect item");
+        assert_eq!(parse_at(item), Some((12.7, 25.4, 0.0)));
+        assert!(item.find("uuid").is_some());
+    }
+
+    #[test]
+    fn format_bus_entry_uses_typed_direction_and_parseable_geometry() {
+        let sexp = format_bus_entry(10.16, 20.32, BusEntryDirection::UpLeft);
+        let tree = parse_sexp(&format!("(kicad_sch{sexp}\n)")).unwrap();
+        let entry = tree.find("bus_entry").expect("bus entry");
+        assert_eq!(parse_at(entry), Some((10.16, 20.32, 0.0)));
+        let size = entry.find("size").expect("entry size");
+        assert_eq!(size.get_f64(1), Some(-2.54));
+        assert_eq!(size.get_f64(2), Some(-2.54));
+        assert!(entry.find("uuid").is_some());
+    }
+
+    #[test]
+    fn bus_entry_extractor_preserves_geometry_uuid_and_malformed_records() {
+        let tree = parse_sexp(
+            r#"(kicad_sch
+                (bus_entry (at 10.16 20.32) (size 2.54 -2.54) (uuid "complete"))
+                (bus_entry (at 30.48 40.64) (uuid "missing-size"))
+                (bus_entry (at nope 50.8) (size 2.54 2.54) (uuid "bad-at"))
+                (bus_entry (at NaN 60.96) (size 2.54 2.54) (uuid "non-finite"))
+            )"#,
+        )
+        .unwrap();
+
+        let entries = extract_bus_entries(&tree);
+        assert_eq!(entries.len(), 4, "malformed entries must not disappear");
+        assert_eq!(entries[0].at, Some((10.16, 20.32)));
+        assert_eq!(entries[0].size, Some((2.54, -2.54)));
+        assert_eq!(entries[0].uuid.as_deref(), Some("complete"));
+        assert_eq!(
+            entries[0].endpoints(),
+            Some(((10.16, 20.32), (12.7, 17.78)))
+        );
+        assert_eq!(entries[1].uuid.as_deref(), Some("missing-size"));
+        assert_eq!(entries[1].endpoints(), None);
+        assert_eq!(entries[2].uuid.as_deref(), Some("bad-at"));
+        assert_eq!(entries[2].endpoints(), None);
+        assert_eq!(entries[3].uuid.as_deref(), Some("non-finite"));
+        assert_eq!(entries[3].endpoints(), None);
+    }
+
+    #[test]
+    fn format_bus_emits_a_parseable_uuid_line() {
+        let sexp = format_bus(1.27, 2.54, 25.4, 2.54);
+        let tree = parse_sexp(&format!("(kicad_sch\n\t{sexp}\n)")).unwrap();
+        let bus = tree.find("bus").expect("bus line");
+        assert!(bus.find("pts").is_some());
+        assert!(bus.find("uuid").is_some());
+    }
+
+    #[test]
+    fn format_hierarchical_sheet_positions_fields_and_escapes_metadata() {
+        let sexp = format_hierarchical_sheet(HierarchicalSheetSpec {
+            name: "Power \\\"A\\\"",
+            file: "power_a.kicad_sch",
+            x: 25.4,
+            y: 50.8,
+            width: 76.2,
+            height: 50.8,
+            project_name: "Pack",
+            parent_instance_path: "/root-uuid",
+            page: "2",
+        });
+        let tree = parse_sexp(&format!("(kicad_sch{sexp}\n)")).unwrap();
+        let sheet = tree.find("sheet").expect("sheet");
+        assert_eq!(parse_at(sheet), Some((25.4, 50.8, 0.0)));
+        assert_eq!(sheet.find_all("property").len(), 2);
+        assert!(sheet
+            .find_all("property")
+            .iter()
+            .all(|property| property.find("at").is_some()));
+        assert_eq!(
+            sheet.find_all("property")[0]
+                .get(2)
+                .and_then(SexpNode::as_str),
+            Some("Power \\\"A\\\"")
+        );
+        assert_eq!(
+            sheet
+                .find("instances")
+                .and_then(|instances| instances.find("project"))
+                .and_then(|project| project.find("path"))
+                .and_then(|path| path.find("page"))
+                .and_then(|page| page.get(1))
+                .and_then(SexpNode::as_str),
+            Some("2")
+        );
+    }
+
+    /// #643: these are the exact default fields KiCad 10.0.6 added while
+    /// repairing and saving a one-sheet project generated by Voltaris. The
+    /// fixture is that repaired save, not a hand-authored approximation.
+    #[test]
+    fn format_hierarchical_sheet_matches_repaired_kicad10_defaults() {
+        let repaired = parse_sexp(include_str!(
+            "../tests/fixtures/kicad10_repaired_hierarchy.kicad_sch"
+        ))
+        .unwrap();
+        let expected = repaired.find("sheet").expect("repaired fixture sheet");
+        let emitted = parse_sexp(&format!(
+            "(kicad_sch{}\n)",
+            format_hierarchical_sheet(HierarchicalSheetSpec {
+                name: "Child",
+                file: "child.kicad_sch",
+                x: 50.0,
+                y: 50.0,
+                width: 80.0,
+                height: 50.0,
+                project_name: "hierarchy_repro",
+                parent_instance_path: "/e64b742a-75a3-4d9e-a323-fa15681421b0",
+                page: "2",
+            })
+        ))
+        .unwrap();
+        let actual = emitted.find("sheet").expect("emitted sheet");
+
+        for tag in ["exclude_from_sim", "in_bom", "on_board", "dnp"] {
+            assert_eq!(actual.find_str(tag), expected.find_str(tag), "{tag}");
+        }
+        for (actual_property, expected_property) in actual
+            .find_all("property")
+            .iter()
+            .zip(expected.find_all("property"))
+        {
+            for tag in ["show_name", "do_not_autoplace"] {
+                assert_eq!(
+                    actual_property.find_str(tag),
+                    expected_property.find_str(tag),
+                    "{} {tag}",
+                    actual_property.get(1).and_then(SexpNode::as_str).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn format_sheet_pin_uses_a_typed_direction_and_escapes_its_name() {
+        let source = format_sheet_pin("DATA \"A\"", SheetPinType::Bidirectional, 10.0, 20.0, 180.0);
+        let pin = parse_sexp(&source).expect("sheet pin parses");
+        assert_eq!(pin.head(), Some("pin"));
+        assert_eq!(pin.get(1).and_then(SexpNode::as_str), Some("DATA \"A\""));
+        assert_eq!(pin.get(2).and_then(SexpNode::as_str), Some("bidirectional"));
+        assert_eq!(parse_at(&pin), Some((10.0, 20.0, 180.0)));
+        assert!(pin.find("uuid").is_some());
+    }
+
+    /// KiCAD's schematic format has no `net_label` tag — a file containing one
+    /// fails to load outright ("Failed to load schematic" from kicad-cli 10.0.3,
+    /// verified against a file identical but for this tag). The plain net label
+    /// is `label`.
+    #[test]
+    fn format_net_label_emits_kicad_label_tag() {
+        let sexp = format_net_label("VCC", 100.0, 80.0, 0.0);
+        assert!(
+            sexp.contains("(label \"VCC\""),
+            "must emit KiCAD's (label) tag, got: {sexp}"
+        );
+        assert!(!sexp.contains("(net_label"));
+    }
+
+    #[test]
+    fn format_net_label_round_trips_through_extract_labels() {
+        let sch = format!(
+            "(kicad_sch{}\n)",
+            format_net_label("SIGNAL", 25.4, 50.8, 90.0)
+        );
+        let tree = parse_sexp(&sch).expect("emitted label must parse");
+        let labels = extract_labels(&tree);
+        assert_eq!(labels.len(), 1, "emitted label must be readable back");
+        assert_eq!(labels[0].net, "SIGNAL");
+        assert_eq!(labels[0].kind, LabelKind::NetLabel);
+        assert_eq!(labels[0].x, 25.4);
+        assert_eq!(labels[0].y, 50.8);
+        assert_eq!(labels[0].rotation, 90.0);
+        assert!(labels[0].uuid.is_some());
+    }
+
+    #[test]
+    fn format_net_label_escapes_user_text() {
+        let sch = format!("(kicad_sch{}\n)", format_net_label("A\\\"B", 1.0, 2.0, 0.0));
+        let tree = parse_sexp(&sch).expect("escaped label parses");
+        assert_eq!(extract_labels(&tree)[0].net, "A\\\"B");
+    }
+
+    #[test]
+    fn extract_labels_sees_plain_labels_written_by_eeschema() {
+        // Tab-indented, as eeschema saves; all three label kinds present.
+        let sch = "(kicad_sch\n\t(label \"MID\"\n\t\t(at 10 20 0)\n\t\t(uuid \"a\")\n\t)\n\t(global_label \"VBUS\"\n\t\t(shape input)\n\t\t(at 30 40 0)\n\t\t(uuid \"b\")\n\t)\n\t(hierarchical_label \"HIN\"\n\t\t(shape input)\n\t\t(at 50 60 0)\n\t\t(uuid \"c\")\n\t)\n)";
+        let tree = parse_sexp(sch).unwrap();
+        let labels = extract_labels(&tree);
+        assert_eq!(labels.len(), 3, "all three label kinds must be found");
+
+        let plain = labels
+            .iter()
+            .find(|l| l.kind == LabelKind::NetLabel)
+            .expect(
+                "plain (label) must be extracted — it was invisible while this matched 'net_label'",
+            );
+        assert_eq!(plain.net, "MID");
+        assert_eq!((plain.x, plain.y), (10.0, 20.0));
+    }
+}
+
+#[cfg(test)]
+mod label_justify_tests {
+    use super::*;
+
+    /// The pairing eeschema itself writes, sampled from 692 labels across
+    /// KiCAD 10-authored schematics: 0→left, 90→left, 180→right, 270→right.
+    #[test]
+    fn justify_follows_the_rotation_eeschema_pairs_it_with() {
+        assert_eq!(label_justify(0.0), "left");
+        assert_eq!(label_justify(90.0), "left");
+        assert_eq!(label_justify(180.0), "right");
+        assert_eq!(label_justify(270.0), "right");
+    }
+
+    #[test]
+    fn rotation_is_normalized() {
+        assert_eq!(label_justify(360.0), "left");
+        assert_eq!(label_justify(-180.0), "right");
+        assert_eq!(label_justify(-90.0), "right", "-90 is 270");
+        assert_eq!(label_justify(540.0), "right", "540 is 180");
+    }
+
+    #[test]
+    fn formatted_label_carries_justify_matching_its_rotation() {
+        let west = format_net_label("SIG", 10.0, 20.0, 180.0);
+        assert!(
+            west.contains("(justify right bottom)"),
+            "a 180° label must read right-justified, got: {west}"
+        );
+        let east = format_net_label("SIG", 10.0, 20.0, 0.0);
+        assert!(east.contains("(justify left bottom)"), "got: {east}");
+    }
+}
+
+#[cfg(test)]
+mod pin_label_rotation_tests {
+    use super::*;
+
+    /// One pin per edge of a square IC body, in the KiCad convention where a
+    /// pin's angle points from its tip toward the body.
+    fn edge_pin(angle: f64) -> LibPin {
+        let rad = angle.to_radians();
+        LibPin {
+            number: "1".into(),
+            name: "PIN".into(),
+            electrical_type: "passive".into(),
+            // Tip sits 10 mm out from the origin, opposite the way it points.
+            local_x: -10.0 * rad.cos(),
+            local_y: -10.0 * rad.sin(),
+            rotation: angle,
+            length: 2.54,
+        }
+    }
+
+    fn placed(rotation_deg: f64, mirror_x: bool, mirror_y: bool) -> PinTransform {
+        PinTransform {
+            comp_x: 100.0,
+            comp_y: 100.0,
+            rotation_deg,
+            mirror_x,
+            mirror_y,
+        }
+    }
+
+    #[test]
+    fn horizontal_pins_point_their_label_away_from_the_body() {
+        let t = placed(0.0, false, false);
+        // Left-edge pin (angle 0, body to its right): text must run left.
+        assert_eq!(pin_label_rotation(&edge_pin(0.0), t), 180.0);
+        // Right-edge pin (angle 180, body to its left): text runs right.
+        assert_eq!(pin_label_rotation(&edge_pin(180.0), t), 0.0);
+    }
+
+    #[test]
+    fn vertical_pins_keep_their_label_horizontal() {
+        let t = placed(0.0, false, false);
+        // Outward is north and south respectively, but no pin-anchored label
+        // in the KiCad demo corpus is rotated 90 or 270.
+        assert_eq!(pin_outward_direction(&edge_pin(270.0), t), 90.0);
+        assert_eq!(pin_label_rotation(&edge_pin(270.0), t), 0.0);
+        assert_eq!(pin_outward_direction(&edge_pin(90.0), t), 270.0);
+        assert_eq!(pin_label_rotation(&edge_pin(90.0), t), 0.0);
+    }
+
+    #[test]
+    fn rotating_the_symbol_carries_the_label_with_it() {
+        // A left-edge pin on a symbol turned 180° is now on the right.
+        assert_eq!(
+            pin_label_rotation(&edge_pin(0.0), placed(180.0, false, false)),
+            0.0
+        );
+        // Turned 90°, the pin is vertical, so the text stays horizontal.
+        assert_eq!(
+            pin_label_rotation(&edge_pin(0.0), placed(90.0, false, false)),
+            0.0
+        );
+    }
+
+    #[test]
+    fn mirroring_the_symbol_flips_left_and_right() {
+        let mirrored = placed(0.0, false, true);
+        assert_eq!(pin_label_rotation(&edge_pin(0.0), mirrored), 0.0);
+        assert_eq!(pin_label_rotation(&edge_pin(180.0), mirrored), 180.0);
+        // Mirroring about the other axis leaves a horizontal pin alone.
+        assert_eq!(
+            pin_label_rotation(&edge_pin(0.0), placed(0.0, true, false)),
+            180.0
+        );
+    }
+
+    /// The thing the user actually sees: a left-edge pin's label must be
+    /// right-justified, so its text runs away from the pin names inside the body.
+    #[test]
+    fn justify_pairs_with_the_derived_rotation() {
+        let t = placed(0.0, false, false);
+        assert_eq!(
+            label_justify(pin_label_rotation(&edge_pin(0.0), t)),
+            "right"
+        );
+        assert_eq!(
+            label_justify(pin_label_rotation(&edge_pin(180.0), t)),
+            "left"
+        );
+    }
+
+    #[test]
+    fn folding_a_direction_keeps_only_west() {
+        assert_eq!(horizontal_label_rotation(0.0), 0.0);
+        assert_eq!(horizontal_label_rotation(180.0), 180.0);
+        assert_eq!(horizontal_label_rotation(90.0), 0.0);
+        assert_eq!(horizontal_label_rotation(270.0), 0.0);
+        assert_eq!(horizontal_label_rotation(-180.0), 180.0);
+    }
+}

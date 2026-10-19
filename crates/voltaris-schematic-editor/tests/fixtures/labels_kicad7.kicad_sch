@@ -1,0 +1,26 @@
+(kicad_sch (version 20230819) (generator eeschema)
+
+  (uuid 3903a7df-7a56-43ca-91ba-b94a068bd407)
+
+  (paper "A2")
+
+  (title_block
+    (title "Front-Panel Connections")
+    (rev "-")
+    (company "CERN")
+    (comment 1 "PXIE-WREN")
+    (comment 3 "BE-CEM")
+    (comment 4 "Paul PERONNARD")
+    (comment 6 "Paul PERONNARD")
+  )
+
+  (lib_symbols)
+  (label "TRIGOUT6" (at 187.96 275.59 0) (fields_autoplaced)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid 023cf3af-4ede-4443-8185-42863f2b4a2f)
+  )
+  (hierarchical_label "TRIGIO_IN[7..0]" (shape output) (at 394.97 69.85 0) (fields_autoplaced)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 4f8cf29d-9167-4ba7-a0ed-759e3dacdd1c)
+  )
+)
