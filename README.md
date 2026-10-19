@@ -36,11 +36,12 @@ and hands you files a fab can build.
 
 ## ✨ Features
 
-**253 tools across 32 on-demand toolsets.** Guided by 13 expert skills.
+**253 tools across 32 on-demand toolsets.** Guided by 15 expert skills.
 
 | | Design | | Verify | | Deliver |
 |:-:|---|:-:|---|:-:|---|
 | 🧠 | Gated pro workflow | ✅ | Your rules as automatic checks | 🏭 | Gerbers, drill, BOM, pick-and-place |
+| 🛣️ | Pro placement and routing method | 🎨 | Maker-grade finish: Qwiic, Grove, pin labels | 🔁 | Freerouting with cleanup |
 | 📄 | Datasheet reader with page citations | 🔎 | ERC, DRC and design review | 🔌 | Firmware pin maps + bring-up code |
 | 🧱 | Verified circuit library | 👁️ | 3D visual review | 📐 | 3D-printable enclosure |
 | ⚙️ | Trace, impedance and power calculators | 🔬 | Circuit simulation | 📦 | LCSC part import |

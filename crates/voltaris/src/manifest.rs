@@ -158,6 +158,36 @@ pub const SKILLS: &[SkillManifest] = &[
         content: include_str!("../assets/skills/kicad-library/SKILL.md"),
         references: &[],
     },
+    SkillManifest {
+        name: "kicad-pro-layout",
+        content: include_str!("../assets/skills/kicad-pro-layout/SKILL.md"),
+        references: &[
+            (
+                "layer-playbook.md",
+                include_str!("../assets/skills/kicad-pro-layout/references/layer-playbook.md"),
+            ),
+            (
+                "layout-review.md",
+                include_str!("../assets/skills/kicad-pro-layout/references/layout-review.md"),
+            ),
+        ],
+    },
+    SkillManifest {
+        name: "kicad-board-craft",
+        content: include_str!("../assets/skills/kicad-board-craft/SKILL.md"),
+        references: &[
+            (
+                "connector-standards.md",
+                include_str!(
+                    "../assets/skills/kicad-board-craft/references/connector-standards.md"
+                ),
+            ),
+            (
+                "form-factors.md",
+                include_str!("../assets/skills/kicad-board-craft/references/form-factors.md"),
+            ),
+        ],
+    },
 ];
 
 // ─── Agents ──────────────────────────────────────────────────────────────────

@@ -6,6 +6,8 @@ skills:
   - voltaris
   - kicad-pro-workflow
   - kicad-review
+  - kicad-pro-layout
+  - kicad-board-craft
 maxTurns: 30
 ---
 

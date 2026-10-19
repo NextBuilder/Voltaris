@@ -18,8 +18,9 @@ return evidence. A gate whose check could not run is **INCOMPLETE** — say so, 
 Specialist skills carry the depth for each area — load them when their topic comes up:
 kicad-power-design (power tree, batteries), kicad-esp32 (ESP32 boards), kicad-mcu-design
 (RP2040/RP2350, STM32, nRF52 boards), kicad-high-speed-rf (impedance, USB, RF, length matching),
-kicad-part-sourcing (stock, alternates, importing parts) and kicad-simulation (checking
-circuits numerically).
+kicad-part-sourcing (stock, alternates, importing parts), kicad-simulation (checking
+circuits numerically), kicad-pro-layout (floor plan, placement and routing method) and
+kicad-board-craft (form factor, connectors, silkscreen and the finished look).
 
 Two habits run through every gate:
 - **Snapshot before every large change** (applying templates, re-placing, autorouting,
@@ -125,6 +126,8 @@ load_toolset('engineering')      # calc_impedance list_stackups calc_trace_width
 2. Net classes: power rails sized by `calc_trace_width` for their current; signal default;
    USB pair; RF. Create with `create_netclass` and `assign_net_to_class`.
 3. Outline, mounting holes (M3 by default) and keep-outs (antenna, mounting-hole screw heads).
+   Agree the style with the user — form factor, connector standard, mask colour — using the
+   kicad-board-craft skill.
 4. Push the netlist with `update_pcb_from_schematic`.
 
 ## Gate 4 — Placement
@@ -135,7 +138,7 @@ load_toolset('pcb_components')   # move_component rotate_component align_compone
 load_toolset('visual_review')    # render_board_3d
 ```
 
-Place in this order: fixed mechanical parts (connectors at their edges, buttons, mounting
+Follow the kicad-pro-layout skill's floor plan and placement order. In short: fixed mechanical parts (connectors at their edges, buttons, mounting
 holes) → RF module with its antenna over the edge/keep-out → MCU → power stage with its input
 loop tight → decoupling beside the pins it serves (`place_decoupling_caps` with the capacitor
 references you chose) → everything else grouped by function, sensors away from heat.
@@ -146,8 +149,8 @@ review against its checklist finds nothing open.
 ## Gate 5 — Routing
 
 ```
-load_toolset('pcb_routing')      # route_trace route_differential_pair add_via add_copper_pour
-load_toolset('integration')      # autoroute
+load_toolset('pcb_routing')      # route_trace route_differential_pair add_via add_copper_pour apply_specctra_ses
+load_toolset('integration')      # check_freerouting route_specctra_dsn
 load_toolset('pcb_export')       # refill_zones
 load_toolset('verification')     # run_drc
 ```
@@ -156,7 +159,8 @@ load_toolset('verification')     # run_drc
    `route_differential_pair`, RF feed, crystal.
 2. Ground: solid pour on the reference layer (`add_copper_pour`), stitching vias along RF and
    board edges.
-3. Remaining signals with `autoroute`, then review its result — never accept it unseen.
+3. Remaining signals with Freerouting (kicad-pro-layout skill, section 5), then review its
+   result — never accept it unseen.
 4. `refill_zones`, then `run_drc`: 0 errors and 0 unconnected items.
 5. `analyze_net_lengths` on every differential pair and matched group: verdict pass.
    ```
@@ -176,7 +180,8 @@ load_toolset('visual_review')    # render_board_3d
 
 - `run_design_review`, `run_design_checks` and the full [expert checklist](references/expert-checklist.md)
 - `diff_design` against the snapshot approved at Gate 1/2: every change since then is explained
-- `render_board_3d` with views iso, top and bottom against its visual checklist
+- `render_board_3d` with views iso, top and bottom against its visual checklist, plus the
+  kicad-board-craft beauty review and the kicad-pro-layout layout review
 - Fix every finding, then re-run Gates 2, 5 and 6 checks.
 
 ## Gate 7 — Manufacturing, enclosure, bring-up

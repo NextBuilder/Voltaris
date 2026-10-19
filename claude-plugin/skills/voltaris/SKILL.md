@@ -79,6 +79,8 @@ does not establish that a missing server-side check ran.
 | "What does the datasheet say about layout / pin 5 / max voltage?" | — | `load_toolset("datasheet")` then `read_datasheet` (cite the page) |
 | "Draw the block diagram / architecture" | 2 | `load_toolset("block_diagram")` then `generate_block_diagram` |
 | "Power supply / battery / regulator design" | — | kicad-power-design skill |
+| "Place and route this like a pro" / "clean up the routing" | 1 | kicad-pro-layout skill |
+| "Make it look like an Adafruit / Seeed / Arduino board" / "add Qwiic" / "pin labels" | 1 | kicad-board-craft skill |
 | "ESP32 board" | — | kicad-esp32 skill |
 | "RP2040 / RP2350 / STM32 / nRF52 board" | — | kicad-mcu-design skill |
 

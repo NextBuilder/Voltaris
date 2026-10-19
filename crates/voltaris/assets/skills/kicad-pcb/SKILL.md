@@ -12,6 +12,10 @@ argument-hint: "[layout task]"
 This skill guides Claude to perform PCB layout using Voltaris MCP tools.
 ALL modifications go through MCP tools — never edit .kicad_pcb files directly.
 
+This skill covers the tool mechanics. For the layout method (floor plan, placement order,
+return paths, routing order, autorouter cleanup) load the kicad-pro-layout skill; for form
+factors, connector standards, silkscreen and the finished look load kicad-board-craft.
+
 ---
 
 ## Prerequisites

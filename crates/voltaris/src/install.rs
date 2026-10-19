@@ -1739,9 +1739,9 @@ mod tests {
         run_install_at(InstallClient::Claude, &paths, false).unwrap();
 
         let claude = inspect_guidance(InstallClient::Claude, &paths, &this_exe());
-        // 12 SKILL.md + 15 reference files + 3 agents, and 4 hooks: the counts
+        // 15 SKILL.md + 19 reference files + 3 agents, and 4 hooks: the counts
         // `voltaris init` reports, restated rather than read from the manifest.
-        assert_eq!(claude.files.len(), 31);
+        assert_eq!(claude.files.len(), 37);
         assert_eq!(claude.hooks.len(), 4);
         for file in &claude.files {
             assert_eq!(file.status, ItemStatus::Current, "{}", file.name);
@@ -2090,7 +2090,7 @@ mod tests {
         .unwrap();
         let codex = inspect_guidance(InstallClient::Codex, &paths, &this_exe());
         assert!(codex.hooks.is_empty());
-        assert_eq!(codex.files.len(), 28);
+        assert_eq!(codex.files.len(), 34);
         assert_eq!(file_status(&codex, "kicad-library/SKILL.md"), "missing");
         let notice = codex.notice().unwrap();
         assert!(notice.starts_with("Voltaris Codex guidance"), "{notice}");
