@@ -4901,7 +4901,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "voltaris"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4925,7 +4925,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-core"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4959,7 +4959,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-ipc"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -4979,7 +4979,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-render"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "image",
@@ -4988,7 +4988,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-schematic-editor"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "tempfile",
  "thiserror 1.0.69",
@@ -4998,7 +4998,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-sexp"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -5016,7 +5016,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-vcs"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "gix",

@@ -32,11 +32,16 @@ The smart_layout engines do in one call what the sections below describe by hand
 dry-runs first and applies only with the plan_revision it returned, as one KiCad undo step:
 
 1. `smart_place` — connectors to edges, ICs centred, decoupling beside its pins, the rest beside
-   what it connects to, rows aligned. Read the moves and the connection-length reduction, then
-   apply.
-2. Route the critical nets by hand (differential pairs, RF feed, crystal, switching loops).
-3. `route_board` — routes everything else in priority order with vias; aim for
-   100 % completion. Nets it cannot finish are listed with the reason.
+   what it connects to, rows aligned, then an optimizer that moves, turns and swaps parts for a
+   shorter ratsnest with fewer crossings. `mode='improve'` (default) polishes an existing layout
+   without rearranging it; `mode='replace'` starts over; `mode='respect'` only places what is
+   missing. Read the moves, the connection-length and crossing reduction, then apply.
+2. Route the nets no engine should decide by hand: RF feed, crystal, switching loops.
+3. `route_board` — routes differential pairs first as coupled, length-matched pairs (D+/D-,
+   DP/DM and _P/_N are detected; pass `pair_width`/`pair_gap` from `calc_impedance`), then
+   everything else in priority order with vias. Fine-pitch parts are handled automatically: a
+   pitch-aligned grid and a neck-down width at their pads. Aim for 100 % completion and every
+   pair inside `pair_skew`; nets it cannot finish are listed with the reason.
 4. `polish_board` — pin labels, name block, mirrored ground pour and stitching vias.
 5. `refill_zones`, `run_drc` (live sync), then `audit_layout` — fix every finding it names, using
    the tool it names, until the engineering and beauty grades are A.
@@ -101,7 +106,8 @@ rotate or swap parts now — every crossing removed here saves two vias later.
 
 1. **Power and high-current paths**, short and wide, with enough vias to carry the current
    (`calc_via` gives current per via; use several in parallel at every layer change).
-2. **Critical signals**: differential pairs (`route_differential_pair`), clocks, crystal,
+2. **Critical signals**: differential pairs (`route_board` routes them coupled and
+   length-matched; `route_differential_pair` for one it leaves partial), clocks, crystal,
    RF feed, analog inputs — shortest path, over solid ground, away from the board edge.
 3. **Buses** as a group, parallel, equal spacing, turning together.
 4. **General signals**, by hand or with the autorouter (section 5).
@@ -120,7 +126,8 @@ Style rules that are also good engineering:
 
 An autorouter is fast and useful for the boring 60 %, never for the critical 40 %.
 
-1. Route and lock power, critical and matched nets by hand first.
+1. Route and lock power loops, RF and crystal nets by hand first; `route_board` already routes
+   differential pairs as coupled, length-matched pairs before anything else.
 2. `route_board` is the built-in router (no install). For very dense boards, Freerouting is the
    alternative: `check_freerouting`, then `export_specctra_dsn` → `route_specctra_dsn` →
    `plan_specctra_ses_import` → `apply_specctra_ses`. Locked tracks are preserved.

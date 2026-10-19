@@ -9,6 +9,7 @@ pub(crate) mod audit;
 pub(crate) mod model;
 pub(crate) mod placer;
 pub(crate) mod polish;
+pub(crate) mod refine;
 pub(crate) mod router;
 
 use crate::mcp::error::ToolErrorKind;
@@ -30,12 +31,15 @@ pub fn tools() -> Vec<ToolDef> {
              orders nets by priority (pours, power, fast signals, signals, ground), uses every \
              copper layer you allow with vias, keeps clearance from foreign copper and the edge, \
              prefers 45°/90° paths with few bends and a preferred layer, straightens each path, \
-             and retries the nets that failed first on the next pass. Power nets get \
-             power_width, signals signal_width, any net its net_widths entry. Nets fully covered \
-             by pours on every routing layer, and nets already connected, are skipped. Defaults to \
-             a dry run that reports completion, vias, length and a plan_revision; apply with \
-             dry_run false and that revision. Applies live in KiCad as one undo step. Differential \
-             pairs and length-matched groups should be routed first with route_differential_pair.",
+             and retries the nets that failed first on the next pass. Differential pairs (D+/D-, \
+             USB_DP/DM, _P/_N, or 'pairs') are routed first as coupled pairs at pair_gap and \
+             length-tuned with 45° bumps until the skew is within pair_skew. Fine-pitch parts \
+             (pins closer than 0.8 mm) get an automatic pitch-aligned grid and a neck-down width at \
+             their pads, so no manual grid is needed. Power nets get power_width, signals \
+             signal_width, any net its net_widths entry. Nets fully covered by pours on every \
+             routing layer, and nets already connected, are skipped. Defaults to a dry run that \
+             reports completion, vias, length, pairs (coupling, skew) and a plan_revision; apply \
+             with dry_run false and that revision. Applies live in KiCad as one undo step.",
             json!({
                 "type": "object",
                 "properties": {
@@ -44,8 +48,14 @@ pub fn tools() -> Vec<ToolDef> {
                     "expected_plan_revision": { "type": "string", "description": "Required to apply: plan_revision from the dry run" },
                     "nets": { "type": "array", "items": { "type": "string" }, "description": "Route only these nets" },
                     "layers": { "type": "array", "items": { "type": "string" }, "description": "Copper layers to route on (default F.Cu, B.Cu)" },
-                    "grid": { "type": "number", "default": 0.2, "description": "Routing grid in mm (0.1 for fine-pitch parts)" },
+                    "grid": { "type": "number", "description": "Routing grid in mm; omit to pick one from the finest pin pitch (0.2 mm on ordinary boards)" },
                     "clearance": { "type": "number", "default": 0.2 },
+                    "pairs": { "type": "array", "items": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 }, "description": "Differential pairs as [positive, negative] net names, in addition to the detected ones" },
+                    "auto_pairs": { "type": "boolean", "default": true, "description": "Detect pairs from net names (D+/D-, DP/DM, _P/_N)" },
+                    "pair_width": { "type": "number", "description": "Track width for pair nets (default signal_width; take it from calc_impedance)" },
+                    "pair_gap": { "type": "number", "description": "Edge-to-edge gap inside a pair (default and minimum: clearance)" },
+                    "pair_skew": { "type": "number", "default": 0.1, "description": "Largest allowed length difference inside a pair in mm" },
+                    "fine_pitch": { "type": "boolean", "default": true, "description": "Neck tracks down at fine-pitch pads and pick a fine grid automatically" },
                     "signal_width": { "type": "number", "default": 0.25 },
                     "power_width": { "type": "number", "default": 0.5 },
                     "net_widths": { "type": "object", "additionalProperties": { "type": "number" }, "description": "Track width per net name" },
@@ -63,13 +73,16 @@ pub fn tools() -> Vec<ToolDef> {
             "smart_place",
             "Plan and apply a professional placement: connectors flush on a board edge, the main \
              ICs in the middle, every decoupling capacitor beside the power pin it serves and \
-             turned along the IC's side, every other part next to the parts it connects to (trying \
-             all four rotations for the shortest connections), snapped to a grid with no courtyard \
-             overlaps and aligned into rows. Locked parts, mounting holes and 'keep' references \
-             stay where they are, and parts already well placed on the board are respected \
-             unless replace_all is set. Reports every move with its reason and the total connection \
-             length before and after. Defaults to a dry run; apply with dry_run false and the \
-             plan_revision.",
+             turned along the IC's side, every other part next to the parts it connects to, \
+             snapped to a grid with no courtyard overlaps and aligned into rows; then an optimizer \
+             moves, turns and swaps identical parts to shorten the ratsnest and cut its crossings, \
+             keeping every decoupling capacitor beside its pin. mode 'improve' (default) keeps a \
+             person's layout and its connectors and moves parts at most max_shift mm; 'replace' \
+             re-places everything and anneals it (connectors slide along their edge); 'respect' \
+             only places what is missing, off the board or overlapping. Locked parts, mounting \
+             holes and 'keep' references never move. Reports every move with its reason, the \
+             connection length and crossings before and after. Defaults to a dry run; apply with \
+             dry_run false and the plan_revision.",
             json!({
                 "type": "object",
                 "properties": {
@@ -82,7 +95,8 @@ pub fn tools() -> Vec<ToolDef> {
                     "keep": { "type": "array", "items": { "type": "string" }, "description": "References to leave where they are" },
                     "only": { "type": "array", "items": { "type": "string" }, "description": "Place only these references" },
                     "rotate": { "type": "boolean", "default": true },
-                    "replace_all": { "type": "boolean", "default": false, "description": "Re-place every movable part, not only those off the board, overlapping, or in the wrong role position" }
+                    "mode": { "type": "string", "enum": ["improve", "replace", "respect"], "default": "improve", "description": "improve: refine the current layout; replace: full re-placement; respect: place only what is missing" },
+                    "max_shift": { "type": "number", "default": 5.0, "description": "improve mode: furthest a part may move, in mm" }
                 },
                 "required": ["board"]
             }),
@@ -287,7 +301,32 @@ async fn handle_route(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
         opts.layers = l;
     }
     opts.only_nets = str_list(args, "nets");
-    opts.grid = f64_arg(args, "grid", opts.grid);
+    opts.grid = args["grid"].as_f64().filter(|g| g.is_finite() && *g > 0.0);
+    opts.auto_pairs = args["auto_pairs"].as_bool().unwrap_or(true);
+    opts.fine_pitch = args["fine_pitch"].as_bool().unwrap_or(true);
+    opts.pair_width = args["pair_width"]
+        .as_f64()
+        .filter(|w| w.is_finite() && *w > 0.0);
+    opts.pair_gap = args["pair_gap"]
+        .as_f64()
+        .filter(|g| g.is_finite() && *g > 0.0);
+    opts.pair_skew = f64_arg(args, "pair_skew", opts.pair_skew);
+    if let Some(pairs) = args["pairs"].as_array() {
+        for pair in pairs {
+            match pair
+                .as_array()
+                .map(|p| p.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+            {
+                Some(p) if p.len() == 2 => opts.pairs.push((p[0].to_string(), p[1].to_string())),
+                _ => {
+                    return Ok(invalid_arg(
+                        "pairs",
+                        "each pair is [positive, negative] net names",
+                    ))
+                }
+            }
+        }
+    }
     opts.clearance = f64_arg(args, "clearance", opts.clearance);
     opts.signal_width = f64_arg(args, "signal_width", opts.signal_width);
     opts.power_width = f64_arg(args, "power_width", opts.power_width);
@@ -347,8 +386,31 @@ async fn handle_route(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
         "vias": result.vias(),
         "track_length_mm": round3(result.length()),
         "pass_used": result.pass_used,
+        "grid_mm": result.grid,
         "router_ms": elapsed,
     });
+    let pairs: Vec<Value> = result
+        .pairs
+        .iter()
+        .map(|p| {
+            json!({
+                "positive": p.positive,
+                "negative": p.negative,
+                "status": p.status,
+                "width_mm": p.width,
+                "gap_mm": p.gap,
+                "length_mm": [round3(p.length_positive), round3(p.length_negative)],
+                "skew_mm": round3(p.skew),
+                "coupled_pct": round3(p.coupled_pct),
+                "tuned_mm": round3(p.tuned_mm),
+            })
+        })
+        .collect();
+    let fine: Vec<Value> = result
+        .fine_pitch
+        .iter()
+        .map(|f| json!({ "reference": f.reference, "pitch_mm": f.pitch, "pad_width_mm": f.pad_width, "neck_width_mm": f.neck }))
+        .collect();
     let dry = args["dry_run"].as_bool().unwrap_or(true);
     if dry {
         return Ok(CallToolResult::json(&json!({
@@ -356,6 +418,8 @@ async fn handle_route(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
             "source": source,
             "plan_revision": rev,
             "summary": summary,
+            "pairs": pairs,
+            "fine_pitch": fine,
             "nets": nets,
             "warnings": result.warnings,
             "next": "Apply with dry_run false and this plan_revision, then refill_zones and run_drc."
@@ -402,6 +466,8 @@ async fn handle_route(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
             "applied_items": n,
             "plan_revision": rev,
             "summary": summary,
+            "pairs": pairs,
+            "fine_pitch": fine,
             "nets": nets,
             "warnings": result.warnings,
             "undo": "One KiCad undo step removes everything route_board added.",
@@ -424,9 +490,16 @@ async fn handle_place(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
             .collect(),
         only: str_list(args, "only").map(|v| v.into_iter().collect::<BTreeSet<_>>()),
         rotate: args["rotate"].as_bool().unwrap_or(true),
-        respect_existing: !args["replace_all"].as_bool().unwrap_or(false),
+        mode: match opt_str(args, "mode").unwrap_or("improve") {
+            "improve" => placer::PlaceMode::Improve,
+            "replace" => placer::PlaceMode::Replace,
+            "respect" => placer::PlaceMode::Respect,
+            _ => return Ok(invalid_arg("mode", "use improve, replace or respect")),
+        },
+        max_shift: f64_arg(args, "max_shift", 5.0),
+        iterations: 0,
     };
-    let plan = match placer::plan(&board, &opts) {
+    let plan = match tokio::task::spawn_blocking(move || placer::plan(&board, &opts)).await? {
         Ok(p) => p,
         Err(e) => return Ok(CallToolResult::error(e.to_string())),
     };
@@ -456,6 +529,8 @@ async fn handle_place(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
         "kept": plan.kept.iter().map(|(r, why)| json!({"reference": r, "why": why})).collect::<Vec<_>>(),
         "unplaced": plan.unplaced.iter().map(|(r, why)| json!({"reference": r, "why": why})).collect::<Vec<_>>(),
         "connection_length_mm": { "before": round3(plan.airwire_before), "after": round3(plan.airwire_after), "reduction_pct": reduction },
+        "ratsnest_crossings": { "before": plan.crossings_before, "after": plan.crossings_after },
+        "optimizer": plan.refine.map(|r| json!({ "iterations": r.iterations, "accepted_moves": r.accepted, "cost_before": round3(r.cost_before), "cost_after": round3(r.cost_after) })),
     });
     if args["dry_run"].as_bool().unwrap_or(true) {
         let mut b = body;

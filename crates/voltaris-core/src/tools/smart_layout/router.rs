@@ -1,8 +1,15 @@
 //! Grid A* router: routes every unrouted connection on the board in priority
-//! order (power, fast, signal, ground), on any number of copper layers with
-//! vias, keeps KiCad's clearance from foreign copper, prefers octilinear paths
-//! with few bends, straightens them afterwards, and retries failed nets first
-//! on the next pass.
+//! order (differential pairs, power, fast, signal, ground), on any number of
+//! copper layers with vias, keeps KiCad's clearance from foreign copper,
+//! prefers octilinear paths with few bends, straightens them afterwards, and
+//! retries failed nets first on the next pass.
+//!
+//! Differential pairs (D+/D-, _P/_N, DP/DM) are routed as a coupled pair: the
+//! positive net first with room left beside it, the negative net hugging it at
+//! the pair gap, then the shorter one is length-tuned with mitred bumps until
+//! the skew is inside tolerance. Fine-pitch parts (pitch under 0.8 mm) get an
+//! automatic finer grid aligned to their pins and a neck-down width near their
+//! pads, so their pins escape without any manual settings.
 
 use super::model::{dist, is_fast, is_ground, segment_distance, Board, PadShape};
 use std::cmp::Ordering;
@@ -11,7 +18,8 @@ use std::collections::{BTreeMap, BinaryHeap, HashMap};
 #[derive(Debug, Clone)]
 pub struct RouteOptions {
     pub layers: Vec<String>,
-    pub grid: f64,
+    /// Routing grid in mm; None picks one from the finest pin pitch.
+    pub grid: Option<f64>,
     pub clearance: f64,
     pub signal_width: f64,
     pub power_width: f64,
@@ -24,13 +32,23 @@ pub struct RouteOptions {
     pub passes: usize,
     pub only_nets: Option<Vec<String>>,
     pub max_expansions: usize,
+    /// Explicit differential pairs as (positive, negative) net names.
+    pub pairs: Vec<(String, String)>,
+    /// Detect pairs from net names (D+/D-, _P/_N, DP/DM).
+    pub auto_pairs: bool,
+    pub pair_width: Option<f64>,
+    pub pair_gap: Option<f64>,
+    /// Largest allowed length difference inside a pair, in mm.
+    pub pair_skew: f64,
+    /// Neck tracks down near fine-pitch pads and pick a fine grid automatically.
+    pub fine_pitch: bool,
 }
 
 impl Default for RouteOptions {
     fn default() -> Self {
         Self {
             layers: vec!["F.Cu".into(), "B.Cu".into()],
-            grid: 0.2,
+            grid: None,
             clearance: 0.2,
             signal_width: 0.25,
             power_width: 0.5,
@@ -43,6 +61,12 @@ impl Default for RouteOptions {
             passes: 3,
             only_nets: None,
             max_expansions: 4_000_000,
+            pairs: Vec::new(),
+            auto_pairs: true,
+            pair_width: None,
+            pair_gap: None,
+            pair_skew: 0.1,
+            fine_pitch: true,
         }
     }
 }
@@ -73,8 +97,33 @@ impl NetResult {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct PairResult {
+    pub positive: String,
+    pub negative: String,
+    pub width: f64,
+    pub gap: f64,
+    pub length_positive: f64,
+    pub length_negative: f64,
+    pub skew: f64,
+    pub coupled_pct: f64,
+    pub tuned_mm: f64,
+    pub status: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct FinePitch {
+    pub reference: String,
+    pub pitch: f64,
+    pub pad_width: f64,
+    pub neck: f64,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct RouteResult {
     pub nets: Vec<NetResult>,
+    pub pairs: Vec<PairResult>,
+    pub fine_pitch: Vec<FinePitch>,
+    pub grid: f64,
     pub pass_used: usize,
     pub warnings: Vec<String>,
 }
@@ -217,7 +266,176 @@ struct NetPlan {
     span: f64,
     components: Vec<Vec<usize>>,
     terminal_points: Vec<Vec<(f64, f64)>>,
+    /// (partner plan index, this net is the positive one)
+    pair: Option<(usize, bool)>,
 }
+
+/// Name rules for differential pairs: (positive suffix, negative suffix).
+const PAIR_SUFFIXES: &[(&str, &str)] = &[
+    ("+", "-"),
+    ("_P", "_N"),
+    ("_DP", "_DN"),
+    ("_DP", "_DM"),
+    ("DP", "DM"),
+    ("P", "N"),
+];
+
+const NOT_PAIR_BASES: &[&str] = &[
+    "V", "VCC", "VDD", "VEE", "VSS", "VBAT", "VIN", "VOUT", "BAT", "PWR", "SUPPLY", "AC", "DC",
+    "VBUS", "POWER",
+];
+
+/// Pairs nets by name: D+/D-, USB_DP/USB_DM, TX_P/TX_N, CLKP/CLKN and so on.
+pub fn find_pairs(nets: &[String]) -> Vec<(String, String)> {
+    let upper: Vec<String> = nets.iter().map(|n| n.to_ascii_uppercase()).collect();
+    let mut used = vec![false; nets.len()];
+    let mut out = Vec::new();
+    for (i, u) in upper.iter().enumerate() {
+        if used[i] || super::super::design_model::is_power_net(&nets[i]) || is_ground(&nets[i]) {
+            continue;
+        }
+        for (sp, sn) in PAIR_SUFFIXES {
+            let Some(base) = u.strip_suffix(sp) else {
+                continue;
+            };
+            let short = super::model::short_net(base);
+            if short.is_empty() || NOT_PAIR_BASES.contains(&short.trim_end_matches('_')) {
+                continue;
+            }
+            if *sp == "P"
+                && !(is_fast(base) || ["TX", "RX", "LVDS", "CLK"].iter().any(|m| base.contains(m)))
+            {
+                continue;
+            }
+            let want = format!("{base}{sn}");
+            if let Some(j) = upper.iter().position(|v| *v == want) {
+                if !used[j] && j != i {
+                    used[i] = true;
+                    used[j] = true;
+                    out.push((nets[i].clone(), nets[j].clone()));
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Footprints whose pins are closer than 0.8 mm, with the widest track that
+/// still escapes between their pads at this clearance on the given grid
+/// (pitch and origin): the further a part's pins sit off the grid lines, the
+/// narrower the neck.
+pub fn fine_pitch_parts(board: &Board, clearance: f64, grid: (f64, f64, f64)) -> Vec<FinePitch> {
+    let (gx0, gy0, g) = grid;
+    let mut out = Vec::new();
+    for f in &board.footprints {
+        let pads: Vec<&super::model::Pad> = f
+            .pads
+            .iter()
+            .map(|&i| &board.pads[i])
+            .filter(|p| !p.through_hole)
+            .collect();
+        if pads.len() < 3 {
+            continue;
+        }
+        let mut pitch = f64::INFINITY;
+        let mut pad_width = 0.0;
+        let mut off: f64 = 0.0;
+        for (i, a) in pads.iter().enumerate() {
+            let mut near: Option<(f64, &super::model::Pad)> = None;
+            for (j, b) in pads.iter().enumerate() {
+                if i == j || a.front != b.front {
+                    continue;
+                }
+                let d = dist(a.at, b.at);
+                if d > 0.05 && near.is_none_or(|n| d < n.0) {
+                    near = Some((d, b));
+                }
+            }
+            let Some((d, b)) = near else { continue };
+            if d < pitch - 1e-9 {
+                pitch = d;
+                pad_width = a.size.0.min(a.size.1);
+            }
+            if d < 0.8 {
+                let (v, o) = if (a.at.0 - b.at.0).abs() > (a.at.1 - b.at.1).abs() {
+                    (a.at.0, gx0)
+                } else {
+                    (a.at.1, gy0)
+                };
+                let k = ((v - o) / g).round();
+                off = off.max((o + k * g - v).abs());
+            }
+        }
+        if pitch >= 0.8 - 1e-9 {
+            continue;
+        }
+        let margin = cell_margin(g, clearance + 0.05);
+        let between = 2.0 * (pitch - pad_width / 2.0 - clearance - margin - off);
+        let neck = (pitch - clearance).min(pad_width).min(between);
+        out.push(FinePitch {
+            reference: f.reference.clone(),
+            pitch: round_to(pitch, 1000.0),
+            pad_width: round_to(pad_width, 1000.0),
+            neck: (neck * 100.0).floor() / 100.0,
+        });
+    }
+    out
+}
+
+fn round_to(v: f64, k: f64) -> f64 {
+    (v * k).round() / k
+}
+
+/// Extra clearance a grid cell needs so that the straight step between two
+/// cell centres never comes closer to a convex obstacle than the centres do.
+fn cell_margin(pitch: f64, keep: f64) -> f64 {
+    pitch * pitch / (4.0 * keep.max(0.05)) + 0.002
+}
+
+/// The grid the router uses when none is given: 0.2 mm for ordinary boards; a
+/// pitch-aligned grid of a quarter pitch or finer when fine-pitch parts exist.
+fn auto_grid(fine: &[FinePitch]) -> f64 {
+    let Some(min_pitch) = fine.iter().map(|f| f.pitch).reduce(f64::min) else {
+        return 0.2;
+    };
+    let steps = (min_pitch / 0.125).ceil().max(4.0);
+    (min_pitch / steps).clamp(0.08, 0.2)
+}
+
+/// Shifts the grid origin so the pins of the finest part sit on grid lines.
+fn grid_origin(board: &Board, fine: &[FinePitch], outline: Rect, pitch: f64) -> (f64, f64) {
+    let mut origin = (outline.0, outline.1);
+    let Some(part) = fine
+        .iter()
+        .min_by(|a, b| a.pitch.partial_cmp(&b.pitch).unwrap_or(Ordering::Equal))
+    else {
+        return origin;
+    };
+    let Some(f) = board.footprint(&part.reference) else {
+        return origin;
+    };
+    let pads: Vec<(f64, f64)> = f.pads.iter().map(|&i| board.pads[i].at).collect();
+    let mut have = (false, false);
+    for (i, a) in pads.iter().enumerate() {
+        for b in &pads[i + 1..] {
+            if (dist(*a, *b) - part.pitch).abs() > 0.01 {
+                continue;
+            }
+            let along_x = (a.0 - b.0).abs() > (a.1 - b.1).abs();
+            if along_x && !have.0 {
+                origin.0 = a.0 - ((a.0 - outline.0) / pitch).floor() * pitch;
+                have.0 = true;
+            } else if !along_x && !have.1 {
+                origin.1 = a.1 - ((a.1 - outline.1) / pitch).floor() * pitch;
+                have.1 = true;
+            }
+        }
+    }
+    origin
+}
+
+type Rect = (f64, f64, f64, f64);
 
 pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> {
     let outline = board
@@ -232,17 +450,57 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
     if layers.is_empty() {
         anyhow::bail!("none of the requested layers exist on this board");
     }
-    let pitch = opts.grid.clamp(0.05, 1.0);
+    let mut warnings = Vec::new();
+    let probe = opts.grid.unwrap_or(0.1).clamp(0.05, 1.0);
+    let mut fine = if opts.fine_pitch {
+        fine_pitch_parts(board, opts.clearance, (outline.0, outline.1, probe))
+    } else {
+        Vec::new()
+    };
+    let mut pitch = match opts.grid {
+        Some(g) => g.clamp(0.05, 1.0),
+        None => auto_grid(&fine),
+    };
+    let cells = |p: f64| {
+        (((outline.2 - outline.0) / p).ceil() as usize + 2)
+            * (((outline.3 - outline.1) / p).ceil() as usize + 2)
+            * layers.len()
+    };
+    if opts.grid.is_none() {
+        while cells(pitch) > 8_000_000 && pitch < 0.5 {
+            pitch *= 1.25;
+        }
+    }
+    let (x0, y0) = grid_origin(board, &fine, outline, pitch);
+    if opts.fine_pitch {
+        fine = fine_pitch_parts(board, opts.clearance, (x0, y0, pitch));
+        for f in &fine {
+            if f.neck < 0.1 {
+                warnings.push(format!(
+                    "{} has a {:.2} mm pin pitch: at {:.2} mm clearance no track fits between its pads; lower 'clearance' (0.1-0.15 mm is typical for fine pitch)",
+                    f.reference, f.pitch, opts.clearance
+                ));
+            }
+        }
+    }
     let grid = Grid {
-        x0: outline.0,
-        y0: outline.1,
+        x0,
+        y0,
         pitch,
-        nx: ((outline.2 - outline.0) / pitch).ceil() as usize + 1,
-        ny: ((outline.3 - outline.1) / pitch).ceil() as usize + 1,
+        nx: ((outline.2 - x0) / pitch).ceil() as usize + 1,
+        ny: ((outline.3 - y0) / pitch).ceil() as usize + 1,
         nl: layers.len(),
     };
     if grid.nx * grid.ny * grid.nl > 12_000_000 {
         anyhow::bail!("the routing grid would exceed 12 million cells; raise 'grid'");
+    }
+    let mut pad_neck: HashMap<usize, f64> = HashMap::new();
+    for f in fine.iter().filter(|f| f.neck >= 0.1) {
+        if let Some(fp) = board.footprint(&f.reference) {
+            for &i in &fp.pads {
+                pad_neck.insert(i, f.neck);
+            }
+        }
     }
 
     let nets: Vec<String> = board.nets().into_iter().collect();
@@ -303,8 +561,35 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
         });
     }
 
+    let mut pair_list: Vec<(String, String)> = opts
+        .pairs
+        .iter()
+        .filter(|(p, n)| net_id.contains_key(p.as_str()) && net_id.contains_key(n.as_str()))
+        .cloned()
+        .collect();
+    if opts.auto_pairs {
+        for (p, n) in find_pairs(&nets) {
+            if !pair_list
+                .iter()
+                .any(|(a, b)| [a, b].contains(&&p) || [a, b].contains(&&n))
+            {
+                pair_list.push((p, n));
+            }
+        }
+    }
+    if let Some(only) = &opts.only_nets {
+        pair_list.retain(|(p, n)| only.contains(p) && only.contains(n));
+    }
+    let pair_gap = opts.pair_gap.unwrap_or(opts.clearance);
+    if pair_gap + 1e-9 < opts.clearance && !pair_list.is_empty() {
+        warnings.push(format!(
+            "pair_gap {pair_gap} mm is below the {} mm clearance KiCad's DRC checks between the two nets; the pairs use the clearance as their gap (add a diff-pair rule and lower 'clearance' for a tighter gap)",
+            opts.clearance
+        ));
+    }
+    let pair_gap = pair_gap.max(opts.clearance);
+
     let mut plans = Vec::new();
-    let mut warnings = Vec::new();
     let mut skipped = Vec::new();
     for (id, name) in nets.iter().enumerate() {
         if let Some(only) = &opts.only_nets {
@@ -341,32 +626,33 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
             });
             continue;
         }
+        let in_pair = pair_list.iter().any(|(p, n)| p == name || n == name);
         let power = super::super::design_model::is_power_net(name) || is_ground(name);
-        let width = opts
-            .net_widths
-            .get(name)
-            .copied()
-            .or_else(|| {
-                opts.net_widths
-                    .iter()
-                    .find(|(k, _)| super::model::short_net(name) == k.as_str())
-                    .map(|(_, v)| *v)
-            })
-            .unwrap_or(if power {
-                opts.power_width
-            } else {
-                opts.signal_width
-            });
-        let tier = if is_ground(name) && !poured.is_empty() {
-            0
-        } else if power && !is_ground(name) {
-            1
-        } else if is_fast(name) {
-            2
-        } else if is_ground(name) {
-            4
+        let explicit = opts.net_widths.get(name).copied().or_else(|| {
+            opts.net_widths
+                .iter()
+                .find(|(k, _)| super::model::short_net(name) == k.as_str())
+                .map(|(_, v)| *v)
+        });
+        let width = explicit.unwrap_or(if in_pair {
+            opts.pair_width.unwrap_or(opts.signal_width)
+        } else if power {
+            opts.power_width
         } else {
+            opts.signal_width
+        });
+        let tier = if in_pair {
+            0
+        } else if is_ground(name) && !poured.is_empty() {
+            1
+        } else if power && !is_ground(name) {
+            2
+        } else if is_fast(name) {
             3
+        } else if is_ground(name) {
+            5
+        } else {
+            4
         };
         let pts: Vec<(f64, f64)> = pads.iter().map(|&i| board.pads[i].at).collect();
         let span = {
@@ -383,11 +669,6 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
             .iter()
             .map(|c| c.iter().map(|&i| board.pads[i].at).collect())
             .collect();
-        if is_fast(name) {
-            warnings.push(format!(
-                "{name} looks like a fast signal; route matched pairs with route_differential_pair and check skew with analyze_net_lengths"
-            ));
-        }
         plans.push(NetPlan {
             name: name.clone(),
             id,
@@ -396,6 +677,7 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
             span,
             components,
             terminal_points,
+            pair: None,
         });
     }
     plans.sort_by(|a, b| {
@@ -404,39 +686,77 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
             .then(a.span.partial_cmp(&b.span).unwrap_or(Ordering::Equal))
             .then(a.name.cmp(&b.name))
     });
+    let mut pairs_routed: Vec<(usize, usize)> = Vec::new();
+    for (p, n) in &pair_list {
+        let pi = plans.iter().position(|x| &x.name == p);
+        let ni = plans.iter().position(|x| &x.name == n);
+        match (pi, ni) {
+            (Some(pi), Some(ni)) => {
+                plans[pi].pair = Some((ni, true));
+                plans[ni].pair = Some((pi, false));
+                pairs_routed.push((pi, ni));
+            }
+            (None, None) => {}
+            _ => warnings.push(format!(
+                "{p}/{n}: one side is already connected, so the pair is not routed as a coupled pair; check its skew with analyze_net_lengths"
+            )),
+        }
+    }
+    for plan in &plans {
+        if plan.pair.is_none() && is_fast(&plan.name) {
+            warnings.push(format!(
+                "{} looks like a fast signal; keep it short and check it with analyze_net_lengths",
+                plan.name
+            ));
+        }
+    }
 
+    let ctx = RouteCtx {
+        board,
+        grid: &grid,
+        layers: &layers,
+        opts,
+        pad_neck: &pad_neck,
+        layer_bit: &layer_bit,
+        all_layers,
+    };
     let mut order: Vec<usize> = (0..plans.len()).collect();
     let mut best: Option<RouteResult> = None;
     for pass in 0..opts.passes.max(1) {
         let mut obstacles = base.clone();
         let mut results: Vec<NetResult> = Vec::new();
+        let mut pairs_out: Vec<PairResult> = Vec::new();
         let mut failed = Vec::new();
         for &pi in &order {
             let plan = &plans[pi];
-            let r = route_net(board, plan, &grid, &layers, &obstacles, opts);
-            for s in &r.segments {
-                obstacles.push(Obstacle {
-                    net: Some(plan.id),
-                    layers: layer_bit(&s.layer),
-                    shape: Shape::Capsule(s.a, s.b, s.width / 2.0),
-                });
+            match plan.pair {
+                Some((_, false)) => continue,
+                Some((ni, true)) => {
+                    let (rp, rn, pr) = route_pair(&ctx, plan, &plans[ni], &mut obstacles, pair_gap);
+                    if rp.connections_routed < rp.connections_total
+                        || rn.connections_routed < rn.connections_total
+                    {
+                        failed.push(pi);
+                    }
+                    results.push(rp);
+                    results.push(rn);
+                    pairs_out.push(pr);
+                }
+                None => {
+                    let r = route_net(&ctx, plan, &obstacles, &Extras::default());
+                    ctx.add_obstacles(&mut obstacles, plan.id, &r);
+                    if r.connections_routed < r.connections_total {
+                        failed.push(pi);
+                    }
+                    results.push(r);
+                }
             }
-            for v in &r.vias {
-                obstacles.push(Obstacle {
-                    net: Some(plan.id),
-                    layers: all_layers,
-                    shape: Shape::Circle(*v, opts.via_size / 2.0),
-                });
-            }
-            if r.connections_routed < r.connections_total {
-                failed.push(pi);
-            }
-            results.push(r);
         }
         let candidate = RouteResult {
             nets: results,
+            pairs: pairs_out,
             pass_used: pass + 1,
-            warnings: Vec::new(),
+            ..Default::default()
         };
         let done = failed.is_empty();
         if best.as_ref().is_none_or(|b| candidate.better_than(b)) {
@@ -452,8 +772,365 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
     let mut best = best.unwrap_or_default();
     best.nets.sort_by(|a, b| a.net.cmp(&b.net));
     best.nets.extend(skipped);
+    for p in &best.pairs {
+        if p.status == "routed" && p.skew > opts.pair_skew + 1e-6 {
+            warnings.push(format!(
+                "{}/{}: skew {:.2} mm is above the {:.2} mm target (no room left to tune); lengthen the shorter net by hand",
+                p.positive, p.negative, p.skew, opts.pair_skew
+            ));
+        }
+    }
     best.warnings = warnings;
+    best.grid = round_to(pitch, 10000.0);
+    best.fine_pitch = fine;
     Ok(best)
+}
+
+struct RouteCtx<'a> {
+    board: &'a Board,
+    grid: &'a Grid,
+    layers: &'a [String],
+    opts: &'a RouteOptions,
+    pad_neck: &'a HashMap<usize, f64>,
+    layer_bit: &'a dyn Fn(&str) -> u32,
+    all_layers: u32,
+}
+
+impl RouteCtx<'_> {
+    fn add_obstacles(&self, obstacles: &mut Vec<Obstacle>, net: usize, r: &NetResult) {
+        for s in &r.segments {
+            obstacles.push(Obstacle {
+                net: Some(net),
+                layers: (self.layer_bit)(&s.layer),
+                shape: Shape::Capsule(s.a, s.b, s.width / 2.0),
+            });
+        }
+        for v in &r.vias {
+            obstacles.push(Obstacle {
+                net: Some(net),
+                layers: self.all_layers,
+                shape: Shape::Circle(*v, self.opts.via_size / 2.0),
+            });
+        }
+    }
+}
+
+/// Per-net adjustments for pair routing.
+#[derive(Default)]
+struct Extras {
+    /// Keep this much further from foreign copper (room for the partner),
+    /// except from the partner net itself and near the pair's own pads.
+    inflate: Option<(f64, usize, Vec<usize>)>,
+    /// Cells at the pair spacing from the partner: cheaper, so the path hugs it.
+    couple: Option<Vec<bool>>,
+}
+
+fn route_pair(
+    ctx: &RouteCtx<'_>,
+    p: &NetPlan,
+    n: &NetPlan,
+    obstacles: &mut Vec<Obstacle>,
+    gap: f64,
+) -> (NetResult, NetResult, PairResult) {
+    let spacing = p.width / 2.0 + gap + n.width / 2.0;
+    let pair_pads: Vec<usize> = p
+        .components
+        .iter()
+        .chain(n.components.iter())
+        .flatten()
+        .copied()
+        .collect();
+    let inflated = route_net(
+        ctx,
+        p,
+        obstacles,
+        &Extras {
+            inflate: Some((gap + n.width, n.id, pair_pads)),
+            couple: None,
+        },
+    );
+    let mut rp = if inflated.connections_routed == inflated.connections_total {
+        inflated
+    } else {
+        let plain = route_net(ctx, p, obstacles, &Extras::default());
+        if plain.connections_routed > inflated.connections_routed {
+            plain
+        } else {
+            inflated
+        }
+    };
+    let p_start = obstacles.len();
+    ctx.add_obstacles(obstacles, p.id, &rp);
+    let band = coupling_band(ctx.grid, ctx.layers, &rp.segments, spacing);
+    let mut rn = route_net(
+        ctx,
+        n,
+        obstacles,
+        &Extras {
+            inflate: None,
+            couple: Some(band),
+        },
+    );
+    let both = rp.connections_routed == rp.connections_total
+        && rn.connections_routed == rn.connections_total;
+    let mut tuned = 0.0;
+    let skew0 = (rp.length() - rn.length()).abs();
+    if both && skew0 > ctx.opts.pair_skew {
+        if rn.length() < rp.length() {
+            tuned = tune_length(ctx, &mut rn, n.id, obstacles, skew0, &rp.segments);
+            ctx.add_obstacles(obstacles, n.id, &rn);
+        } else {
+            obstacles.truncate(p_start);
+            ctx.add_obstacles(obstacles, n.id, &rn);
+            tuned = tune_length(ctx, &mut rp, p.id, obstacles, skew0, &rn.segments);
+            ctx.add_obstacles(obstacles, p.id, &rp);
+        }
+    } else {
+        ctx.add_obstacles(obstacles, n.id, &rn);
+    }
+    let coupled = coupled_fraction(&rn.segments, &rp.segments, spacing + ctx.grid.pitch * 1.5);
+    let pr = PairResult {
+        positive: p.name.clone(),
+        negative: n.name.clone(),
+        width: p.width,
+        gap,
+        length_positive: rp.length(),
+        length_negative: rn.length(),
+        skew: (rp.length() - rn.length()).abs(),
+        coupled_pct: coupled * 100.0,
+        tuned_mm: tuned,
+        status: if both { "routed" } else { "partial" },
+    };
+    if both {
+        let note = format!(
+            "differential pair with {}: {:.0}% coupled, skew {:.3} mm",
+            if p.name == pr.positive {
+                &n.name
+            } else {
+                &p.name
+            },
+            pr.coupled_pct,
+            pr.skew
+        );
+        rp.detail = Some(note.clone());
+        rn.detail = Some(note.replacen(&n.name, &p.name, 1));
+    }
+    (rp, rn, pr)
+}
+
+/// Grid cells whose centre lies at the pair spacing (plus up to 1.5 cells) from
+/// the partner's tracks on the same layer.
+fn coupling_band(
+    grid: &Grid,
+    layers: &[String],
+    partner: &[RoutedSegment],
+    spacing: f64,
+) -> Vec<bool> {
+    let mut band = vec![false; grid.nx * grid.ny * grid.nl];
+    let mut nearest: HashMap<usize, f64> = HashMap::new();
+    let hi = spacing + grid.pitch * 1.5;
+    for s in partner {
+        let Some(l) = layers.iter().position(|x| x == &s.layer) else {
+            continue;
+        };
+        let bbox = (
+            s.a.0.min(s.b.0),
+            s.a.1.min(s.b.1),
+            s.a.0.max(s.b.0),
+            s.a.1.max(s.b.1),
+        );
+        let (x0, y0, x1, y1) = grid.cells_near(bbox, hi);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let d = segment_distance(s.a, s.b, grid.center(x, y));
+                let e = nearest.entry(grid.idx(l, x, y)).or_insert(f64::INFINITY);
+                *e = e.min(d);
+            }
+        }
+    }
+    for (cell, d) in nearest {
+        if d >= spacing - 0.02 && d <= hi {
+            band[cell] = true;
+        }
+    }
+    band
+}
+
+fn coupled_fraction(net: &[RoutedSegment], partner: &[RoutedSegment], within: f64) -> f64 {
+    let (mut total, mut near) = (0.0, 0.0);
+    for s in net {
+        let len = dist(s.a, s.b);
+        let steps = (len / 0.1).ceil().max(1.0) as usize;
+        for k in 0..steps {
+            let t = (k as f64 + 0.5) / steps as f64;
+            let q = (s.a.0 + t * (s.b.0 - s.a.0), s.a.1 + t * (s.b.1 - s.a.1));
+            let d = partner
+                .iter()
+                .filter(|o| o.layer == s.layer)
+                .map(|o| segment_distance(o.a, o.b, q))
+                .fold(f64::INFINITY, f64::min);
+            total += len / steps as f64;
+            if d <= within {
+                near += len / steps as f64;
+            }
+        }
+    }
+    if total > 0.0 {
+        near / total
+    } else {
+        0.0
+    }
+}
+
+/// Adds mitred (45°) bumps to the straight runs of a routed net until it is
+/// `extra` mm longer, on the side away from its partner, keeping clearance.
+/// Returns the length added.
+fn tune_length(
+    ctx: &RouteCtx<'_>,
+    r: &mut NetResult,
+    net: usize,
+    obstacles: &[Obstacle],
+    extra: f64,
+    partner: &[RoutedSegment],
+) -> f64 {
+    let opts = ctx.opts;
+    let outline = ctx.board.outline.unwrap_or_default();
+    let mut remaining = extra;
+    let mut added = 0.0;
+    let mut order: Vec<usize> = (0..r.segments.len()).collect();
+    order.sort_by(|&a, &b| {
+        let la = dist(r.segments[a].a, r.segments[a].b);
+        let lb = dist(r.segments[b].a, r.segments[b].b);
+        lb.partial_cmp(&la).unwrap_or(Ordering::Equal)
+    });
+    let mut replace: Vec<(usize, Vec<RoutedSegment>)> = Vec::new();
+    for si in order {
+        if remaining < 0.005 {
+            break;
+        }
+        let s = r.segments[si].clone();
+        let len = dist(s.a, s.b);
+        let w = s.width;
+        let top = (2.0 * w).max(0.4);
+        let amax = (4.0 * w).max(1.0);
+        let end_margin = (2.0 * w).max(0.8);
+        let per_bump = |a: f64| a * (2.0 * std::f64::consts::SQRT_2 - 2.0);
+        let room = len - 2.0 * end_margin;
+        if room < 2.0 * 0.2 + top {
+            continue;
+        }
+        let u = ((s.b.0 - s.a.0) / len, (s.b.1 - s.a.1) / len);
+        let fits =
+            |a: f64, k: usize| k as f64 * (2.0 * a + top) + (k as f64 - 1.0).max(0.0) * top <= room;
+        let c = per_bump(1.0);
+        let mut k = 1usize;
+        while remaining / (c * k as f64) > amax && fits(amax, k + 1) {
+            k += 1;
+        }
+        let a = (remaining / (c * k as f64)).clamp(0.05, amax);
+        if !fits(a, k) {
+            continue;
+        }
+        let normal_a = (-u.1, u.0);
+        let side_score = |nv: (f64, f64)| -> f64 {
+            let mid = (
+                (s.a.0 + s.b.0) / 2.0 + nv.0 * a,
+                (s.a.1 + s.b.1) / 2.0 + nv.1 * a,
+            );
+            partner
+                .iter()
+                .filter(|o| o.layer == s.layer)
+                .map(|o| segment_distance(o.a, o.b, mid))
+                .fold(f64::INFINITY, f64::min)
+        };
+        let mut sides = [normal_a, (-normal_a.0, -normal_a.1)];
+        if side_score(sides[1]) > side_score(sides[0]) {
+            sides.swap(0, 1);
+        }
+        let used = k as f64 * (2.0 * a + top) + (k as f64 - 1.0) * top;
+        let start = (len - used) / 2.0;
+        for nv in sides {
+            let at = |along: f64, out: f64| {
+                (
+                    s.a.0 + u.0 * along + nv.0 * out,
+                    s.a.1 + u.1 * along + nv.1 * out,
+                )
+            };
+            let mut pts = vec![s.a];
+            let mut t = start;
+            for _ in 0..k {
+                pts.push(at(t, 0.0));
+                pts.push(at(t + a, a));
+                pts.push(at(t + a + top, a));
+                pts.push(at(t + 2.0 * a + top, 0.0));
+                t += 2.0 * a + 2.0 * top;
+            }
+            pts.push(s.b);
+            let segs: Vec<RoutedSegment> = pts
+                .windows(2)
+                .filter(|p| dist(p[0], p[1]) > 1e-6)
+                .map(|p| RoutedSegment {
+                    layer: s.layer.clone(),
+                    a: p[0],
+                    b: p[1],
+                    width: w,
+                })
+                .collect();
+            let edge = opts.edge_clearance + w / 2.0;
+            let inside = pts.iter().all(|p| {
+                p.0 >= outline.0 + edge
+                    && p.0 <= outline.2 - edge
+                    && p.1 >= outline.1 + edge
+                    && p.1 <= outline.3 - edge
+            });
+            let bit = (ctx.layer_bit)(&s.layer);
+            let clear = inside
+                && segs.iter().all(|g| {
+                    obstacles.iter().all(|o| {
+                        o.net == Some(net)
+                            || o.layers & bit == 0
+                            || shape_segment_distance(&o.shape, g.a, g.b)
+                                >= opts.clearance + w / 2.0 + 0.005
+                    })
+                })
+                && segs.iter().all(|g| {
+                    partner.iter().filter(|o| o.layer == g.layer).all(|o| {
+                        shape_segment_distance(&Shape::Capsule(o.a, o.b, o.width / 2.0), g.a, g.b)
+                            >= opts.clearance + w / 2.0 + 0.005
+                    })
+                })
+                && r.vias.iter().all(|v| {
+                    dist(*v, s.a) < 1e-6
+                        || dist(*v, s.b) < 1e-6
+                        || segs.iter().all(|g| {
+                            segment_distance(g.a, g.b, *v) >= opts.via_size / 2.0 + w / 2.0
+                        })
+                });
+            if clear {
+                let gain = per_bump(a) * k as f64;
+                remaining -= gain;
+                added += gain;
+                replace.push((si, segs));
+                break;
+            }
+        }
+    }
+    replace.sort_by_key(|r| std::cmp::Reverse(r.0));
+    for (si, segs) in replace {
+        r.segments.splice(si..=si, segs);
+    }
+    added
+}
+
+fn shape_segment_distance(shape: &Shape, a: (f64, f64), b: (f64, f64)) -> f64 {
+    let len = dist(a, b);
+    let steps = (len / 0.02).ceil().max(1.0) as usize;
+    (0..=steps)
+        .map(|k| {
+            let t = k as f64 / steps as f64;
+            shape.distance((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)))
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 pub(crate) fn component_count(board: &Board, net: &str, pads: &[usize]) -> usize {
@@ -538,13 +1215,12 @@ fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
 }
 
 fn route_net(
-    board: &Board,
+    ctx: &RouteCtx<'_>,
     plan: &NetPlan,
-    grid: &Grid,
-    layers: &[String],
     obstacles: &[Obstacle],
-    opts: &RouteOptions,
+    extras: &Extras,
 ) -> NetResult {
+    let (board, grid, layers, opts) = (ctx.board, ctx.grid, ctx.layers, ctx.opts);
     let total = plan.components.len() - 1;
     let mut result = NetResult {
         net: plan.name.clone(),
@@ -552,19 +1228,67 @@ fn route_net(
         connections_total: total,
         ..Default::default()
     };
-    let half = plan.width / 2.0;
-    let track_keep = opts.clearance + half;
-    let margin = grid.pitch * 0.25;
-    let n = grid.nx * grid.ny * grid.nl;
+    let own_pads: Vec<usize> = plan.components.iter().flatten().copied().collect();
+    let neck_width = own_pads
+        .iter()
+        .filter_map(|i| ctx.pad_neck.get(i).copied())
+        .reduce(f64::min)
+        .filter(|w| *w + 1e-9 < plan.width);
+    let per = grid.nx * grid.ny;
+    let mut neck_zone = vec![false; per];
+    if neck_width.is_some() {
+        for &i in &own_pads {
+            if !ctx.pad_neck.contains_key(&i) {
+                continue;
+            }
+            let p = &board.pads[i];
+            let (hx, hy) = p.half_extent();
+            let reach = hx.max(hy) + 0.8;
+            let (x0, y0, x1, y1) = grid.cells_near(p.bbox(), reach);
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if dist(p.at, grid.center(x, y)) <= reach {
+                        neck_zone[y * grid.nx + x] = true;
+                    }
+                }
+            }
+        }
+    }
+    let half_of = |xy: usize| -> f64 {
+        match neck_width {
+            Some(w) if neck_zone[xy] => w / 2.0,
+            _ => plan.width / 2.0,
+        }
+    };
+    let wide_keep = opts.clearance + plan.width / 2.0;
+    let margin = cell_margin(
+        grid.pitch,
+        opts.clearance + neck_width.unwrap_or(plan.width) / 2.0,
+    );
+    let n = per * grid.nl;
     let mut blocked = vec![false; n];
-    let mut via_blocked = vec![false; grid.nx * grid.ny];
+    let mut via_blocked = vec![false; per];
     let via_keep = opts.clearance + opts.via_size / 2.0;
+    let mut exempt = vec![false; per];
+    if let Some((_, _, pads)) = &extras.inflate {
+        for &i in pads {
+            let p = &board.pads[i];
+            let (x0, y0, x1, y1) = grid.cells_near(p.bbox(), 1.5);
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if p.distance_to(grid.center(x, y)) <= 1.5 {
+                        exempt[y * grid.nx + x] = true;
+                    }
+                }
+            }
+        }
+    }
 
-    let edge = opts.edge_clearance + half;
     let outline = board.outline.unwrap_or_default();
     for y in 0..grid.ny {
         for x in 0..grid.nx {
             let (cx, cy) = grid.center(x, y);
+            let edge = opts.edge_clearance + half_of(y * grid.nx + x);
             let inside = cx >= outline.0 + edge
                 && cx <= outline.2 - edge
                 && cy >= outline.1 + edge
@@ -585,24 +1309,30 @@ fn route_net(
         }
     }
     for o in obstacles {
-        let foreign = o.net != Some(plan.id);
+        if o.net == Some(plan.id) {
+            continue;
+        }
+        let extra = match &extras.inflate {
+            Some((e, partner, _)) if o.net != Some(*partner) => *e,
+            _ => 0.0,
+        };
         let bbox = o.shape.bbox();
-        if foreign {
-            let reach = track_keep.max(via_keep) + margin;
-            let (x0, y0, x1, y1) = grid.cells_near(bbox, reach);
-            for y in y0..=y1 {
-                for x in x0..=x1 {
-                    let d = o.shape.distance(grid.center(x, y));
-                    if d < track_keep + margin {
-                        for l in 0..grid.nl {
-                            if o.layers & (1 << l) != 0 {
-                                blocked[grid.idx(l, x, y)] = true;
-                            }
+        let reach = (wide_keep + extra).max(via_keep) + margin;
+        let (x0, y0, x1, y1) = grid.cells_near(bbox, reach);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let xy = y * grid.nx + x;
+                let d = o.shape.distance(grid.center(x, y));
+                let grow = if exempt[xy] { 0.0 } else { extra };
+                if d < opts.clearance + half_of(xy) + margin + grow {
+                    for l in 0..grid.nl {
+                        if o.layers & (1 << l) != 0 {
+                            blocked[grid.idx(l, x, y)] = true;
                         }
                     }
-                    if d < via_keep + margin {
-                        via_blocked[y * grid.nx + x] = true;
-                    }
+                }
+                if d < via_keep + margin {
+                    via_blocked[xy] = true;
                 }
             }
         }
@@ -620,7 +1350,11 @@ fn route_net(
         }
     }
 
-    let terminal_cells = |pads: &[usize]| -> Vec<usize> {
+    // Terminal cells: grid cells inside the pad that keep clearance; when none
+    // does, the inside cell nearest the pad centre (or, for a pad smaller than
+    // the grid, the nearest cell plus a stub track back to the pad centre).
+    let mut stubs: HashMap<usize, (f64, f64)> = HashMap::new();
+    let mut terminal_cells = |pads: &[usize], blocked: &[bool]| -> Vec<usize> {
         let mut cells = Vec::new();
         for &pi in pads {
             let p = &board.pads[pi];
@@ -629,37 +1363,53 @@ fn route_net(
                 if !p.on_layer(name) && !p.through_hole {
                     continue;
                 }
-                let mut found = false;
+                let mut inside = Vec::new();
                 for y in y0..=y1 {
                     for x in x0..=x1 {
-                        let c = grid.center(x, y);
-                        if p.distance_to(c) <= 1e-9 {
-                            cells.push(grid.idx(l, x, y));
-                            found = true;
+                        if p.distance_to(grid.center(x, y)) <= 1e-9 {
+                            inside.push(grid.idx(l, x, y));
                         }
                     }
                 }
-                if !found {
+                let free: Vec<usize> = inside.iter().copied().filter(|&c| !blocked[c]).collect();
+                if !free.is_empty() {
+                    cells.extend(free);
+                } else if let Some(&c) = inside.iter().min_by(|&&a, &&b| {
+                    let (_, ax, ay) = grid.coord(a);
+                    let (_, bx, by) = grid.coord(b);
+                    dist(grid.center(ax, ay), p.at)
+                        .partial_cmp(&dist(grid.center(bx, by), p.at))
+                        .unwrap_or(Ordering::Equal)
+                }) {
+                    cells.push(c);
+                } else {
                     let gx = (((p.at.0 - grid.x0) / grid.pitch).round().max(0.0) as usize)
                         .min(grid.nx - 1);
                     let gy = (((p.at.1 - grid.y0) / grid.pitch).round().max(0.0) as usize)
                         .min(grid.ny - 1);
-                    cells.push(grid.idx(l, gx, gy));
+                    let c = grid.idx(l, gx, gy);
+                    stubs.insert(c, p.at);
+                    cells.push(c);
                 }
             }
         }
         cells
     };
 
+    let cell_owner: Vec<Vec<usize>> = plan
+        .components
+        .iter()
+        .map(|c| terminal_cells(c, &blocked))
+        .collect();
     let mut connected = vec![false; plan.components.len()];
     connected[0] = true;
-    let mut tree: Vec<usize> = terminal_cells(&plan.components[0]);
-    let cell_owner: Vec<Vec<usize>> = plan.components.iter().map(|c| terminal_cells(c)).collect();
+    let mut tree: Vec<usize> = cell_owner[0].clone();
     for cells in &cell_owner {
         for &c in cells {
             blocked[c] = false;
         }
     }
+    let bonus = extras.couple.as_deref();
 
     let mut routed = 0;
     loop {
@@ -687,6 +1437,7 @@ fn route_net(
             &target_pts,
             opts,
             &plan.name,
+            bonus,
         ) else {
             result.detail = Some(format!(
                 "no path found for {} of {} connections",
@@ -697,7 +1448,26 @@ fn route_net(
         };
         connected[reached] = true;
         routed += 1;
-        let (segs, vias) = emit(grid, layers, &path, plan.width, &blocked);
+        let widths = Widths {
+            wide: plan.width,
+            neck: neck_width,
+            zone: &neck_zone,
+        };
+        let (segs, vias) = emit(grid, layers, &path, &widths, &blocked);
+        for end in [path.first(), path.last()].into_iter().flatten() {
+            if let Some(&pad_at) = stubs.get(end) {
+                let (l, x, y) = grid.coord(*end);
+                let c = grid.center(x, y);
+                if dist(c, pad_at) > 1e-6 {
+                    result.segments.push(RoutedSegment {
+                        layer: layers[l].clone(),
+                        a: pad_at,
+                        b: c,
+                        width: neck_width.unwrap_or(plan.width),
+                    });
+                }
+            }
+        }
         result.segments.extend(segs);
         result.vias.extend(vias);
         tree.extend(path.iter().copied());
@@ -711,7 +1481,20 @@ fn route_net(
     } else {
         "failed"
     };
+    if let (Some(w), true) = (neck_width, routed > 0) {
+        let note = format!("necked to {w} mm at fine-pitch pads");
+        result.detail = Some(match result.detail.take() {
+            Some(d) => format!("{d}; {note}"),
+            None => note,
+        });
+    }
     result
+}
+
+struct Widths<'a> {
+    wide: f64,
+    neck: Option<f64>,
+    zone: &'a [bool],
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -725,7 +1508,10 @@ fn astar(
     target_pts: &[(f64, f64)],
     opts: &RouteOptions,
     net: &str,
+    bonus: Option<&[bool]>,
 ) -> Option<(Vec<usize>, usize)> {
+    const COUPLED: f64 = 0.45;
+    let h_scale = if bonus.is_some() { COUPLED } else { 1.0 };
     let n = blocked.len();
     let mut g = vec![f64::INFINITY; n];
     let mut parent = vec![usize::MAX; n];
@@ -743,6 +1529,7 @@ fn astar(
                 dx.max(dy) + (std::f64::consts::SQRT_2 - 1.0) * dx.min(dy)
             })
             .fold(f64::INFINITY, f64::min)
+            * h_scale
     };
     let layer_cost: Vec<f64> = layers
         .iter()
@@ -798,6 +1585,9 @@ fn astar(
             } else {
                 p
             } * layer_cost[l];
+            if bonus.is_some_and(|b| b[next]) {
+                step *= COUPLED;
+            }
             let prev = dir_of[cell];
             if prev != 8 {
                 let turn = ((d as i32 - prev as i32).rem_euclid(8))
@@ -849,7 +1639,7 @@ fn emit(
     grid: &Grid,
     layers: &[String],
     path: &[usize],
-    width: f64,
+    widths: &Widths<'_>,
     blocked: &[bool],
 ) -> (Vec<RoutedSegment>, Vec<(f64, f64)>) {
     let mut segments = Vec::new();
@@ -858,17 +1648,22 @@ fn emit(
     let mut run_layer = None;
     let flush = |run: &mut Vec<(usize, usize)>, layer: usize, segments: &mut Vec<RoutedSegment>| {
         if run.len() >= 2 {
-            let pts = straighten(grid, layer, run, blocked);
-            for w in pts.windows(2) {
-                let a = grid.center(w[0].0, w[0].1);
-                let b = grid.center(w[1].0, w[1].1);
-                if dist(a, b) > 1e-9 {
-                    segments.push(RoutedSegment {
-                        layer: layers[layer].clone(),
-                        a,
-                        b,
-                        width,
-                    });
+            for (piece, width) in split_by_width(grid, run, widths) {
+                if piece.len() < 2 {
+                    continue;
+                }
+                let pts = straighten(grid, layer, &piece, blocked);
+                for w in pts.windows(2) {
+                    let a = grid.center(w[0].0, w[0].1);
+                    let b = grid.center(w[1].0, w[1].1);
+                    if dist(a, b) > 1e-9 {
+                        segments.push(RoutedSegment {
+                            layer: layers[layer].clone(),
+                            a,
+                            b,
+                            width,
+                        });
+                    }
                 }
             }
         }
@@ -894,6 +1689,41 @@ fn emit(
         flush(&mut run, rl, &mut segments);
     }
     (segments, vias)
+}
+
+/// Splits a run of cells where the track changes between its full width and
+/// the neck-down width. The cell shared by two pieces is always a full-width
+/// cell, whose clearance was checked for the wider track.
+fn split_by_width(
+    grid: &Grid,
+    run: &[(usize, usize)],
+    widths: &Widths<'_>,
+) -> Vec<(Vec<(usize, usize)>, f64)> {
+    let Some(neck) = widths.neck else {
+        return vec![(run.to_vec(), widths.wide)];
+    };
+    let is_neck = |c: &(usize, usize)| widths.zone[c.1 * grid.nx + c.0];
+    let mut pieces: Vec<(Vec<(usize, usize)>, bool)> = Vec::new();
+    for c in run {
+        let flag = is_neck(c);
+        match pieces.last_mut() {
+            Some((cells, f)) if *f == flag => cells.push(*c),
+            _ => pieces.push((vec![*c], flag)),
+        }
+    }
+    for i in 1..pieces.len() {
+        if pieces[i - 1].1 {
+            let first = pieces[i].0[0];
+            pieces[i - 1].0.push(first);
+        } else {
+            let last = *pieces[i - 1].0.last().expect("piece is non-empty");
+            pieces[i].0.insert(0, last);
+        }
+    }
+    pieces
+        .into_iter()
+        .map(|(cells, f)| (cells, if f { neck } else { widths.wide }))
+        .collect()
 }
 
 fn straighten(
@@ -967,6 +1797,254 @@ mod tests {
         let dx = (s.b.0 - s.a.0).abs();
         let dy = (s.b.1 - s.a.1).abs();
         dx < 1e-6 || dy < 1e-6 || (dx - dy).abs() < 1e-6
+    }
+
+    /// A board with its own net list; pads are (number, x, y, w, h, net).
+    type TestPad<'a> = (String, f64, f64, f64, f64, &'a str);
+    type TestPart<'a> = (&'a str, &'a str, f64, f64, Vec<TestPad<'a>>);
+
+    fn custom(outline: (f64, f64), nets: &[&str], parts: &[TestPart<'_>]) -> Board {
+        let code = |n: &str| {
+            nets.iter()
+                .position(|x| *x == n)
+                .map(|i| i + 1)
+                .unwrap_or(0)
+        };
+        let mut text = String::from(
+            "(kicad_pcb (version 20250114) (generator \"test\")\n  (layers (0 \"F.Cu\" signal) (2 \"B.Cu\" signal) (25 \"Edge.Cuts\" user))\n  (net 0 \"\")",
+        );
+        for (i, n) in nets.iter().enumerate() {
+            text.push_str(&format!(" (net {} \"{n}\")", i + 1));
+        }
+        text.push_str(&format!(
+            "\n  (gr_rect (start 100 100) (end {} {}) (stroke (width 0.05) (type default)) (fill none) (layer \"Edge.Cuts\"))\n",
+            outline.0, outline.1
+        ));
+        for (reference, lib, x, y, pads) in parts {
+            let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+            let mut body = String::new();
+            for (num, px, py, w, h, net) in pads {
+                x0 = x0.min(px - w / 2.0);
+                y0 = y0.min(py - h / 2.0);
+                x1 = x1.max(px + w / 2.0);
+                y1 = y1.max(py + h / 2.0);
+                let net = if net.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (net {} \"{net}\")", code(net))
+                };
+                if lib.starts_with("Connector_PinHeader") {
+                    body.push_str(&format!("    (pad \"{num}\" thru_hole circle (at {px} {py}) (size {w} {h}) (drill 1) (layers \"*.Cu\" \"*.Mask\"){net})\n"));
+                } else {
+                    body.push_str(&format!("    (pad \"{num}\" smd rect (at {px} {py}) (size {w} {h}) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"){net})\n"));
+                }
+            }
+            text.push_str(&format!(
+                "  (footprint \"{lib}\" (layer \"F.Cu\") (at {x} {y})\n    (property \"Reference\" \"{reference}\" (at 0 -3 0) (layer \"F.SilkS\"))\n    (fp_rect (start {} {}) (end {} {}) (layer \"F.CrtYd\"))\n{body}  )\n",
+                x0 - 0.25, y0 - 0.25, x1 + 0.25, y1 + 0.25
+            ));
+        }
+        text.push(')');
+        Board::from_text(&text).unwrap()
+    }
+
+    fn pad(num: usize, x: f64, y: f64, w: f64, h: f64, net: &str) -> TestPad<'_> {
+        (num.to_string(), x, y, w, h, net)
+    }
+
+    /// Writes the board and its routes as an SVG when VOLTARIS_SVG_DIR is set.
+    fn dump_svg(name: &str, b: &Board, r: &RouteResult) {
+        let Ok(dir) = std::env::var("VOLTARIS_SVG_DIR") else {
+            return;
+        };
+        let o = b.outline.unwrap();
+        let mut svg = format!(
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='{} {} {} {}' width='1200' style='background:#0b2a17'>",
+            o.0, o.1, o.2 - o.0, o.3 - o.1
+        );
+        for p in &b.pads {
+            let bb = p.bbox();
+            svg.push_str(&format!(
+                "<rect x='{}' y='{}' width='{}' height='{}' fill='#c8a85a'/>",
+                bb.0,
+                bb.1,
+                bb.2 - bb.0,
+                bb.3 - bb.1
+            ));
+        }
+        for n in &r.nets {
+            for s in &n.segments {
+                let c = if s.layer == "F.Cu" {
+                    "#d04040"
+                } else {
+                    "#4060d0"
+                };
+                svg.push_str(&format!("<line x1='{}' y1='{}' x2='{}' y2='{}' stroke='{c}' stroke-width='{}' stroke-linecap='round' opacity='0.85'/>", s.a.0, s.a.1, s.b.0, s.b.1, s.width));
+            }
+            for v in &n.vias {
+                svg.push_str(&format!(
+                    "<circle cx='{}' cy='{}' r='0.4' fill='#ddd'/>",
+                    v.0, v.1
+                ));
+            }
+        }
+        svg.push_str("</svg>");
+        std::fs::write(format!("{dir}/{name}.svg"), svg).unwrap();
+    }
+
+    #[test]
+    fn detects_differential_pairs_by_name() {
+        let nets: Vec<String> = [
+            "/D+", "/D-", "USB_DP", "USB_DM", "TX_P", "TX_N", "V+", "V-", "+5V", "CLKP", "CLKN",
+            "SIG",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let pairs = find_pairs(&nets);
+        let has = |p: &str, n: &str| pairs.iter().any(|(a, b)| a == p && b == n);
+        assert!(has("/D+", "/D-"), "{pairs:?}");
+        assert!(has("USB_DP", "USB_DM"), "{pairs:?}");
+        assert!(has("TX_P", "TX_N"), "{pairs:?}");
+        assert!(has("CLKP", "CLKN"), "{pairs:?}");
+        assert!(!pairs.iter().any(|(a, _)| a == "V+"), "{pairs:?}");
+        assert_eq!(pairs.len(), 4, "{pairs:?}");
+    }
+
+    fn usb_board(stagger: f64) -> Board {
+        custom(
+            (130.0, 120.0),
+            &["GND", "D+", "D-"],
+            &[
+                (
+                    "J1",
+                    "Connector_USB:USB_C_Receptacle",
+                    103.0,
+                    110.0,
+                    vec![
+                        pad(1, 0.0, -0.25, 1.0, 0.3, "D+"),
+                        pad(2, 0.0, 0.25, 1.0, 0.3, "D-"),
+                        pad(3, 0.0, -1.5, 1.0, 0.6, "GND"),
+                    ],
+                ),
+                (
+                    "U1",
+                    "Package_SO:SOIC-8",
+                    125.0,
+                    114.0,
+                    vec![
+                        pad(1, -1.0, 0.0, 1.0, 0.35, "D+"),
+                        pad(2, -1.0 + stagger, 0.65, 1.0, 0.35, "D-"),
+                        pad(3, 1.0, 0.0, 1.0, 0.35, "GND"),
+                    ],
+                ),
+            ],
+        )
+    }
+
+    #[test]
+    fn routes_a_usb_pair_coupled_and_length_matched() {
+        let b = usb_board(1.2);
+        let opts = RouteOptions {
+            layers: vec!["F.Cu".into()],
+            only_nets: Some(vec!["D+".into(), "D-".into()]),
+            ..Default::default()
+        };
+        let r = route(&b, &opts).unwrap();
+        assert_eq!(r.pairs.len(), 1, "{:?}", r.warnings);
+        let p = &r.pairs[0];
+        eprintln!("{p:?}");
+        dump_svg("usb_pair", &b, &r);
+        assert_eq!(p.status, "routed");
+        assert!(p.coupled_pct >= 50.0, "only {:.0}% coupled", p.coupled_pct);
+        assert!(p.tuned_mm > 0.3, "the stagger should need tuning: {p:?}");
+        assert!(p.skew <= opts.pair_skew + 0.02, "skew {:.3} mm", p.skew);
+        let v = super::check::violations(&b, &r, opts.clearance, opts.via_size);
+        assert!(v.is_empty(), "{v:?}");
+        for n in &r.nets {
+            assert!(
+                n.segments.iter().all(|s| {
+                    let dx = (s.b.0 - s.a.0).abs();
+                    let dy = (s.b.1 - s.a.1).abs();
+                    dx < 1e-6 || dy < 1e-6 || (dx - dy).abs() < 1e-6
+                }),
+                "{} has off-angle segments",
+                n.net
+            );
+        }
+    }
+
+    #[test]
+    fn escapes_a_half_millimetre_pitch_part_without_settings() {
+        let mut u1 = Vec::new();
+        let nets: Vec<String> = (0..8).map(|i| format!("S{i}")).collect();
+        let net_refs: Vec<&str> = nets.iter().map(String::as_str).collect();
+        for (i, net) in net_refs.iter().enumerate() {
+            u1.push(pad(i + 1, -1.5, -1.75 + i as f64 * 0.5, 0.8, 0.25, net));
+            u1.push(pad(i + 9, 1.5, -1.75 + i as f64 * 0.5, 0.8, 0.25, ""));
+        }
+        let header: Vec<_> = (0..8)
+            .map(|i| pad(i + 1, 0.0, i as f64 * 2.54, 1.7, 1.7, net_refs[i]))
+            .collect();
+        let b = custom(
+            (140.0, 125.0),
+            &net_refs,
+            &[
+                ("U1", "Package_DFN_QFN:QFN-16", 125.0, 112.5, u1),
+                (
+                    "J1",
+                    "Connector_PinHeader_2.54mm:PinHeader_1x08",
+                    104.0,
+                    103.0,
+                    header,
+                ),
+            ],
+        );
+        let opts = RouteOptions {
+            layers: vec!["F.Cu".into()],
+            ..Default::default()
+        };
+        let r = route(&b, &opts).unwrap();
+        eprintln!(
+            "grid {} fine {:?} warnings {:?}",
+            r.grid, r.fine_pitch, r.warnings
+        );
+        dump_svg("fine_pitch", &b, &r);
+        let (done, total) = r.routed_connections();
+        assert_eq!(
+            (done, total),
+            (8, 8),
+            "{:?}",
+            r.nets
+                .iter()
+                .map(|n| (&n.net, n.status, &n.detail))
+                .collect::<Vec<_>>()
+        );
+        assert!(r.grid < 0.2, "grid {}", r.grid);
+        let u1 = r
+            .fine_pitch
+            .iter()
+            .find(|f| f.reference == "U1")
+            .expect("U1 is fine pitch");
+        assert!((u1.pitch - 0.5).abs() < 1e-6);
+        let v = super::check::violations(&b, &r, opts.clearance, opts.via_size);
+        assert!(v.is_empty(), "{v:?}");
+
+        let coarse = route(
+            &b,
+            &RouteOptions {
+                grid: Some(0.2),
+                fine_pitch: false,
+                ..opts.clone()
+            },
+        )
+        .unwrap();
+        let v = super::check::violations(&b, &coarse, opts.clearance, opts.via_size);
+        eprintln!(
+            "coarse 0.2 mm grid: {:?} routed, {} violations",
+            coarse.routed_connections(),
+            v.len()
+        );
     }
 
     #[test]
@@ -1093,7 +2171,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod corpus {
+pub(super) mod check {
     use super::super::model::Board;
     use super::*;
 
@@ -1116,7 +2194,7 @@ mod corpus {
             .min(segment_distance(c, d, b))
     }
 
-    fn violations(b: &Board, r: &RouteResult, clearance: f64, via_size: f64) -> Vec<String> {
+    pub fn violations(b: &Board, r: &RouteResult, clearance: f64, via_size: f64) -> Vec<String> {
         let mut out = Vec::new();
         let tol = 1e-3;
         let copper: Vec<(&str, &RoutedSegment)> = r
@@ -1184,6 +2262,13 @@ mod corpus {
         }
         out
     }
+}
+
+#[cfg(test)]
+mod corpus {
+    use super::super::model::Board;
+    use super::check::violations;
+    use super::*;
 
     fn reroute(name: &str, opts: &RouteOptions) -> (usize, usize, usize, f64, u128) {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1219,7 +2304,7 @@ mod corpus {
     #[ignore = "large board; run with --ignored for a benchmark"]
     fn reroutes_the_pic_programmer_demo_board() {
         let opts = RouteOptions {
-            grid: 0.25,
+            grid: Some(0.25),
             ..Default::default()
         };
         let (done, total, vias, len, ms) = reroute("pic_programmer.kicad_pcb", &opts);

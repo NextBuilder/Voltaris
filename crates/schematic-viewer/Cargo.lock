@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-schematic-editor"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "voltaris-sexp",
  "thiserror 1.0.69",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "voltaris-sexp"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2659,7 +2659,7 @@ dependencies = [
 
 [[package]]
 name = "schematic-viewer"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "voltaris-schematic-editor",
  "notify",

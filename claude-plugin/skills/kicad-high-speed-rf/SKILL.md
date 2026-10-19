@@ -14,6 +14,7 @@ load_toolset('engineering')      # calc_impedance list_stackups calc_via
 load_toolset('pcb_routing')      # route_differential_pair create_netclass assign_net_to_class add_via
 load_toolset('signal_integrity') # analyze_net_lengths
 load_toolset('visual_review')    # render_board_3d
+load_toolset('smart_layout')     # route_board
 ```
 
 ## Stackup first
@@ -38,10 +39,15 @@ Solve every controlled trace with `calc_impedance` and store the widths and gaps
 | Crystals | — | load caps beside the crystal, short equal traces, ground guard, no signals under them |
 | SPI / SDIO above ~20 MHz | — | series termination at the source, keep lengths matched within a group |
 
+`route_board` routes every pair it detects (D+/D-, DP/DM, _P/_N, or the `pairs` you name) first,
+as a coupled pair at `pair_gap` with `pair_width` from `calc_impedance`, then adds 45° tuning
+bumps to the shorter net until the skew is inside `pair_skew` (0.1 mm by default). Its dry run
+reports coupling and skew per pair.
+
 After routing, run `analyze_net_lengths`: it finds polarity pairs automatically and reports
 skew in millimetres and picoseconds plus via-count mismatches. Use the εeff from
-`calc_impedance` for accurate delay. Fix skew with KiCad's interactive length tuner
-(meanders near the mismatched end), then re-run.
+`calc_impedance` for accurate delay. Fix any remaining skew with KiCad's interactive length
+tuner (meanders near the mismatched end), then re-run.
 
 ## Antennas
 

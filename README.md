@@ -41,8 +41,8 @@ and hands you files a fab can build.
 | | Design | | Verify | | Deliver |
 |:-:|---|:-:|---|:-:|---|
 | 🧠 | Gated pro workflow | ✅ | Your rules as automatic checks | 🏭 | Gerbers, drill, BOM, pick-and-place |
-| 🛣️ | **One-call autorouter** (`route_board`) | 🎨 | **One-call polish**: pin labels, pours, stitching | 🔁 | Freerouting with cleanup |
-| 📍 | **Smart placement** (`smart_place`) | 🩺 | **Layout + EMC audit** with engineering and beauty grades | 🧭 | Pro layout and board-craft skills |
+| 🛣️ | **One-call autorouter** (`route_board`): coupled, length-matched USB pairs and fine-pitch fanout | 🎨 | **One-call polish**: pin labels, pours, stitching | 🔁 | Freerouting with cleanup |
+| 📍 | **Smart placement** (`smart_place`) that shortens a hand layout's connections by 10–20 % | 🩺 | **Layout + EMC audit** with engineering and beauty grades | 🧭 | Pro layout and board-craft skills |
 | 📄 | Datasheet reader with page citations | 🔎 | ERC, DRC and design review | 🔌 | Firmware pin maps + bring-up code |
 | 🧱 | Verified circuit library | 👁️ | 3D visual review | 📐 | 3D-printable enclosure |
 | ⚙️ | Trace, impedance and power calculators | 🔬 | Circuit simulation | 📦 | LCSC part import |

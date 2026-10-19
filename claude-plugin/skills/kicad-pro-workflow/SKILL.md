@@ -138,7 +138,9 @@ load_toolset('visual_review')    # render_board_3d
 load_toolset('smart_layout')     # smart_place audit_layout
 ```
 
-Start with `smart_place` (dry run, review the moves, apply), then adjust by hand.
+Start with `smart_place` (dry run, review the moves, apply), then adjust by hand. On a board the
+user already placed, keep the default `mode='improve'` (parts move at most `max_shift` mm and
+connectors stay); use `mode='replace'` only when the user asks for a fresh placement.
 Follow the kicad-pro-layout skill's floor plan and placement order. In short: fixed mechanical parts (connectors at their edges, buttons, mounting
 holes) → RF module with its antenna over the edge/keep-out → MCU → power stage with its input
 loop tight → decoupling beside the pins it serves (`place_decoupling_caps` with the capacitor
@@ -157,8 +159,9 @@ load_toolset('verification')     # run_drc
 load_toolset('smart_layout')     # route_board polish_board audit_layout
 ```
 
-1. By hand first: power input loop and regulator loops (short, wide), USB pair with
-   `route_differential_pair`, RF feed, crystal.
+1. By hand first: power input loop and regulator loops (short, wide), RF feed, crystal.
+   Differential pairs (USB D+/D-) are routed by `route_board` as coupled, length-matched pairs;
+   use `route_differential_pair` only for a pair it reports as partial.
 2. Ground: solid pour on the reference layer (`add_copper_pour`), stitching vias along RF and
    board edges.
 3. Remaining signals with `route_board` (dry run, then apply with its plan_revision), or

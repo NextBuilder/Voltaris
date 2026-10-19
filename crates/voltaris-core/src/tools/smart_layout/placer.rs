@@ -1,11 +1,24 @@
 //! Placement planner: connectors flush on an edge, main ICs centred, every
 //! decoupling capacitor beside the power pin it serves, everything else next to
-//! the part it talks to most, snapped to a grid and aligned into rows.
+//! the part it talks to most, snapped to a grid and aligned into rows. Then the
+//! optimizer (refine.rs) shortens the ratsnest: gently around a person's
+//! layout in `Improve` mode, with full annealing in `Replace` mode.
 
 use super::model::{dist, is_ground, is_unnamed, rects_overlap, Board, Footprint, Rect};
 use crate::tools::design_model::is_power_net;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use voltaris_sexp::geometry::transform_pad;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceMode {
+    /// Place only what is missing, off the board or overlapping; leave the rest.
+    Respect,
+    /// Keep the layout's structure and shorten its connections: parts move at
+    /// most `max_shift`, turn and swap with identical parts; connectors stay.
+    Improve,
+    /// Re-place every movable part from scratch and anneal the result.
+    Replace,
+}
 
 #[derive(Debug, Clone)]
 pub struct PlaceOptions {
@@ -15,7 +28,9 @@ pub struct PlaceOptions {
     pub keep: BTreeSet<String>,
     pub rotate: bool,
     pub only: Option<BTreeSet<String>>,
-    pub respect_existing: bool,
+    pub mode: PlaceMode,
+    pub max_shift: f64,
+    pub iterations: usize,
 }
 
 impl Default for PlaceOptions {
@@ -27,7 +42,9 @@ impl Default for PlaceOptions {
             keep: BTreeSet::new(),
             rotate: true,
             only: None,
-            respect_existing: true,
+            mode: PlaceMode::Improve,
+            max_shift: 5.0,
+            iterations: 0,
         }
     }
 }
@@ -48,6 +65,9 @@ pub struct PlacePlan {
     pub unplaced: Vec<(String, String)>,
     pub airwire_before: f64,
     pub airwire_after: f64,
+    pub crossings_before: usize,
+    pub crossings_after: usize,
+    pub refine: Option<super::refine::RefineStats>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -306,6 +326,7 @@ fn plan_once(
         .flat_map(|f| f.pads.iter().filter_map(|&i| board.pads[i].net.clone()))
         .filter(|n| is_power_net(n) && !is_ground(n))
         .collect();
+    let respect_existing = opts.mode != PlaceMode::Replace;
     let mut roles: BTreeMap<String, Role> = board
         .footprints
         .iter()
@@ -331,6 +352,7 @@ fn plan_once(
         placed: BTreeMap::new(),
         occupied: Vec::new(),
     };
+    let base_roles = roles.clone();
     let mut out = PlacePlan::default();
     for f in &board.footprints {
         if roles[&f.reference] == Role::Fixed {
@@ -338,7 +360,7 @@ fn plan_once(
             out.kept.push((f.reference.clone(), "fixed"));
         }
     }
-    if opts.respect_existing {
+    if respect_existing {
         let refs: Vec<String> = board
             .footprints
             .iter()
@@ -711,7 +733,7 @@ fn plan_once(
         }
         if inside_board(f) && st.fits(f, f.at, f.rotation, region) {
             let current = cost_at(&st, f.at, f.rotation);
-            if opts.respect_existing || best.is_none_or(|b| current <= b.0 + 0.5) {
+            if respect_existing || best.is_none_or(|b| current <= b.0 + 0.5) {
                 st.commit(f, f.at, f.rotation);
                 out.kept.push((f.reference.clone(), "already well placed"));
                 continue;
@@ -734,6 +756,104 @@ fn plan_once(
         }
     }
 
+    if opts.mode != PlaceMode::Respect {
+        let constructive: Poses = st.placed.clone();
+        let refine_opts = super::refine::RefineOptions {
+            anneal: opts.mode == PlaceMode::Replace,
+            iterations: opts.iterations,
+            max_shift: if opts.mode == PlaceMode::Replace {
+                f64::INFINITY
+            } else {
+                opts.max_shift
+            },
+            grid: opts.grid,
+            gap: opts.gap,
+            rotate: opts.rotate,
+            ..Default::default()
+        };
+        let mut seeds = vec![constructive.clone()];
+        if opts.mode == PlaceMode::Replace {
+            // Also anneal from the arrangement already on the board: a fresh
+            // start and the existing layout often settle in different valleys.
+            let mut existing = constructive.clone();
+            let mut on_board = 0;
+            for (r, pose) in existing.iter_mut() {
+                let f = st.fp(r);
+                if rects_overlap(f.courtyard, outline, 0.0) {
+                    *pose = (f.at, f.rotation);
+                    on_board += 1;
+                }
+            }
+            if on_board * 2 >= existing.len() {
+                seeds.push(existing);
+            }
+        }
+        let mut best: Option<(Poses, super::refine::RefineStats)> = None;
+        for (i, seed) in seeds.into_iter().enumerate() {
+            st.placed = seed;
+            let parts = refine_parts(board, &st, &base_roles, opts);
+            let mut placed = st.placed.clone();
+            let stats = super::refine::refine(
+                board,
+                &mut placed,
+                parts,
+                &super::refine::RefineOptions {
+                    seed: refine_opts.seed.wrapping_add(i as u64 * 0x2545_F491),
+                    heat: if i == 0 { 1.0 } else { 0.05 },
+                    ..refine_opts.clone()
+                },
+            );
+            if best
+                .as_ref()
+                .is_none_or(|(_, b)| stats.cost_after < b.cost_after)
+            {
+                best = Some((placed, stats));
+            }
+        }
+        let (placed, stats) = best.expect("at least one seed");
+        st.placed = placed;
+        out.refine = Some(stats);
+        let placed: Vec<(String, Pose)> = st.placed.iter().map(|(r, p)| (r.clone(), *p)).collect();
+        st.occupied.clear();
+        for (r, (at, rot)) in &placed {
+            let f = st.fp(r).clone();
+            st.commit(&f, *at, *rot);
+        }
+        for (r, (at, rot)) in placed {
+            let f = st.fp(&r);
+            let (from_at, from_rot) = (f.at, f.rotation);
+            let moved = (at.0 - from_at.0).abs() > 1e-6
+                || (at.1 - from_at.1).abs() > 1e-6
+                || (rot - from_rot).rem_euclid(360.0).abs() > 1e-6;
+            let refined = constructive.get(&r).is_some_and(|c| {
+                (c.0 .0 - at.0).abs() > 1e-6
+                    || (c.0 .1 - at.1).abs() > 1e-6
+                    || (c.1 - rot).abs() > 1e-6
+            });
+            if !moved {
+                continue;
+            }
+            match out.moves.iter_mut().find(|m| m.reference == r) {
+                Some(m) => {
+                    m.to = (at.0, at.1, rot);
+                    if refined {
+                        m.reason.push_str(", then refined for shorter connections");
+                    }
+                }
+                None => {
+                    out.kept.retain(|(k, _)| k != &r);
+                    out.moves.push(Move {
+                        reference: r.clone(),
+                        from: (from_at.0, from_at.1, from_rot),
+                        to: (at.0, at.1, rot),
+                        role: base_roles[&r].name(),
+                        reason: "moved, turned or swapped for shorter connections".into(),
+                    });
+                }
+            }
+        }
+    }
+
     align_rows(&mut st, &mut out);
 
     out.moves.retain(|m| {
@@ -750,8 +870,92 @@ fn plan_once(
     }
     out.airwire_before = before;
     out.airwire_after = airwire_length(board, &positions);
+    out.crossings_before = super::refine::crossings(board, &HashMap::new());
+    out.crossings_after = super::refine::crossings(board, &positions);
     let _ = st.outline;
     Ok(out)
+}
+
+type Pose = ((f64, f64), f64);
+type Poses = BTreeMap<String, Pose>;
+
+/// What the optimizer may do with each placed part.
+fn refine_parts(
+    board: &Board,
+    st: &State<'_>,
+    roles: &BTreeMap<String, Role>,
+    opts: &PlaceOptions,
+) -> Vec<super::refine::Part> {
+    use super::refine::{Freedom, Part};
+    let outline = st.outline;
+    let region = st.region;
+    let mut parts = Vec::new();
+    for (r, &(at, rot)) in &st.placed {
+        let f = st.fp(r);
+        let c = f.courtyard_at(at, rot);
+        let within = |o: Rect| {
+            c.0 >= o.0 - 1e-6 && c.1 >= o.1 - 1e-6 && c.2 <= o.2 + 1e-6 && c.3 <= o.3 + 1e-6
+        };
+        let (freedom, inside) = match roles[r] {
+            Role::Fixed => (Freedom::Fixed, outline),
+            Role::Connector if opts.mode == PlaceMode::Replace => {
+                let d = [
+                    c.0 - outline.0,
+                    outline.2 - c.2,
+                    c.1 - outline.1,
+                    outline.3 - c.3,
+                ];
+                let edge = (0..4)
+                    .min_by(|&a, &b| d[a].partial_cmp(&d[b]).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or(0);
+                if edge < 2 {
+                    (
+                        Freedom::Slide(false),
+                        (f64::MIN / 4.0, outline.1, f64::MAX / 4.0, outline.3),
+                    )
+                } else {
+                    (
+                        Freedom::Slide(true),
+                        (outline.0, f64::MIN / 4.0, outline.2, f64::MAX / 4.0),
+                    )
+                }
+            }
+            Role::Connector => (Freedom::Fixed, outline),
+            _ if within(region) => (Freedom::Free, region),
+            _ if within(outline) => (Freedom::Free, outline),
+            _ => (Freedom::Fixed, outline),
+        };
+        let decouples = if roles[r] == Role::Decoupling {
+            f.pads
+                .iter()
+                .copied()
+                .find(|&i| board.pads[i].net.as_deref().is_some_and(|n| !is_ground(n)))
+                .map(|cap_pad| {
+                    let net = board.pads[cap_pad].net.clone();
+                    let ic: Vec<usize> = board
+                        .pads
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, q)| {
+                            q.net == net && roles.get(&q.reference) == Some(&Role::Main)
+                        })
+                        .map(|(i, _)| i)
+                        .collect();
+                    (cap_pad, ic)
+                })
+                .filter(|(_, ic)| !ic.is_empty())
+        } else {
+            None
+        };
+        parts.push(Part {
+            reference: r.clone(),
+            freedom,
+            inside,
+            both_sides: f.pads.iter().any(|&i| board.pads[i].through_hole),
+            decouples,
+        });
+    }
+    parts
 }
 
 fn align_rows(st: &mut State<'_>, out: &mut PlacePlan) {
@@ -917,61 +1121,168 @@ mod corpus {
     use super::super::model::{rects_overlap, Board};
     use super::*;
 
-    #[test]
-    fn replans_a_real_board_inside_the_outline_without_overlaps() {
-        for (name, respect) in [
-            ("ecc83-pp.kicad_pcb", true),
-            ("pic_programmer.kicad_pcb", true),
-            ("ecc83-pp.kicad_pcb", false),
-            ("pic_programmer.kicad_pcb", false),
-        ] {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../voltaris-sexp/tests/fixtures")
-                .join(name);
-            let b = Board::from_text(&std::fs::read_to_string(path).unwrap()).unwrap();
-            let opts = PlaceOptions {
-                respect_existing: respect,
-                ..Default::default()
-            };
-            let p = plan(&b, &opts).unwrap();
-            let o = b.outline.unwrap();
-            let mut boxes: Vec<(String, super::super::model::Rect, bool)> = Vec::new();
-            for f in &b.footprints {
-                let (at, rot) = p
-                    .moves
-                    .iter()
-                    .find(|m| m.reference == f.reference)
-                    .map(|m| ((m.to.0, m.to.1), m.to.2))
-                    .unwrap_or((f.at, f.rotation));
-                boxes.push((f.reference.clone(), f.courtyard_at(at, rot), f.back));
-            }
-            for m in &p.moves {
-                let (_, c, _) = boxes.iter().find(|(r, _, _)| r == &m.reference).unwrap();
+    fn check(name: &str, mode: PlaceMode) -> PlacePlan {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../voltaris-sexp/tests/fixtures")
+            .join(name);
+        let b = Board::from_text(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let opts = PlaceOptions {
+            mode,
+            ..Default::default()
+        };
+        let t = std::time::Instant::now();
+        let p = plan(&b, &opts).unwrap();
+        let ms = t.elapsed().as_millis();
+        let o = b.outline.unwrap();
+        let mut boxes: Vec<(String, super::super::model::Rect, bool)> = Vec::new();
+        for f in &b.footprints {
+            let (at, rot) = p
+                .moves
+                .iter()
+                .find(|m| m.reference == f.reference)
+                .map(|m| ((m.to.0, m.to.1), m.to.2))
+                .unwrap_or((f.at, f.rotation));
+            boxes.push((f.reference.clone(), f.courtyard_at(at, rot), f.back));
+        }
+        for m in &p.moves {
+            let (_, c, _) = boxes.iter().find(|(r, _, _)| r == &m.reference).unwrap();
+            let connector = b.footprint(&m.reference).unwrap().is_connector();
+            if !connector {
                 assert!(
                     c.0 >= o.0 - 1e-6
                         && c.2 <= o.2 + 1e-6
                         && c.1 >= o.1 - 1e-6
                         && c.3 <= o.3 + 1e-6,
-                    "{name}: {} outside",
+                    "{name} {mode:?}: {} outside",
                     m.reference
                 );
-                for (r, other, back) in &boxes {
-                    let mine = b.footprint(&m.reference).unwrap().back;
-                    if r != &m.reference && *back == mine {
-                        assert!(
-                            !rects_overlap(*c, *other, 0.0),
-                            "{name}: {} overlaps {r}",
-                            m.reference
-                        );
-                    }
+            }
+            for (r, other, back) in &boxes {
+                let mine = b.footprint(&m.reference).unwrap().back;
+                if r != &m.reference && *back == mine {
+                    assert!(
+                        !rects_overlap(*c, *other, 0.0),
+                        "{name} {mode:?}: {} overlaps {r}",
+                        m.reference
+                    );
                 }
             }
-            eprintln!(
-                "{name}: {} moves, {} unplaced, connections {:.0} -> {:.0} mm",
-                p.moves.len(),
-                p.unplaced.len(),
+        }
+        eprintln!(
+            "{name} {mode:?}: {} moves, {} unplaced, connections {:.0} -> {:.0} mm, crossings {} -> {}, {ms} ms, {:?}",
+            p.moves.len(),
+            p.unplaced.len(),
+            p.airwire_before,
+            p.airwire_after,
+            p.crossings_before,
+            p.crossings_after,
+            p.refine
+        );
+        p
+    }
+
+    #[test]
+    fn respects_a_finished_layout() {
+        for name in ["ecc83-pp.kicad_pcb", "pic_programmer.kicad_pcb"] {
+            let p = check(name, PlaceMode::Respect);
+            assert!(p.moves.is_empty(), "{name}: {} moves", p.moves.len());
+        }
+    }
+
+    #[test]
+    fn improves_a_human_layout_without_rearranging_it() {
+        for name in ["ecc83-pp.kicad_pcb", "pic_programmer.kicad_pcb"] {
+            let p = check(name, PlaceMode::Improve);
+            assert!(
+                p.airwire_after < p.airwire_before * 0.97,
+                "{name}: {:.0} -> {:.0}",
                 p.airwire_before,
                 p.airwire_after
+            );
+        }
+    }
+
+    #[test]
+    fn full_replacement_beats_the_human_layout() {
+        for name in ["ecc83-pp.kicad_pcb", "pic_programmer.kicad_pcb"] {
+            let p = check(name, PlaceMode::Replace);
+            assert!(
+                p.airwire_after < p.airwire_before * 0.9,
+                "{name}: {:.0} -> {:.0}",
+                p.airwire_before,
+                p.airwire_after
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod pipeline {
+    use super::super::model::Board;
+    use super::super::router::{route, RouteOptions};
+    use super::*;
+
+    /// The board with the plan's moves applied.
+    fn moved(b: &Board, p: &PlacePlan) -> Board {
+        let mut out = b.clone();
+        for m in &p.moves {
+            let Some(fi) = out
+                .footprints
+                .iter()
+                .position(|f| f.reference == m.reference)
+            else {
+                continue;
+            };
+            let old_rot = out.footprints[fi].rotation;
+            let f = &mut out.footprints[fi];
+            f.courtyard = f.courtyard_at((m.to.0, m.to.1), m.to.2);
+            f.at = (m.to.0, m.to.1);
+            f.rotation = m.to.2;
+            for &pi in &f.pads.clone() {
+                let pad = &mut out.pads[pi];
+                pad.at = transform_pad(pad.local.0, pad.local.1, m.to.0, m.to.1, m.to.2);
+                pad.rotation += m.to.2 - old_rot;
+            }
+        }
+        out.segments.clear();
+        out.vias.clear();
+        out.zones.clear();
+        out
+    }
+
+    #[test]
+    #[ignore = "places and routes a whole board; run with --ignored for a benchmark"]
+    fn optimized_placement_still_routes_completely() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../voltaris-sexp/tests/fixtures/pic_programmer.kicad_pcb");
+        let b = Board::from_text(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let ropts = RouteOptions::default();
+        let human = moved(&b, &PlacePlan::default());
+        let base = route(&human, &ropts).unwrap();
+        for mode in [PlaceMode::Improve, PlaceMode::Replace] {
+            let p = plan(
+                &b,
+                &PlaceOptions {
+                    mode,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let r = route(&moved(&b, &p), &ropts).unwrap();
+            let (done, total) = r.routed_connections();
+            let (hd, ht) = base.routed_connections();
+            eprintln!(
+                "{mode:?}: ratsnest {:.0} -> {:.0} mm; routed {done}/{total} with {} vias, {:.0} mm of track (human placement: {hd}/{ht}, {} vias, {:.0} mm)",
+                p.airwire_before,
+                p.airwire_after,
+                r.vias(),
+                r.length(),
+                base.vias(),
+                base.length()
+            );
+            assert!(
+                done as f64 >= total as f64 * 0.95,
+                "{mode:?}: {done}/{total}"
             );
         }
     }
