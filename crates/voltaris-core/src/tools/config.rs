@@ -462,7 +462,7 @@ pub fn tools() -> Vec<ToolDef> {
                 "properties": {
                     "project_dir": {
                         "type": "string",
-                        "description": "Path to the KiCAD project directory. If omitted, uses the configured project_dir."
+                        "description": "Path to the KiCad project directory. If omitted, uses the configured project_dir."
                     }
                 },
                 "required": []

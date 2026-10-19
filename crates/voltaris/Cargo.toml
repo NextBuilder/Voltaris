@@ -6,7 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 
-# Compile as both a binary (standalone MCP server) and a cdylib (KiCAD plugin)
+# Compile as both a binary (standalone MCP server) and a cdylib (KiCad plugin)
 [[bin]]
 name = "voltaris"
 path = "src/main.rs"

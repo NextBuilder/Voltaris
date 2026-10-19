@@ -514,7 +514,7 @@ fn lib_name_is_parsed_into_its_own_field() {
 #[test]
 fn lib_symbol_name_prefers_lib_name_over_lib_id() {
     let sch = load_derived();
-    // The derived entry is what KiCAD resolves through; lib_id is provenance.
+    // The derived entry is what KiCad resolves through; lib_id is provenance.
     assert_eq!(
         sch.symbols.by_reference("R2").unwrap().lib_symbol_name(),
         "R_1"
@@ -698,8 +698,8 @@ fn sch_with_paper(paper_line: &str) -> Schematic {
 #[test]
 fn custom_paper_keeps_its_dimensions() {
     // `User` is the one page size whose width and height are mandatory. Writing
-    // a bare `(paper "User")` produces a file KiCAD refuses to load, with no
-    // diagnostic beyond "Failed to load schematic" — and KiCAD's own EasyEDA
+    // a bare `(paper "User")` produces a file KiCad refuses to load, with no
+    // diagnostic beyond "Failed to load schematic" — and KiCad's own EasyEDA
     // importer lands every imported sheet on `User`.
     let sch = sch_with_paper(r#"(paper "User" 292.1 205.105)"#);
     assert_eq!(sch.paper.as_deref(), Some("User"));
@@ -750,7 +750,7 @@ fn named_paper_gains_no_extra_tokens() {
 }
 
 /// #210: every typed-model write reindented the whole sheet, because the
-/// writer emitted two spaces unconditionally while KiCAD writes tabs. A
+/// writer emitted two spaces unconditionally while KiCad writes tabs. A
 /// one-symbol edit came back as a whole-file diff, which makes the change
 /// unreviewable and the history useless.
 #[test]

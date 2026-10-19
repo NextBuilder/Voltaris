@@ -402,7 +402,7 @@ pub fn tools() -> Vec<ToolDef> {
 
 // ─── Shared: insert wires/labels BEFORE symbol instances ─────────────────────
 //
-// KiCAD 10 requires this element order in .kicad_sch files:
+// KiCad 10 requires this element order in .kicad_sch files:
 //   1. lib_symbols
 //   2. wire, bus, junction, no_connect, net_label, global_label, text, etc.
 //   3. symbol (instances) — MUST come last
@@ -1428,7 +1428,7 @@ pub(crate) fn reconcile_junctions_at(
         .into_iter()
         // Pin endpoints come out of arithmetic (136.19 + 3.81 = 139.70000000000002)
         // and `format_junction` interpolates the f64 verbatim, so round to the
-        // 6 decimals KiCAD writes rather than leaking float noise into the file.
+        // 6 decimals KiCad writes rather than leaking float noise into the file.
         .map(|(x, y)| (round6(x), round6(y)))
         .collect();
     to_add.sort_by(|a, b| a.partial_cmp(b).expect("rounded coordinates are finite"));
@@ -1773,7 +1773,7 @@ async fn handle_delete_net_label(
 
     // Exact position match. Deleting the *nearest* label instead would silently
     // remove a same-named label elsewhere on the sheet — same-named labels are
-    // how KiCAD joins nets, so they are the normal case, not an edge case.
+    // how KiCad joins nets, so they are the normal case, not an edge case.
     let matched: Vec<&&LabelBlock> = named
         .iter()
         .filter(|l| same_point(l.x, target_x) && same_point(l.y, target_y))
@@ -1833,7 +1833,7 @@ struct LabelBlock {
     y: f64,
 }
 
-/// KiCAD's three label tags. `label` is the plain net label — the type
+/// KiCad's three label tags. `label` is the plain net label — the type
 /// `add_schematic_net_label` writes by default. (`net_label` is this codebase's
 /// internal name for it and never appears in a .kicad_sch.)
 const LABEL_TAGS: [&str; 3] = ["label", "global_label", "hierarchical_label"];
@@ -1874,7 +1874,7 @@ fn find_label_blocks(content: &str) -> Vec<LabelBlock> {
     out
 }
 
-/// Compare schematic coordinates. KiCAD stores mm to 4 decimals, so this is an
+/// Compare schematic coordinates. KiCad stores mm to 4 decimals, so this is an
 /// exact match in practice while tolerating float round-trip noise.
 fn same_point(a: f64, b: f64) -> bool {
     (a - b).abs() < 1e-6
@@ -2238,7 +2238,7 @@ async fn handle_add_power_symbol(
     ));
 
     // Instance entry, keyed to the root sheet UUID like eeschema writes it —
-    // without a resolvable "/<root-uuid>" path KiCAD's netlister drops the
+    // without a resolvable "/<root-uuid>" path KiCad's netlister drops the
     // symbol from net formation.
     for instance_path in &context.instance_paths {
         sym.set_instance_path(&context.project_name, instance_path, &pwr_ref, 1);

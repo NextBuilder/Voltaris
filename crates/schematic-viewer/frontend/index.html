@@ -180,7 +180,7 @@
   <button onclick="fitToPage()" title="Fit to window (0)">Fit</button>
   <button onclick="manualRefresh()" title="Re-render the current sheet (R)">Refresh</button>
   <button onclick="toggleTheme()" title="Toggle dark/light theme">Theme</button>
-  <button onclick="openInKicad()" title="Open this project in KiCAD">Open in KiCAD</button>
+  <button onclick="openInKicad()" title="Open this project in KiCad">Open in KiCad</button>
 </div>
 
 <div id="viewer">
@@ -359,7 +359,7 @@
   async function openInKicad() {
     try {
       await invoke('open_in_kicad');
-      statusEl.textContent = 'Opened in KiCAD';
+      statusEl.textContent = 'Opened in KiCad';
     } catch (e) {
       statusEl.textContent = 'Error: ' + e;
       flash(String(e), true);

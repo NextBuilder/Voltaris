@@ -1,6 +1,6 @@
 use super::SexpNode;
 
-/// KiCAD's own writer indents with tabs; this crate historically used two
+/// KiCad's own writer indents with tabs; this crate historically used two
 /// spaces, so every typed-model write reindented the whole sheet and turned a
 /// one-symbol edit into a whole-file diff (#210).
 pub const KICAD_INDENT: &str = "\t";
@@ -22,8 +22,8 @@ pub fn write_with_indent(node: &SexpNode, indent: &str) -> String {
     buf
 }
 
-/// The indentation unit a KiCAD file already uses, from its first indented
-/// line: a tab, or the run of spaces that opens it. Falls back to KiCAD's own
+/// The indentation unit a KiCad file already uses, from its first indented
+/// line: a tab, or the run of spaces that opens it. Falls back to KiCad's own
 /// tab for a file with nothing to learn from.
 pub fn detect_indent(source: &str) -> String {
     for line in source.lines() {
@@ -95,7 +95,7 @@ fn write_node(node: &SexpNode, buf: &mut String, depth: usize, indent: &str) {
                         write_node(child, buf, depth + 1, indent);
                     }
                 }
-                // KiCAD closes a node that has list children on its own line at
+                // KiCad closes a node that has list children on its own line at
                 // the node's own indent. Collapsing it onto the last child —
                 // `(uuid "j1"))` — differs on every such node in the file, which
                 // is most of them (#210).

@@ -168,7 +168,7 @@ impl<'a> WireIndex<'a> {
         self.hits(x, y).next().is_some()
     }
 
-    /// Lies on the interior of a wire — a T-junction, which KiCAD connects
+    /// Lies on the interior of a wire — a T-junction, which KiCad connects
     /// without splitting the crossed wire.
     fn covers_interior(&self, x: f64, y: f64) -> bool {
         self.hits(x, y).any(|wire| {
@@ -668,7 +668,7 @@ impl<'a> ConnectivityIndex<'a> {
         self.on_wire.covers(x, y)
     }
 
-    /// Lies on a wire's interior — a T-junction KiCAD connects without
+    /// Lies on a wire's interior — a T-junction KiCad connects without
     /// splitting the crossed wire.
     pub(crate) fn on_wire_interior(&self, x: f64, y: f64) -> bool {
         self.on_wire.covers_interior(x, y)
@@ -770,7 +770,7 @@ impl<'a> ConnectivityIndex<'a> {
     /// Whether a pin at `(x, y)` is attached to anything. A wire ending on it,
     /// a label naming it, a hierarchical sheet pin meeting it, or a second pin
     /// stacked on it all connect. A pin landing mid-wire connects only through
-    /// a junction dot: KiCAD's netlister registers the unsplit wire at a
+    /// a junction dot: KiCad's netlister registers the unsplit wire at a
     /// junction point, so the dot alone is enough (#104).
     pub(crate) fn attaches_pin(&self, x: f64, y: f64) -> bool {
         self.has_wire_end(x, y)

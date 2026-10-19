@@ -210,7 +210,7 @@ pub fn tools() -> Vec<ToolDef> {
                     },
                     "fields": {
                         "type": "string",
-                        "description": "Ordered, comma-separated columns to export, e.g. 'Reference,Value,Footprint,MPN,${QUANTITY}'. Any schematic field name works — this is how MPN/LCSC columns reach the fab. Omit for KiCAD's default Reference,Value,Footprint,QUANTITY,DNP."
+                        "description": "Ordered, comma-separated columns to export, e.g. 'Reference,Value,Footprint,MPN,${QUANTITY}'. Any schematic field name works — this is how MPN/LCSC columns reach the fab. Omit for KiCad's default Reference,Value,Footprint,QUANTITY,DNP."
                     },
                     "labels": {
                         "type": "string",
@@ -232,7 +232,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "export_netlist",
-            "Export the PCB netlist to a file in KiCAD or IPC-D-356 format.",
+            "Export the PCB netlist to a file in KiCad or IPC-D-356 format.",
             json!({
                 "type": "object",
                 "properties": {

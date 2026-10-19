@@ -3,7 +3,7 @@
 //! KiCad 10 exposes an IPC API over NNG (nanomsg-next-gen) using protobuf messages.
 //! The transport is NNG req/rep over IPC (Unix sockets / Windows named pipes).
 //!
-//! Socket path: set by KICAD_API_SOCKET env var when KiCAD launches a plugin,
+//! Socket path: set by KICAD_API_SOCKET env var when KiCad launches a plugin,
 //! or can be manually specified.
 //!
 //! Protocol: ApiRequest envelope containing a google.protobuf.Any body → ApiResponse.
@@ -38,7 +38,7 @@ const COMMAND_RECV_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 /// drain.
 const COMMAND_SEND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// Converts KiCAD nanometers to millimeters.
+/// Converts KiCad nanometers to millimeters.
 fn nm_to_mm(nm: i64) -> f64 {
     nm as f64 / 1_000_000.0
 }
@@ -130,7 +130,7 @@ fn pad_geometry(pad: &kiapi::board::types::Pad) -> PadGeometry {
     }
 }
 
-/// Map a BoardLayer enum integer back to a KiCAD layer name string.
+/// Map a BoardLayer enum integer back to a KiCad layer name string.
 fn layer_enum_to_name(layer: i32) -> &'static str {
     kiapi::board::types::BoardLayer::try_from(layer)
         .ok()
@@ -1076,14 +1076,14 @@ impl KiCadIpcClient {
         if self.socket_path.is_empty() {
             return Err(unreachable_error(
                 UnreachableReason::NotConfigured,
-                "KiCAD IPC socket path not configured. To fix: \
-                 (1) in KiCAD, enable Edit > Preferences > Plugins > 'Enable KiCad API' \
+                "KiCad IPC socket path not configured. To fix: \
+                 (1) in KiCad, enable Edit > Preferences > Plugins > 'Enable KiCad API' \
                  and copy the listed ipc:// address; \
                  (2) paste it into the 'IPC Socket' field of the Voltaris settings dialog \
                  (Tools > External Plugins > Voltaris) and save; \
                  (3) restart the AI client so the server rereads settings. \
                  Alternatively set ipc_socket_path in voltaris-settings.json or launch \
-                 via KiCAD (which sets KICAD_API_SOCKET). \
+                 via KiCad (which sets KICAD_API_SOCKET). \
                  Full guide: https://github.com/NextBuilder/Voltaris/blob/main/docs/TROUBLESHOOTING.md",
             ));
         }
@@ -1108,7 +1108,7 @@ impl KiCadIpcClient {
         let socket =
             nng::Socket::new(nng::Protocol::Req0).context("Failed to create NNG socket")?;
 
-        // Bound every step: a busy or wedged KiCAD must produce an error the
+        // Bound every step: a busy or wedged KiCad must produce an error the
         // tools can surface, never an indefinite hang (the predecessor
         // project's sync/autoroute hangs blocked for >600 s on exactly this).
         // The receive bound is the caller's, so a caller on a deadline gets
@@ -1143,7 +1143,7 @@ impl KiCadIpcClient {
             .context("Failed to set NNG receive timeout")?;
 
         // Build the dial URL. inproc:// is same-process only — used by the
-        // mock-KiCAD test servers, where it avoids TCP port races entirely.
+        // mock-KiCad test servers, where it avoids TCP port races entirely.
         let dial_url = if self.socket_path.starts_with("ipc://")
             || self.socket_path.starts_with("tcp://")
             || self.socket_path.starts_with("inproc://")
@@ -1396,7 +1396,7 @@ impl KiCadIpcClient {
         Ok(response.contents)
     }
 
-    /// Check if KiCAD is reachable.
+    /// Check if KiCad is reachable.
     pub fn ping(&self) -> Result<bool> {
         Ok(self.ping_outcome().is_responsive())
     }
@@ -3086,7 +3086,7 @@ impl KiCadIpcClient {
                     let old = fp.position.unwrap_or_default();
                     let new_pos = crate::builders::vec2(x, y);
                     fp.position = Some(new_pos);
-                    // KiCAD carries the footprint's children (pads, silk,
+                    // KiCad carries the footprint's children (pads, silk,
                     // text) in absolute board coordinates and re-creates them
                     // verbatim on update, so they must be shifted along with
                     // the anchor (issue #23).
@@ -3719,7 +3719,7 @@ impl KiCadIpcClient {
                         value_degrees: angle,
                     });
                     // Children are carried in absolute board coordinates and
-                    // angles; rotate them around the anchor like KiCAD's
+                    // angles; rotate them around the anchor like KiCad's
                     // FOOTPRINT::SetOrientation does natively (issue #23).
                     let anchor = fp.position.unwrap_or_default();
                     crate::transform::transform_footprint_children(
@@ -3959,12 +3959,12 @@ impl KiCadIpcClient {
     /// Build a typed footprint item suitable for [`Self::create_items`].
     ///
     /// Children (pads and graphics) are emitted in ABSOLUTE board
-    /// coordinates: KiCAD serializes `FootprintInstance` children that way
+    /// coordinates: KiCad serializes `FootprintInstance` children that way
     /// and re-creates them verbatim (issue #23 — see the `transform` module
     /// docs), so every footprint-local point is rotated and translated here.
     ///
     /// An associated function rather than a method: it is pure construction,
-    /// and callers that never dial KiCAD (library-side planning) must not
+    /// and callers that never dial KiCad (library-side planning) must not
     /// need a client to reach it.
     #[allow(clippy::too_many_arguments)]
     pub fn build_footprint_item(
@@ -3985,7 +3985,7 @@ impl KiCadIpcClient {
 
         // Refuse an unrepresentable layer here, before a single child is built.
         //
-        // KiCAD 10.0.5 does not validate the scalar layer field on an incoming
+        // KiCad 10.0.5 does not validate the scalar layer field on an incoming
         // item: it indexes its layer bitset with whatever value arrives, so a
         // `BL_UNDEFINED` is answered with an access violation that kills the
         // process and takes the user's unsaved board with it (#237). There is
@@ -3995,7 +3995,7 @@ impl KiCadIpcClient {
             .with_context(|| format!("footprint '{lib_id}' cannot be placed"))?;
         for pad in pads {
             for name in &pad.layers {
-                // `*.Cu`/`*.Mask`/`*.Paste` are KiCAD's own wildcards, expanded
+                // `*.Cu`/`*.Mask`/`*.Paste` are KiCad's own wildcards, expanded
                 // below rather than mapped.
                 if name.starts_with("*.") {
                     continue;
@@ -4065,7 +4065,7 @@ impl KiCadIpcClient {
         let mut child_items: Vec<prost_types::Any> = pads
             .iter()
             .map(|pad| {
-                // Canonical KiCAD footprint-local → board transform; see
+                // Canonical KiCad footprint-local → board transform; see
                 // voltaris_sexp::geometry::transform_pad for why the sin terms
                 // are not the textbook rotation matrix (Y axis points down).
                 let (board_x, board_y) =
@@ -4651,7 +4651,7 @@ impl KiCadIpcClient {
         Ok(any)
     }
 
-    /// Run an arbitrary tool action in KiCAD (e.g. to trigger a refresh).
+    /// Run an arbitrary tool action in KiCad (e.g. to trigger a refresh).
     pub fn run_action(&self, action: &str) -> Result<()> {
         let cmd = kiapi::common::commands::RunAction {
             action: action.to_string(),
@@ -4667,7 +4667,7 @@ fn is_cardinal_rotation(rotation_deg: f64) -> bool {
     r.abs() < 1e-9 || (90.0 - r).abs() < 1e-9
 }
 
-/// Normalize a text angle the way KiCAD keeps labels readable: fold into
+/// Normalize a text angle the way KiCad keeps labels readable: fold into
 /// [0, 360), then flip anything that would read upside down by 180°.
 fn readable_text_angle(deg: f64) -> f64 {
     let mut angle = deg.rem_euclid(360.0);
@@ -4750,7 +4750,7 @@ fn build_graphic_child(
             filled,
         } => {
             let (cx, cy) = xf(*center);
-            // The radius is rotation-invariant; keep KiCAD's center +
+            // The radius is rotation-invariant; keep KiCad's center +
             // circumference-point encoding by re-deriving it from the length.
             let radius = ((end.0 - center.0).powi(2) + (end.1 - center.1).powi(2)).sqrt();
             builders::pack_any(
@@ -6229,7 +6229,7 @@ mod footprint_graphics_tests {
         );
     }
 
-    /// At 180° the text would read upside down; KiCAD keeps labels readable by
+    /// At 180° the text would read upside down; KiCad keeps labels readable by
     /// flipping such angles 180°, and so does the emitted child.
     #[test]
     fn text_angles_are_kept_readable() {
@@ -6372,7 +6372,7 @@ mod footprint_graphics_tests {
     }
 
     /// A `Dwgs.User` graphic is ordinary, official-library content and must
-    /// place — this is the exact shape that terminated KiCAD 10.0.5 in #237,
+    /// place — this is the exact shape that terminated KiCad 10.0.5 in #237,
     /// via `Connector_USB:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal`
     /// (two such children) and
     /// `Connector:BJB_Pico_46.110.1001_Receptacle_Horizontal` (eight).
@@ -6429,7 +6429,7 @@ mod footprint_graphics_tests {
             }
             assert_ne!(
                 layer, undefined,
-                "no child may carry BL_UNDEFINED — KiCAD crashes on it, it does not refuse it"
+                "no child may carry BL_UNDEFINED — KiCad crashes on it, it does not refuse it"
             );
         }
         assert_eq!(seen, 2, "both Dwgs.User children must survive");
@@ -6438,8 +6438,8 @@ mod footprint_graphics_tests {
     /// And a layer this build genuinely cannot represent is refused before any
     /// item is constructed, rather than silently downgraded to `BL_UNDEFINED`.
     ///
-    /// Widening `layer_from_name` fixed the layers KiCAD 10 has today; this is
-    /// what stops the next one KiCAD adds from crashing it again.
+    /// Widening `layer_from_name` fixed the layers KiCad 10 has today; this is
+    /// what stops the next one KiCad adds from crashing it again.
     #[test]
     fn an_unmappable_layer_refuses_the_whole_footprint() {
         let build = |pads: &[IpcPadDefinition], graphics: &[IpcGraphicDefinition], layer: &str| {
@@ -6494,7 +6494,7 @@ mod footprint_graphics_tests {
         );
         assert!(error.contains("Middle.Cu"), "{error}");
 
-        // The wildcards KiCAD itself writes are expanded, not mapped, so they
+        // The wildcards KiCad itself writes are expanded, not mapped, so they
         // must keep working.
         let through_hole = vec![IpcPadDefinition {
             layers: vec!["*.Cu".to_string(), "*.Mask".to_string()],

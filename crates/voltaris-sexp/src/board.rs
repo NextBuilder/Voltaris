@@ -762,10 +762,10 @@ pub enum CourtyardSource {
 /// Footprint children are stored in footprint-local coordinates in the same
 /// Y-down orientation as the board; the file bakes **no rotation and no
 /// translation** into them. Board position of any child point is
-/// `(at) + R(rot)·local` where `R` is KiCAD's Y-down screen-CCW rotation
+/// `(at) + R(rot)·local` where `R` is KiCad's Y-down screen-CCW rotation
 /// ([`crate::geometry::transform_pad`] — note the non-textbook sign pattern).
 ///
-/// A **back-side** footprint needs *no additional mirroring*: KiCAD's flip
+/// A **back-side** footprint needs *no additional mirroring*: KiCad's flip
 /// rewrites the stored child coordinates themselves, so the same rigid-body
 /// transform holds for both sides. Verified against routed copper in the
 /// pic_programmer demo: JP1 (B.Cu) pad 1 (net `VCC`, local x = −0.725)
@@ -922,7 +922,7 @@ fn footprint_root_at(fp: &SexpNode) -> Option<(f64, f64, f64)> {
 }
 
 /// Which side the footprint's own `(layer …)` puts it on. A footprint layer
-/// is always `F.Cu` or `B.Cu` in KiCAD-authored files; anything else is
+/// is always `F.Cu` or `B.Cu` in KiCad-authored files; anything else is
 /// malformed rather than a third side.
 fn footprint_side(fp: &SexpNode) -> Option<Side> {
     match fp.find_str("layer")? {
@@ -1067,7 +1067,7 @@ fn pad_reaches_both_faces(pad: &SexpNode) -> bool {
 /// # Net identity
 ///
 /// Keys are net **names**, never numeric codes — codes are renumbered on
-/// every save, so an index keyed by them goes stale the moment KiCAD touches
+/// every save, so an index keyed by them goes stale the moment KiCad touches
 /// the file. Both file formats resolve through the same rules as the scans
 /// (see the module docs). Pads on the unconnected pseudo-net are indexed
 /// separately and stay reachable via [`pads_without_net`] — test-point
@@ -1078,7 +1078,7 @@ fn pad_reaches_both_faces(pad: &SexpNode) -> bool {
 /// The constructor never guesses: a pad without a readable number or
 /// position, or one whose footprint root is unreadable, is dropped and
 /// counted in [`skipped_pads`]; segments inherit [`tracks`]' policy via
-/// [`skipped_tracks`]. Non-zero counts on a KiCAD-authored board mean the
+/// [`skipped_tracks`]. Non-zero counts on a KiCad-authored board mean the
 /// parse cannot be trusted, not that the board is odd.
 ///
 /// [`pads_without_net`]: PcbConnectivityIndex::pads_without_net
@@ -1090,7 +1090,7 @@ pub struct PcbConnectivityIndex {
     unconnected_pads: Vec<PadSite>,
     segments_by_net: BTreeMap<String, Vec<Track>>,
     /// `(reference, pad_number) → net name`, first occurrence wins for the
-    /// (shared-number) multi-hole case — all KiCAD-authored duplicates share
+    /// (shared-number) multi-hole case — all KiCad-authored duplicates share
     /// one net.
     net_by_pad: HashMap<(String, String), String>,
     skipped_pads: usize,
@@ -1948,7 +1948,7 @@ mod tests {
     }
 
     /// Non-cardinal rotation, hand-computed. Footprint at (100, 100, 45°),
-    /// courtyard rect local (−1, −2)…(1, 2). KiCAD's Y-down CCW rotation is
+    /// courtyard rect local (−1, −2)…(1, 2). KiCad's Y-down CCW rotation is
     /// (x, y) → (x·cosθ + y·sinθ, y·cosθ − x·sinθ); at 45° (c = s = √2/2)
     /// the corners map to (±3·√2/2, ±√2/2) and (±√2/2, ∓3·√2/2), so the
     /// hull is ±3·√2/2 = ±2.121320343… about the anchor on both axes.

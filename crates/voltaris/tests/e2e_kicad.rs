@@ -1,4 +1,4 @@
-//! End-to-end test against a real KiCAD installation (kicad-cli).
+//! End-to-end test against a real KiCad installation (kicad-cli).
 //!
 //! Drives the shipped binary over stdio through a full design loop:
 //! create project → place components → wire → ERC → export Gerbers → DRC.
@@ -143,7 +143,7 @@ fn body(result: &Value) -> Value {
 #[ignore = "requires kicad-cli; run via e2e workflow"]
 fn selected_layer_pcb_svg_export_through_mcp() {
     let Some(kicad_cli) = find_kicad_cli() else {
-        panic!("kicad-cli not found — set KICAD_CLI or install KiCAD (this test is e2e-only)");
+        panic!("kicad-cli not found — set KICAD_CLI or install KiCad (this test is e2e-only)");
     };
     // KiCad 10-reserialized fixture with a board-owned F.SilkS line and an
     // Edge.Cuts outline; see its README for the source and geometry.
@@ -192,7 +192,7 @@ fn selected_layer_pcb_svg_export_through_mcp() {
 #[ignore = "requires kicad-cli; run via e2e workflow"]
 fn structural_scan_fixture_reloads_through_real_kicad() {
     let Some(kicad_cli) = find_kicad_cli() else {
-        panic!("kicad-cli not found — set KICAD_CLI or install KiCAD (this test is e2e-only)");
+        panic!("kicad-cli not found — set KICAD_CLI or install KiCad (this test is e2e-only)");
     };
     let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../voltaris-core/tests/fixtures/structural_scans_kicad10.kicad_sch");
@@ -231,7 +231,7 @@ fn structural_scan_fixture_reloads_through_real_kicad() {
 #[ignore = "requires kicad-cli + symbol libraries; run via e2e workflow"]
 fn full_design_loop_with_real_kicad() {
     let Some(kicad_cli) = find_kicad_cli() else {
-        panic!("kicad-cli not found — set KICAD_CLI or install KiCAD (this test is e2e-only)");
+        panic!("kicad-cli not found — set KICAD_CLI or install KiCad (this test is e2e-only)");
     };
     // VOLTARIS_E2E_KEEP_DIR: persist the generated project there (CI uploads
     // it as a failure artifact so file-format rejections can be diagnosed).
@@ -530,7 +530,7 @@ fn plotted_wires_and_junction(kicad_cli: &str, sch: &std::path::Path) -> (usize,
 #[ignore = "requires kicad-cli; run via e2e workflow"]
 fn a_written_default_netclass_still_plots_wires() {
     let Some(kicad_cli) = find_kicad_cli() else {
-        panic!("kicad-cli not found — set KICAD_CLI or install KiCAD (this test is e2e-only)");
+        panic!("kicad-cli not found — set KICAD_CLI or install KiCad (this test is e2e-only)");
     };
     let tmp = tempfile::tempdir().unwrap();
     let proj = tmp.path().join("nc");

@@ -1,6 +1,6 @@
 //! `pcb_components` toolset — place, move, rotate, query, and array footprints on the PCB.
 //!
-//! Most operations use the KiCAD IPC API so they integrate with KiCAD's undo/redo
+//! Most operations use the KiCad IPC API so they integrate with KiCad's undo/redo
 //! system and don't require a separate file-sync step. `get_board_2d_view` uses
 //! kicad-cli to render a PNG.
 
@@ -30,14 +30,14 @@ macro_rules! ipc {
         let requested_board = get_path($args, "board")?;
         match with_board_ipc_classified($ctx, &requested_board, move |$c, _| $body).await? {
             Ok(v) => v,
-            // Only an unreachable transport justifies "KiCAD must be running".
+            // Only an unreachable transport justifies "KiCad must be running".
             // This used to say it for every failure, so a tool that refused a
             // request on its merits — "a polygon needs at least 3 points" —
             // told the reader to start a KiCad that was already running, with
             // the actual reason parenthesised after a false statement.
             Err(voltaris_ipc::IpcFailure::Unreachable(msg)) => {
                 return Ok(CallToolResult::error(format!(
-                    "KiCAD must be running with the board loaded (IPC error: {})",
+                    "KiCad must be running with the board loaded (IPC error: {})",
                     msg
                 )))
             }
@@ -82,7 +82,7 @@ pub(crate) fn resolve_footprint_file(lib_id: &str, board_path: &Path) -> anyhow:
 
 /// Structured rejection for any back-side (`B.*`) placement layer.
 ///
-/// Placing on the back is not a layer rename: KiCAD's flip mirrors the
+/// Placing on the back is not a layer rename: KiCad's flip mirrors the
 /// footprint's geometry (pad X positions negate, every front layer swaps with
 /// its back counterpart per item). Until Voltaris implements that mirror,
 /// Read a `[{x, y}, …]` argument into footprint-local millimetre pairs.
@@ -133,7 +133,7 @@ fn back_side_layer_error(layer: &str) -> Option<CallToolResult> {
             "Cannot place on '{layer}': back-side placement is not yet supported, \
              because a correct flip must mirror the footprint geometry rather than \
              just rename its layers. Place the footprint on F.Cu and flip it to the \
-             back in KiCAD (select it and press F)."
+             back in KiCad (select it and press F)."
         ),
     ))
 }
@@ -188,7 +188,7 @@ fn prepare_footprint_source(
     layer: &str,
 ) -> anyhow::Result<String> {
     // No back-side placement: a correct F.Cu→B.Cu flip mirrors the geometry
-    // (pad X positions negate, layers swap per item) the way KiCAD's own flip
+    // (pad X positions negate, layers swap per item) the way KiCad's own flip
     // does. A textual layer swap produces wrong copper, so it is refused
     // outright — see back_side_layer_error.
     if layer != "F.Cu" {
@@ -567,7 +567,7 @@ fn extract_graphic_definitions_with_properties(
 /// renaming it to the full `Library:Footprint` id, stamping in a position,
 /// rotation and fresh UUID, and substituting the real reference designator.
 ///
-/// KiCAD's own parser then handles the pads and graphics, which is why the
+/// KiCad's own parser then handles the pads and graphics, which is why the
 /// whole definition is forwarded rather than reconstructed.
 fn board_footprint_sexp(
     lib_id: &str,
@@ -1838,7 +1838,7 @@ pub fn tools() -> Vec<ToolDef> {
     let mut tools = vec![
         tool!(
             "place_component",
-            "Place a footprint on the PCB. Uses live KiCAD IPC when reachable; otherwise safely \
+            "Place a footprint on the PCB. Uses live KiCad IPC when reachable; otherwise safely \
              edits a closed board file with revision checks.",
             json!({
                 "type": "object",
@@ -1858,7 +1858,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LivePreferredWithFallback),
         tool!(
             "move_component",
-            "Move a placed footprint to a new X/Y position. Uses live KiCAD IPC when reachable; \
+            "Move a placed footprint to a new X/Y position. Uses live KiCad IPC when reachable; \
              otherwise safely edits a closed board file with revision checks.",
             json!({
                 "type": "object",
@@ -1875,7 +1875,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LivePreferredWithFallback),
         tool!(
             "rotate_component",
-            "Set the rotation angle of a placed footprint. Uses live KiCAD IPC when reachable; \
+            "Set the rotation angle of a placed footprint. Uses live KiCad IPC when reachable; \
              otherwise safely edits a closed board file with revision checks.",
             json!({
                 "type": "object",
@@ -1891,7 +1891,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LivePreferredWithFallback),
         tool!(
             "set_component_placements",
-            "Set X/Y positions and rotations for multiple existing footprints atomically. Uses one live KiCAD IPC update and one undo step when reachable; otherwise safely edits a closed board file once with revision checks.",
+            "Set X/Y positions and rotations for multiple existing footprints atomically. Uses one live KiCad IPC update and one undo step when reachable; otherwise safely edits a closed board file once with revision checks.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1940,7 +1940,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LivePreferredWithFallback),
         tool!(
             "delete_component",
-            "Remove a footprint from the board via KiCAD IPC.",
+            "Remove a footprint from the board via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1954,7 +1954,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "edit_component",
-            "Update the value or other properties of a placed footprint via KiCAD IPC.",
+            "Update the value or other properties of a placed footprint via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1969,12 +1969,12 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "repair_corrupted_footprints",
-            "Repair the exact legacy corruption from Voltaris issue #244: footprint drawing \
+            "Repair a known legacy corruption: footprint drawing \
              shapes rewritten as anonymous pads with empty layer sets. Resolves each affected \
              footprint from its library, restores its pads and drawing shapes while preserving \
              placement, identity and pad nets, and applies every requested repair in one KiCad \
              undo commit. Defaults to a non-mutating dry run; apply requires the exact returned \
-             plan revision. Requires KiCAD running with the requested board open.",
+             plan revision. Requires KiCad running with the requested board open.",
             json!({
                 "type": "object",
                 "properties": {
@@ -2016,7 +2016,7 @@ pub fn tools() -> Vec<ToolDef> {
         super::pcb_footprint_update::tool(),
         tool!(
             "list_board_footprint_graphics",
-            "List the graphic items inside a footprint placed on the board — silkscreen, fabrication, and courtyard artwork — with the UUID needed to edit one. Points are footprint-local millimetres, as the .kicad_mod shows them. Each item reports 'editable', plus 'outlines' and 'holes' for polygons: 'points' covers the first outline only, so an item with more than one outline or any holes is reported but cannot be edited here. Requires KiCAD running with the board open.",
+            "List the graphic items inside a footprint placed on the board — silkscreen, fabrication, and courtyard artwork — with the UUID needed to edit one. Points are footprint-local millimetres, as the .kicad_mod shows them. Each item reports 'editable', plus 'outlines' and 'holes' for polygons: 'points' covers the first outline only, so an item with more than one outline or any holes is reported but cannot be edited here. Requires KiCad running with the board open.",
             json!({
                 "type": "object",
                 "properties": {
@@ -2031,7 +2031,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "edit_board_footprint_graphic",
-            "Replace the vertices of a polygon inside a footprint placed on the board, selected by UUID. Points are footprint-local millimetres, as the .kicad_mod shows them. Use this to bring one placed instance in line with a library change without re-placing the part. Only a single-outline polygon with no holes can be replaced; anything else is refused by name rather than flattened. Requires KiCAD running with the board open.",
+            "Replace the vertices of a polygon inside a footprint placed on the board, selected by UUID. Points are footprint-local millimetres, as the .kicad_mod shows them. Use this to bring one placed instance in line with a library change without re-placing the part. Only a single-outline polygon with no holes can be replaced; anything else is refused by name rather than flattened. Requires KiCad running with the board open.",
             json!({
                 "type": "object",
                 "properties": {
@@ -2108,7 +2108,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "place_component_array",
-            "Place multiple copies of a footprint in a grid or line array via KiCAD IPC.",
+            "Place multiple copies of a footprint in a grid or line array via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -2130,7 +2130,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "align_components",
-            "Align multiple footprints along a common X or Y axis via KiCAD IPC.",
+            "Align multiple footprints along a common X or Y axis via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -2146,7 +2146,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "duplicate_component",
-            "Duplicate an existing footprint at a new position via KiCAD IPC.",
+            "Duplicate an existing footprint at a new position via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -3516,7 +3516,7 @@ async fn handle_get_component_pads(
             )));
         };
         // Transform local pad coords to board space (rotation only).
-        // Uses the canonical KiCAD transform — see voltaris_sexp::geometry.
+        // Uses the canonical KiCad transform — see voltaris_sexp::geometry.
         let (board_x, board_y) =
             voltaris_sexp::geometry::transform_pad(local_x, local_y, fp_x, fp_y, fp_rot);
         // Three outcomes, deliberately distinguishable. No (net …) node at
@@ -5392,7 +5392,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&board).unwrap(),
             before,
-            "a reachable KiCAD that says no must never trigger the file fallback"
+            "a reachable KiCad that says no must never trigger the file fallback"
         );
     }
 
@@ -6229,7 +6229,7 @@ mod tests {
     }
 
     /// A rep0 endpoint that completes every round-trip with an error status —
-    /// a live KiCAD saying no. Placement must fail closed: error out, and
+    /// a live KiCad saying no. Placement must fail closed: error out, and
     /// leave the board file alone.
     fn spawn_rejecting_kicad() -> crate::test_support::MockIpcServer {
         crate::test_support::MockIpcServer::spawn("rejecting-component", |_| {
@@ -6278,7 +6278,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&board).unwrap(),
             board_before,
-            "a reachable KiCAD that says no must never trigger the file fallback"
+            "a reachable KiCad that says no must never trigger the file fallback"
         );
     }
 

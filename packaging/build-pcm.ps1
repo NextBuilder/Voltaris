@@ -1,12 +1,12 @@
-# Assemble the KiCAD PCM plugin package for Voltaris.
+# Assemble the KiCad PCM plugin package for Voltaris.
 #
-# Produces a zip laid out the way KiCAD's Plugin and Content Manager expects
+# Produces a zip laid out the way KiCad's Plugin and Content Manager expects
 # for "Install from File" and for kicad-addons repository submission:
 #
 #   metadata.json            PCM package manifest (version stamped in)
-#   plugins/                 installed into KiCAD's scripting/plugins dir
+#   plugins/                 installed into KiCad's scripting/plugins dir
 #     __init__.py            ActionPlugin launcher (settings dialog, server control)
-#     plugin.json            KiCAD 10 IPC plugin manifest
+#     plugin.json            KiCad 10 IPC plugin manifest
 #     settings_dialog.py     wxPython settings UI
 #     native_bridge.py       authenticated KiCad 10 native Specctra bridge
 #     resources/icon.png     toolbar icon (referenced by __init__.py)
@@ -15,7 +15,7 @@
 #   resources/
 #     icon.png               icon shown in the PCM dialog
 #
-# The package declares the platform it carries binaries for, so KiCAD's PCM only
+# The package declares the platform it carries binaries for, so KiCad's PCM only
 # offers it to machines that can run it. A package bundles one native binary, so
 # it is never valid for "all platforms".
 #
@@ -45,10 +45,10 @@ if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path "$staging/plugins/bin", "$staging/plugins/resources", "$staging/resources" -Force | Out-Null
 
 # Plugin files
-Copy-Item "$repoRoot/plugin/__init__.py" "$staging/plugins/"
-Copy-Item "$repoRoot/plugin/plugin.json" "$staging/plugins/"
-Copy-Item "$repoRoot/plugin/settings_dialog.py" "$staging/plugins/"
-Copy-Item "$repoRoot/plugin/native_bridge.py" "$staging/plugins/"
+Copy-Item "$repoRoot/kicad-plugin/__init__.py" "$staging/plugins/"
+Copy-Item "$repoRoot/kicad-plugin/plugin.json" "$staging/plugins/"
+Copy-Item "$repoRoot/kicad-plugin/settings_dialog.py" "$staging/plugins/"
+Copy-Item "$repoRoot/kicad-plugin/native_bridge.py" "$staging/plugins/"
 Copy-Item $BinaryPath "$staging/plugins/bin/voltaris.exe"
 if ($ViewerPath -and (Test-Path $ViewerPath)) {
     Copy-Item $ViewerPath "$staging/plugins/bin/schematic-viewer.exe"

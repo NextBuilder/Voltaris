@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "policy_id": "voltaris-jlcpcb-cpl-v1",
-  "provenance": "Voltaris issue #518: independently observed KiCad 10 export and JLCPCB Component Placements evidence, 2026-09-10",
+  "provenance": "Upstream Konnect issue #518: independently observed KiCad 10 export and JLCPCB Component Placements evidence, 2026-09-10",
   "footprint_rules": [
     {
       "id": "kicad-soic-8-3.9x4.9-p1.27",

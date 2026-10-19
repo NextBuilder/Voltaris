@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Voltaris's PCM packaging against KiCAD's addon schema.
+"""Validate Voltaris's PCM packaging against KiCad's addon schema.
 
 Two modes, combinable:
 
@@ -118,7 +118,7 @@ def validate_zip(zip_path: Path) -> list[str]:
 def validate_platforms(z, meta: dict, binaries: list[str], label: str) -> list[str]:
     """Every version must declare exactly the platform its binaries can run on.
 
-    Omitting `platforms` means "all platforms" to KiCAD's PCM, which is never
+    Omitting `platforms` means "all platforms" to KiCad's PCM, which is never
     true of a package that bundles one native binary — that is how a
     Windows-only package came to be offered to macOS and Linux users.
     """

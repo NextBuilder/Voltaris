@@ -1,8 +1,8 @@
-//! `project` toolset — create, open, save, and snapshot KiCAD projects.
+//! `project` toolset — create, open, save, and snapshot KiCad projects.
 //!
 //! Tools: create_project, open_project, save_project, get_project_info, snapshot_project
 //!
-//! KiCAD interface:
+//! KiCad interface:
 //!   - create_project   → file system (template)
 //!   - open_project     → IPC open-document query
 //!   - save_project     → IPC board.save()
@@ -21,7 +21,7 @@ pub fn tools() -> Vec<ToolDef> {
     vec![
         tool!(
             "create_project",
-            "Create a new KiCAD project at the given path. Creates the directory, \
+            "Create a new KiCad project at the given path. Creates the directory, \
              a blank .kicad_pro file, an empty .kicad_sch schematic, and a blank \
              .kicad_pcb board file. Refuses to replace any existing project file.",
             json!({
@@ -58,8 +58,8 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "save_project",
-            "Save the currently open PCB board file via KiCAD IPC. \
-             Requires KiCAD to be running with IPC enabled.",
+            "Save the currently open PCB board file via KiCad IPC. \
+             Requires KiCad to be running with IPC enabled.",
             json!({
                 "type": "object",
                 "properties": {},
@@ -69,10 +69,10 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "rename_project",
-            "Rename a KiCAD project: renames the .kicad_pro/.kicad_sch/.kicad_pcb/.kicad_prl \
+            "Rename a KiCad project: renames the .kicad_pro/.kicad_sch/.kicad_pcb/.kicad_prl \
              files and rewrites the internal references that carry the old name. Renaming the \
              files alone is NOT enough — every symbol instance stores (project \"name\"), and \
-             a mismatch there makes KiCAD treat the design as unannotated, losing every \
+             a mismatch there makes KiCad treat the design as unannotated, losing every \
              reference designator. Equivalent to eeschema's File > Save As. Use dry_run first.",
             json!({
                 "type": "object",
@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn blank_kicad_sch_has_root_uuid() {
-        // Without a root (uuid ...) KiCAD's netlister silently drops every
+        // Without a root (uuid ...) KiCad's netlister silently drops every
         // wire-only net (symbol instance paths can't resolve).
         let content = blank_kicad_sch();
         assert!(content.contains("(uuid \""));

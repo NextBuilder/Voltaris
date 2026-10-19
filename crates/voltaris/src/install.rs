@@ -324,9 +324,9 @@ fn run_install_at(client: InstallClient, paths: &InstallPaths, verbose: bool) ->
 
     if verbose {
         if let Some(kicad_path) = detect_kicad() {
-            println!("\n  [+] Found KiCAD at: {}", kicad_path.display());
+            println!("\n  [+] Found KiCad at: {}", kicad_path.display());
         } else {
-            println!("\n  [-] KiCAD not found in standard locations");
+            println!("\n  [-] KiCad not found in standard locations");
             println!("      Set kicad_cli path in your config file manually");
         }
     }
@@ -472,7 +472,7 @@ fn print_status_at(client: InstallClient, paths: &InstallPaths) -> Result<()> {
     let guidance = inspect_guidance(client, paths, &exe.to_string_lossy());
     print!("{}", StatusText(&guidance, paths));
 
-    println!("\nKiCAD:");
+    println!("\nKiCad:");
     if let Some(path) = detect_kicad() {
         println!("  [+] Found: {}", path.display());
     } else {
@@ -1355,7 +1355,7 @@ mod tests {
         let installed = fs::read(skill_dir.join("references/reliability-contract.md")).unwrap();
         assert_eq!(
             installed,
-            include_bytes!("../../../docs/RELIABILITY_CONTRACT.md")
+            include_bytes!("../../../docs/dev/RELIABILITY_CONTRACT.md")
         );
         let skill = fs::read_to_string(skill_dir.join("SKILL.md")).unwrap();
         assert!(skill.contains("](references/reliability-contract.md)"));

@@ -15,7 +15,7 @@ use voltaris_sexp::{
 
 // ─── Strategies ──────────────────────────────────────────────────────────────
 
-/// Atoms KiCAD actually emits: identifiers, numbers, uuids, yes/no.
+/// Atoms KiCad actually emits: identifiers, numbers, uuids, yes/no.
 fn atom_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         "[a-z_][a-z0-9_]{0,15}",
@@ -26,7 +26,7 @@ fn atom_strategy() -> impl Strategy<Value = String> {
 }
 
 /// Quoted-string content (no embedded quotes/backslashes — matching what
-/// KiCAD writes for names/values).
+/// KiCad writes for names/values).
 fn string_strategy() -> impl Strategy<Value = String> {
     "[a-zA-Z0-9 ._:/+-]{0,24}"
 }
@@ -235,7 +235,7 @@ proptest! {
 }
 
 /// Deterministic sanity check that the generated-corpus shape resembles a
-/// real KiCAD file header (guards the strategies themselves).
+/// real KiCad file header (guards the strategies themselves).
 #[test]
 fn strategy_shape_smoke() {
     let sample = "(kicad_sch (version 20250610) (generator \"voltaris\") (uuid \"abc\"))";

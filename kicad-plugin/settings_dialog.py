@@ -2,7 +2,7 @@
 Voltaris — Settings Dialog.
 
 wxPython dialog for configuring the MCP server: paths and
-server control. Launched from the KiCAD Tools menu via the action plugin.
+server control. Launched from the KiCad Tools menu via the action plugin.
 
 Settings persist to settings.json in the plugin directory.
 """
@@ -52,7 +52,7 @@ def save_settings(settings_path, settings):
         json.dump(settings, f, indent=2)
 
 
-# ─── KiCAD CLI auto-detection ────────────────────────────────────────────────
+# ─── KiCad CLI auto-detection ────────────────────────────────────────────────
 
 def detect_kicad_cli():
     """Try to find kicad-cli by scanning common locations, registry, and PATH."""
@@ -160,7 +160,7 @@ class VoltarisSettingsDialog(wx.Dialog):
         native_bridge_running=False,
     ):
         # No fixed pixel size: on high-DPI/scaled Windows displays a fixed
-        # (520, 480) clipped the Save/Close buttons off-screen (issue #18).
+        # (520, 480) clipped the Save/Close buttons off-screen.
         # The dialog is sized to fit its content after _build_ui instead.
         super().__init__(
             parent,

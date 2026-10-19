@@ -27,9 +27,9 @@ use wire::{Wire, WireCollection};
 ///
 /// This is a deny-list on purpose. It used to be an allow-list naming the two
 /// or three sub-nodes we happened to care about, which silently deleted every
-/// other token KiCAD writes — most damagingly `(lib_name …)`, whose loss
+/// other token KiCad writes — most damagingly `(lib_name …)`, whose loss
 /// re-points a symbol at the wrong `lib_symbols` entry and rewires the
-/// netlist without any error from KiCAD or from us (#143).
+/// netlist without any error from KiCad or from us (#143).
 pub(crate) fn unmodelled_children(node: &SexpNode, modelled: &[&str]) -> Vec<SexpNode> {
     node.args()
         .iter()
@@ -92,7 +92,7 @@ pub struct Schematic {
     filepath: PathBuf,
     original_source: Mutex<String>,
     /// The indentation unit the loaded file used, so a targeted edit does not
-    /// come back as a whole-file reindent (#210). KiCAD writes tabs; this
+    /// come back as a whole-file reindent (#210). KiCad writes tabs; this
     /// crate used to emit two spaces unconditionally.
     indent: String,
 
@@ -105,10 +105,10 @@ pub struct Schematic {
     /// Tokens that follow the page size name inside `(paper …)`, preserved
     /// verbatim.
     ///
-    /// KiCAD writes `(paper "User" 292.1 205.105)` for a custom page — the two
+    /// KiCad writes `(paper "User" 292.1 205.105)` for a custom page — the two
     /// dimensions are REQUIRED there — and `(paper "A4" portrait)` for a
     /// portrait named page. Both were dropped when only `paper` was
-    /// round-tripped, and a `(paper "User")` with no dimensions makes KiCAD
+    /// round-tripped, and a `(paper "User")` with no dimensions makes KiCad
     /// refuse to load the schematic at all ("Failed to load schematic", no
     /// further diagnostic).
     pub paper_args: Vec<SexpNode>,
@@ -522,8 +522,8 @@ impl Schematic {
             c.push(tagged("version", vec![atom(v.to_string())]));
         }
         // generator / generator_version are STRING fields — eeschema writes
-        // them quoted and KiCAD 10 refuses to load the file when they are
-        // bare atoms (found by the real-KiCAD e2e test: "Failed to load
+        // them quoted and KiCad 10 refuses to load the file when they are
+        // bare atoms (found by the real-KiCad e2e test: "Failed to load
         // schematic" after any tool that re-serialized through this model).
         if let Some(g) = &self.generator {
             c.push(tagged("generator", vec![qstr(g.clone())]));
@@ -536,7 +536,7 @@ impl Schematic {
         }
         // The page size name alone is not always a complete `(paper …)` node:
         // `User` requires its width and height, and a portrait named size
-        // carries a `portrait` token. KiCAD rejects the whole file if either is
+        // carries a `portrait` token. KiCad rejects the whole file if either is
         // missing, so re-emit whatever followed the name.
         if let Some(p) = &self.paper {
             let mut args = Vec::with_capacity(1 + self.paper_args.len());
@@ -558,7 +558,7 @@ impl Schematic {
             }
         }
 
-        // Typed elements in KiCAD 10 required order:
+        // Typed elements in KiCad 10 required order:
         // junctions → no_connects → wires → texts → labels → sheets → symbols (LAST)
         for j in &self.junctions {
             c.push(j.to_sexp());

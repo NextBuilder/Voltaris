@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Assemble the KiCAD PCM plugin package for Voltaris (macOS/Linux port of build-pcm.ps1).
+# Assemble the KiCad PCM plugin package for Voltaris (macOS/Linux port of build-pcm.ps1).
 #
-# Produces a zip laid out the way KiCAD's Plugin and Content Manager expects for
+# Produces a zip laid out the way KiCad's Plugin and Content Manager expects for
 # "Install from File" and for kicad-addons repository submission:
 #
 #   metadata.json                 PCM package manifest (version stamped in)
-#   plugins/                      installed into KiCAD's scripting/plugins dir
+#   plugins/                      installed into KiCad's scripting/plugins dir
 #     __init__.py                 ActionPlugin launcher (settings dialog, server control)
-#     plugin.json                 KiCAD 10 IPC plugin manifest (entrypoint stamped)
+#     plugin.json                 KiCad 10 IPC plugin manifest (entrypoint stamped)
 #     settings_dialog.py          wxPython settings UI
 #     native_bridge.py            authenticated KiCad 10 native Specctra bridge
 #     resources/icon.png          toolbar icon (referenced by __init__.py)
@@ -17,10 +17,10 @@
 #     icon.png                    icon shown in the PCM dialog
 #
 # The IPC entrypoint in plugin.json is stamped to this platform's binary name
-# (bin/voltaris) so the KiCAD 10 IPC action resolves on macOS/Linux, mirroring
+# (bin/voltaris) so the KiCad 10 IPC action resolves on macOS/Linux, mirroring
 # build-pcm.ps1 which stamps bin/voltaris.exe for Windows.
 #
-# The package declares the platform it carries binaries for, so KiCAD's PCM
+# The package declares the platform it carries binaries for, so KiCad's PCM
 # only offers it to machines that can run it. A package bundles one native
 # binary, so it is never valid for "all platforms".
 #
@@ -47,7 +47,7 @@ usage() {
 Usage: packaging/build-pcm.sh [--version X.Y.Z] [--binary PATH] [--viewer PATH]
                               [--platform macos|linux] [--out DIR]
 
-Assembles the KiCAD PCM plugin zip (macOS/Linux port of build-pcm.ps1).
+Assembles the KiCad PCM plugin zip (macOS/Linux port of build-pcm.ps1).
 Defaults: version from Cargo.toml, binary target/release/voltaris, platform from
 the host, output dist/.
 EOF
@@ -94,10 +94,10 @@ staging="$(mktemp -d)/voltaris-pcm-$version"
 mkdir -p "$staging/plugins/bin" "$staging/plugins/resources" "$staging/resources"
 
 # Plugin files
-cp "$repo_root/plugin/__init__.py"        "$staging/plugins/"
-cp "$repo_root/plugin/plugin.json"        "$staging/plugins/"
-cp "$repo_root/plugin/settings_dialog.py" "$staging/plugins/"
-cp "$repo_root/plugin/native_bridge.py"   "$staging/plugins/"
+cp "$repo_root/kicad-plugin/__init__.py"        "$staging/plugins/"
+cp "$repo_root/kicad-plugin/plugin.json"        "$staging/plugins/"
+cp "$repo_root/kicad-plugin/settings_dialog.py" "$staging/plugins/"
+cp "$repo_root/kicad-plugin/native_bridge.py"   "$staging/plugins/"
 cp "$binary"                              "$staging/plugins/bin/$bin_name"
 chmod +x "$staging/plugins/bin/$bin_name"
 if [ -n "$viewer" ] && [ -f "$viewer" ]; then

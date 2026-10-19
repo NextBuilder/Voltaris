@@ -1,6 +1,6 @@
 //! Integration tests that run against real .kicad_sch and .kicad_pcb fixture files.
 //!
-//! These tests do NOT require kicad-cli or a running KiCAD instance.
+//! These tests do NOT require kicad-cli or a running KiCad instance.
 //! They test S-expression parsing and file manipulation only.
 
 use std::path::PathBuf;
@@ -302,7 +302,7 @@ async fn observability_meta_tools_surface_recorded_calls() {
 // ─── derived (lib_name) symbols (#143) ─────────────────────────────────────────
 
 /// Every pin coordinate in the fixture, keyed by reference, resolved the way
-/// KiCAD resolves them.
+/// KiCad resolves them.
 fn pin_map(path: &std::path::Path) -> std::collections::BTreeMap<String, Vec<(f64, f64)>> {
     use voltaris_sexp::schematic::{
         extract_lib_pins_for_unit, extract_symbol_instances, find_lib_symbol, pin_endpoint,

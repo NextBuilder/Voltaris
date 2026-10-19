@@ -1,4 +1,4 @@
-//! nom-based S-expression parser for KiCAD files.
+//! nom-based S-expression parser for KiCad files.
 //!
 //! Produces a lightweight `SexpNode` tree used for **reading** data only.
 //! All writes are done as targeted text edits (see `writer.rs`).
@@ -85,7 +85,7 @@ impl SexpNode {
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
-/// Parse a full KiCAD S-expression document into a `SexpNode::List`.
+/// Parse a full KiCad S-expression document into a `SexpNode::List`.
 pub fn parse_sexp(input: &str) -> Result<SexpNode, SexpError> {
     match sexp(input) {
         Ok(("", node)) => Ok(node),
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn quoted_uuid() {
-        // KiCAD 9+ requires quoted UUIDs
+        // KiCad 9+ requires quoted UUIDs
         let s = r#"(uuid "abc-123-def")"#;
         let n = parse_sexp(s).unwrap();
         assert_eq!(n.find_str("uuid"), None); // uuid is the head

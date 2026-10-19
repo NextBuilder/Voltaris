@@ -26,7 +26,7 @@ cargo fmt --all -- --check
 | IPC builders, transport, and client behavior | `crates/voltaris-ipc` tests |
 | Real KiCad behavior | ignored live tests and `.github/workflows/e2e-kicad.yml` |
 | Viewer | `crates/schematic-viewer` tests and its CI job |
-| Python plugin | `plugin/tests` and the plugin CI job |
+| Python plugin | `kicad-plugin/tests` and the plugin CI job |
 | PCM package | `packaging/validate-pcm.py` and packaging CI jobs |
 
 The viewer is outside the Cargo workspace. Build or test it from

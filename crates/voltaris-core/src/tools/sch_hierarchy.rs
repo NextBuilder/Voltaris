@@ -4,7 +4,7 @@
 //! queries; import/add/edit/delete sheet pins and a read-only pin/label sync
 //! check.
 //!
-//! Every handler here is file-editing only — KiCAD's own IPC API has no
+//! Every handler here is file-editing only — KiCad's own IPC API has no
 //! schematic-editing commands upstream (`schematic_commands.proto` is empty),
 //! so there's no dual IPC/file path to maintain, unlike the PCB toolsets.
 
@@ -84,7 +84,7 @@ pub fn tools() -> Vec<ToolDef> {
             "Insert a hierarchical sheet into a parent schematic, linking it to a child \
              .kicad_sch file. Creates the child file (blank) if it doesn't exist yet, or \
              links to it as-is if it does — reusing an existing file places the *same* \
-             sub-circuit at a second location (KiCAD's multi-instance sheet pattern) rather \
+             sub-circuit at a second location (KiCad's multi-instance sheet pattern) rather \
              than duplicating it. If the linked file already has symbols in it, their \
              hierarchical instance paths are patched immediately so ERC resolves them.",
             json!({
@@ -209,7 +209,7 @@ pub fn tools() -> Vec<ToolDef> {
             "import_sheet_pins",
             "Scan the child sheet's hierarchical_labels and auto-generate matching pins on \
              the parent sheet block, skipping names that already have a pin. This is the \
-             primary, expected way sheet pins get created — mirrors KiCAD's own 'Import Sheet \
+             primary, expected way sheet pins get created — mirrors KiCad's own 'Import Sheet \
              Pins' command rather than pairing every pin to a label by hand. New pins are \
              placed along one edge of the sheet box, stacked below any existing pins.",
             json!({
@@ -2458,7 +2458,7 @@ mod tests {
         let sch = cse::Schematic::load(&path).unwrap();
         assert!(
             sch.uuid.is_some(),
-            "root (uuid ...) is required for KiCAD's netlister to resolve instance paths"
+            "root (uuid ...) is required for KiCad's netlister to resolve instance paths"
         );
     }
 
@@ -3361,7 +3361,7 @@ mod tests {
     #[tokio::test]
     async fn add_sheet_pin_writes_a_rotation_kicad_can_load() {
         // Regression for #303: the pin used to be written as `(at x y)` with no
-        // rotation, and KiCAD then refused to load the whole schematic.
+        // rotation, and KiCad then refused to load the whole schematic.
         let tmp = TempDir::new().unwrap();
         let root = blank_schematic(tmp.path(), "root.kicad_sch");
         let ctx = test_ctx();

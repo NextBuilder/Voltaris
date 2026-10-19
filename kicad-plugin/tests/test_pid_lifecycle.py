@@ -1,11 +1,11 @@
-"""Regression tests for the plugin's server-PID bookkeeping (#103).
+"""Regression tests for the plugin's server-PID bookkeeping.
 
-The plugin runs inside KiCAD, so `plugin/__init__.py` imports `pcbnew`,
+The plugin runs inside KiCad, so `kicad-plugin/__init__.py` imports `pcbnew`,
 `wx` and its own `settings_dialog` at module level. None of those exist in
 CI, so they are stubbed in `sys.modules` before the import — the PID logic
 under test touches none of them.
 
-Run with:  python -m unittest discover -s plugin/tests
+Run with:  python -m unittest discover -s kicad-plugin/tests
 """
 
 import os
@@ -18,7 +18,7 @@ _PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _load_plugin():
-    """Import plugin/__init__.py with its KiCAD-only dependencies stubbed."""
+    """Import kicad-plugin/__init__.py with its KiCad-only dependencies stubbed."""
     pcbnew = types.ModuleType("pcbnew")
 
     class _ActionPlugin:
@@ -73,7 +73,7 @@ class PidFileLifecycle(unittest.TestCase):
         )
 
     def test_clearing_leaves_another_sessions_record_alone(self):
-        """The bug in #103: every KiCAD session writes the same file.
+        """The original bug: every KiCad session writes the same file.
 
         Session A's server exiting used to `os.remove` unconditionally,
         deleting session B's record while B's server was still running. B

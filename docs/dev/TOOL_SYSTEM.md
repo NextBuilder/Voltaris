@@ -12,7 +12,7 @@ The `tool!` macro constructs definitions in each domain module.
 
 `ToolContext` carries `ServerConfig`, the shared `ToolRouter`, the call observer,
 and shared integration state. Public tool names and schema fields are API; apply
-the naming and compatibility rules in `docs/NAMING_CONVENTIONS.md` and
+the naming and compatibility rules in `docs/dev/NAMING_CONVENTIONS.md` and
 `CONTRIBUTING.md`.
 
 ## Toolsets And Meta-Tools

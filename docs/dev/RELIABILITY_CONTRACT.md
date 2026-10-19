@@ -77,7 +77,7 @@ The shared `outcome` envelope is initially implemented only for
 That pilot is intentionally bounded. The following adjacent paths retain their
 existing response contracts until their focused issues are resolved. The
 machine-checked source of this baseline is
-[`reliability-legacy-inventory.json`](reliability-legacy-inventory.json); the
+`docs/dev/reliability-legacy-inventory.json`; the
 table below is its human-readable explanation.
 
 | Area | Current gap | Tracking | Removal condition |
@@ -142,7 +142,7 @@ not model selection.
 ## Maintainer references
 
 
-The canonical source is `docs/RELIABILITY_CONTRACT.md`. The installer embeds these
+The canonical source is `docs/dev/RELIABILITY_CONTRACT.md`. The installer embeds these
 same bytes as the voltaris skill's `references/reliability-contract.md`, so
 installed guidance can read it offline. Repository links above refer to current
 maintainer policy, which may be newer than an installed release.

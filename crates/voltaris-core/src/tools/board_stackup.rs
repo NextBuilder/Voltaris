@@ -30,7 +30,7 @@ const THICKNESS_TOLERANCE_MM: f64 = 0.001;
 const PROPERTY_TOLERANCE: f64 = 1e-6;
 
 const BOARD_SETUP_HINT: &str = "Voltaris cannot change a stackup: KiCad 10 declares \
-     UpdateBoardStackup but does not implement it (#716). Change it in KiCad's Board Setup, \
+     UpdateBoardStackup but does not implement it. Change it in KiCad's Board Setup, \
      under Board Stackup, then read it again.";
 
 /// KiCad's own default finish is "None" (`BOARD_STACKUP::BOARD_STACKUP`), and

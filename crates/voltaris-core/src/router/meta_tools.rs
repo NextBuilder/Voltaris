@@ -196,7 +196,7 @@ pub fn meta_tool_descriptions_for(reload_enabled: bool) -> Vec<McpToolDescriptio
         McpToolDescription {
             name: "list_toolboxes".to_string(),
             description:
-                "List all available KiCAD toolsets with descriptions, categories, tool counts, \
+                "List all available KiCad toolsets with descriptions, categories, tool counts, \
                  and whether each is currently loaded. Only the starter kit (project, config) \
                  is loaded at startup — call load_toolset(name) to expose additional tools \
                  in subsequent tools/list responses. Always call this first to discover what \

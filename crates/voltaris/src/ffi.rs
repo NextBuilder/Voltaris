@@ -1,6 +1,6 @@
-//! C ABI exports for KiCAD plugin integration.
+//! C ABI exports for KiCad plugin integration.
 //!
-//! KiCAD (or the thin Python launcher) can load this cdylib and call:
+//! KiCad (or the thin Python launcher) can load this cdylib and call:
 //!   kicad_plugin_init(config_path)  — start the embedded MCP server thread
 //!   kicad_plugin_version()          — return the version string
 //!   kicad_plugin_shutdown()         — stop the server cleanly

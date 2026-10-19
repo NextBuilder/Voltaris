@@ -36,7 +36,7 @@ pub const SKILLS: &[SkillManifest] = &[
         content: include_str!("../assets/skills/voltaris/SKILL.md"),
         references: &[(
             "reliability-contract.md",
-            include_str!("../../../docs/RELIABILITY_CONTRACT.md"),
+            include_str!("../../../docs/dev/RELIABILITY_CONTRACT.md"),
         )],
     },
     SkillManifest {

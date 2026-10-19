@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup help
+    url: https://github.com/NextBuilder/Voltaris/blob/main/docs/SETUP.md
+    about: Install steps, configuration and other AI clients.
+  - name: Troubleshooting
+    url: https://github.com/NextBuilder/Voltaris/blob/main/docs/TROUBLESHOOTING.md
+    about: Fixes for the most common problems.

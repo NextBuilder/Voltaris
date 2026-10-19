@@ -28,7 +28,7 @@ filesystem entry whose metadata is read and whose owner must be this user,
 while NNG's `ipc://` on Windows is a named pipe with no filesystem presence, so
 the candidate path is looked up in the pipe namespace instead. Neither branch
 opens the endpoint — a stream connect that does not complete NNG's handshake
-wedges KiCad's server for every client (#498), and on Windows opening the pipe
+wedges KiCad's server for every client, and on Windows opening the pipe
 would also consume a server instance. Liveness stays the job of the bounded
 `Ping` in `client.rs`.
 
@@ -57,7 +57,7 @@ the file — the file fallback only ever fires when no live KiCad holds the name
 board at all. The closed-board file-fallback path is unchanged and keeps
 refusing any footprint whose 3D model has a non-zero `offset.y`/`rotate.x`/
 `rotate.y`, since reproducing KiCad's own 3D-model flip math for that path
-remains out of scope (issue #604).
+remains out of scope.
 
 ### Editor observation
 

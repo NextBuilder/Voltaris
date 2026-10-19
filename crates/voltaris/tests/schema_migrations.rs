@@ -35,7 +35,7 @@ fn ignored_inputs_are_no_longer_advertised() {
 
 #[test]
 fn every_removed_input_has_a_migration_note() {
-    let migrations = include_str!("../../../docs/API_MIGRATIONS.md");
+    let migrations = include_str!("../../../docs/dev/API_MIGRATIONS.md");
     for &(tool_name, field) in REMOVED {
         assert!(
             migrations.contains(&format!("`{tool_name}.{field}`")),

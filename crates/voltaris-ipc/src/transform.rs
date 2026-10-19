@@ -1,13 +1,13 @@
 //! Rigid-body transforms for `FootprintInstance` round-trips (issue #23).
 //!
-//! KiCAD 10 serializes every child of a footprint (pads, fields, texts,
+//! KiCad 10 serializes every child of a footprint (pads, fields, texts,
 //! graphics, zones) in ABSOLUTE board coordinates — despite the proto comment
 //! on `Pad.position` claiming footprint-relative coordinates — and
 //! `FOOTPRINT::Deserialize` clears all children and re-creates them at exactly
 //! the coordinates carried in the message. Round-tripping an instance with
 //! only `position` or `orientation` changed therefore leaves the copper and
 //! silkscreen at the old location, detached from the anchor. Before sending
-//! `UpdateItems`, every child must get the same rigid-body transform KiCAD
+//! `UpdateItems`, every child must get the same rigid-body transform KiCad
 //! would apply natively (`FOOTPRINT::SetPosition` / `SetOrientation`).
 
 use crate::gen::kiapi;
@@ -21,7 +21,7 @@ use prost::Message;
 pub enum Xform {
     /// Shift every child by (dx, dy) nanometers.
     Translate { dx_nm: i64, dy_nm: i64 },
-    /// Rotate every child by `delta_deg` around (cx, cy), matching KiCAD's
+    /// Rotate every child by `delta_deg` around (cx, cy), matching KiCad's
     /// convention (Y axis down; positive angles counterclockwise on screen).
     Rotate {
         cx_nm: i64,
@@ -39,7 +39,7 @@ impl Xform {
                 cy_nm,
                 delta_deg,
             } => {
-                // KiCAD's RotatePoint (libs/kimath/src/trigo.cpp):
+                // KiCad's RotatePoint (libs/kimath/src/trigo.cpp):
                 //   x' = x·cosθ + y·sinθ ;  y' = y·cosθ − x·sinθ
                 let (rx, ry) = ((x - cx_nm) as f64, (y - cy_nm) as f64);
                 let (s, c) = delta_deg.to_radians().sin_cos();
@@ -65,7 +65,7 @@ impl Xform {
     }
 }
 
-/// Normalize to (-180, 180], the range KiCAD's `EDA_ANGLE::Normalize180` uses.
+/// Normalize to (-180, 180], the range KiCad's `EDA_ANGLE::Normalize180` uses.
 fn normalize_deg(deg: f64) -> f64 {
     let mut d = deg % 360.0;
     if d <= -180.0 {
@@ -160,7 +160,7 @@ fn xform_graphic_shape(gs: &mut board::BoardGraphicShape, xf: &Xform) -> Result<
                 xform_vec2(&mut rect.top_left, xf);
                 xform_vec2(&mut rect.bottom_right, xf);
             } else if rect.corner_radius.is_some() {
-                // A rounded rectangle can't be represented off-axis; KiCAD
+                // A rounded rectangle can't be represented off-axis; KiCad
                 // itself converts plain rectangles to polygons here, but has
                 // no lossless form for rounded ones.
                 anyhow::bail!(
@@ -168,7 +168,7 @@ fn xform_graphic_shape(gs: &mut board::BoardGraphicShape, xf: &Xform) -> Result<
                      graphic by a non-90° angle; use a multiple of 90°"
                 );
             } else {
-                // Mirror KiCAD's EDA_SHAPE::Rotate: an off-axis rectangle
+                // Mirror KiCad's EDA_SHAPE::Rotate: an off-axis rectangle
                 // becomes a closed polygon of its four rotated corners.
                 let (tl, br) = (
                     rect.top_left.unwrap_or_default(),
@@ -331,7 +331,7 @@ pub fn transform_footprint_children(fp: &mut board::FootprintInstance, xf: &Xfor
         } else if url == "kiapi.board.types.Footprint3DModel" || url == "kiapi.board.types.Group" {
             // No board-space geometry of their own — nothing to shift.
         } else {
-            // KiCAD would re-create this item wherever the stale message
+            // KiCad would re-create this item wherever the stale message
             // says it is; refusing beats silently corrupting the board.
             anyhow::bail!(
                 "footprint contains an item of unsupported type '{url}'; \
@@ -435,7 +435,7 @@ mod tests {
         };
         transform_footprint_children(&mut fp, &xf).unwrap();
 
-        // KiCAD positive rotation is counterclockwise on screen (Y down):
+        // KiCad positive rotation is counterclockwise on screen (Y down):
         // (+1, 0) relative -> (0, -1) relative.
         let pad = decode_pad(&fp.definition.as_ref().unwrap().items[0]);
         assert_eq!(pad.position.unwrap(), builders::vec2(100.0, 99.0));

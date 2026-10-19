@@ -42,7 +42,7 @@ pub fn tools() -> Vec<ToolDef> {
                     },
                     "bom_fields": {
                         "type": "string",
-                        "description": "Ordered, comma-separated BOM columns, e.g. 'Reference,Value,Footprint,MPN,${QUANTITY}'. Any schematic field name works — this is how MPN/LCSC columns reach the fab. Omit for KiCAD's default Reference,Value,Footprint,QUANTITY,DNP."
+                        "description": "Ordered, comma-separated BOM columns, e.g. 'Reference,Value,Footprint,MPN,${QUANTITY}'. Any schematic field name works — this is how MPN/LCSC columns reach the fab. Omit for KiCad's default Reference,Value,Footprint,QUANTITY,DNP."
                     },
                     "bom_labels": {
                         "type": "string",
@@ -1033,7 +1033,7 @@ async fn handle_validate_for_manufacturing(
         issues.push(json!({
             "severity": "error",
             "issue": "No footprints found on the board",
-            "fix": "Open the PCB in KiCAD and run Tools > Update PCB from Schematic (kicad-cli has no 'pcb sync' command)"
+            "fix": "Open the PCB in KiCad and run Tools > Update PCB from Schematic (kicad-cli has no 'pcb sync' command)"
         }));
     }
 

@@ -1,6 +1,6 @@
 //! SchematicBuilder — Structured writer for .kicad_sch files.
 //!
-//! KiCAD 10's parser requires elements in a specific order. This builder
+//! KiCad 10's parser requires elements in a specific order. This builder
 //! parses an existing schematic into sections, allows adding elements to
 //! the correct section, and serializes back with guaranteed valid ordering.
 //!
@@ -59,7 +59,7 @@ impl Default for SchematicBuilder {
 }
 
 impl SchematicBuilder {
-    /// Create an empty schematic with KiCAD 10 header.
+    /// Create an empty schematic with KiCad 10 header.
     pub fn new() -> Self {
         let uuid = voltaris_sexp::writer::new_uuid();
         SchematicBuilder {

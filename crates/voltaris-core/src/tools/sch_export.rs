@@ -2,7 +2,7 @@
 //!
 //! All export operations delegate to `kicad-cli` via the `cli` module.
 //! `export_netlist_summary` and `fix_connectivity` operate directly on
-//! S-expression file content so they work without a running KiCAD instance.
+//! S-expression file content so they work without a running KiCad instance.
 
 use crate::mcp::{error::ToolErrorKind, protocol::CallToolResult};
 use crate::tool;
@@ -112,7 +112,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "generate_netlist",
-            "Generate a KiCAD netlist file from the schematic using kicad-cli.",
+            "Generate a KiCad netlist file from the schematic using kicad-cli.",
             json!({
                 "type": "object",
                 "properties": {

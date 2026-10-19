@@ -1,6 +1,6 @@
 //! `pcb_routing` toolset — traces, vias, copper pours, nets, netclasses, and diff pairs.
 //!
-//! Routing operations use the KiCAD IPC API; `add_net`, `create_netclass`, and
+//! Routing operations use the KiCad IPC API; `add_net`, `create_netclass`, and
 //! `add_copper_pour` use S-expression file manipulation.
 
 use crate::mcp::error::ToolErrorKind;
@@ -35,12 +35,12 @@ macro_rules! ipc {
             }
             Ok(BoardBinding::Unserved { message, .. }) => {
                 return Ok(CallToolResult::error(format!(
-                    "KiCAD must be running with the board loaded (IPC error: {message})"
+                    "KiCad must be running with the board loaded (IPC error: {message})"
                 )))
             }
             Err(error) => {
                 return Ok(CallToolResult::error(format!(
-                    "KiCAD must be running with the board loaded (IPC error: {})",
+                    "KiCad must be running with the board loaded (IPC error: {})",
                     error.message()
                 )))
             }
@@ -55,7 +55,7 @@ pub fn tools() -> Vec<ToolDef> {
         tool!(
             "add_net",
             "Idempotently add a net to the top-level net table of a pre-KiCad-10 board \
-             (S-expression insert, no KiCAD IPC required). An existing name returns its \
+             (S-expression insert, no KiCad IPC required). An existing name returns its \
              observed ID without writing. Fails on a KiCad 10 board, which has no net \
              table — there, name the net on copper (route_trace, add_via, add_copper_pour) \
              instead.",
@@ -71,7 +71,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "route_trace",
-            "Route a trace segment between two points on a copper layer via KiCAD IPC.",
+            "Route a trace segment between two points on a copper layer via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -89,7 +89,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "route_pad_to_pad",
-            "Route a direct trace between two pads of named components (L-bend routing) via KiCAD IPC.",
+            "Route a direct trace between two pads of named components (L-bend routing) via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -109,7 +109,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "add_via",
-            "Add a through-hole via at a given position and assign it to a net via KiCAD IPC.",
+            "Add a through-hole via at a given position and assign it to a net via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -160,15 +160,15 @@ pub fn tools() -> Vec<ToolDef> {
             "add_copper_pour",
             "Alias of pcb_board's add_zone, kept for compatibility: identical arguments, \
              defaults and behaviour. Adds a copper fill zone polygon on a layer/net, trying \
-             KiCAD IPC first and falling back to an S-expression file insert (with a warning) \
-             only when no live KiCAD answers.",
+             KiCad IPC first and falling back to an S-expression file insert (with a warning) \
+             only when no live KiCad answers.",
             crate::tools::pcb_board::zone_schema(),
             |args, ctx| async move { handle_add_copper_pour(args, ctx).await }
         )
         .with_board_access(crate::tools::BoardAccess::LivePreferredWithFallback),
         tool!(
             "delete_trace",
-            "Delete a trace segment identified by its UUID via KiCAD IPC. Refuses UUIDs that are not observed trace segments on the requested board, then verifies the segment is absent before reporting success. Returns the observed preimage and postcondition.",
+            "Delete a trace segment identified by its UUID via KiCad IPC. Refuses UUIDs that are not observed trace segments on the requested board, then verifies the segment is absent before reporting success. Returns the observed preimage and postcondition.",
             json!({
                 "type": "object",
                 "properties": {
@@ -198,7 +198,7 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LiveOnly),
         tool!(
             "get_nets_list",
-            "Return all nets defined on the PCB via KiCAD IPC.",
+            "Return all nets defined on the PCB via KiCad IPC.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1040,7 +1040,7 @@ async fn handle_delete_trace(
         Ok(deleted) => deleted,
         Err(error) => {
             return Ok(CallToolResult::error(format!(
-                "KiCAD must be running with the board loaded (IPC error: {})",
+                "KiCad must be running with the board loaded (IPC error: {})",
                 error.message()
             )))
         }
@@ -1352,7 +1352,7 @@ const DEFAULT_CLASS_NAME: &str = "Default";
 /// A written Default replaces the one KiCad seeds rather than merging with it,
 /// and nothing backfills it, so every key omitted here resolves from nothing.
 /// Without `wire_width` that means no junction dots anywhere in the project,
-/// silently (#326). See `docs/KICAD_NETCLASS_DEFAULTS.md`.
+/// silently (#326). See `docs/dev/KICAD_NETCLASS_DEFAULTS.md`.
 fn kicad_default_class() -> serde_json::Value {
     json!({
         // Ranks the Default last. A C++ int (`net_settings.cpp:69`), so not

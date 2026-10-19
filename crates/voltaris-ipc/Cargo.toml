@@ -15,7 +15,7 @@ voltaris-sexp.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-# NNG + Protobuf for KiCAD 10 IPC API
+# NNG + Protobuf for KiCad 10 IPC API
 nng.workspace = true
 prost.workspace = true
 prost-types.workspace = true

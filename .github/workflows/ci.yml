@@ -41,14 +41,14 @@ jobs:
       - name: Test (unit + integration)
         run: cargo test --workspace --locked --lib --tests
       # --doc cannot be combined with --lib/--tests; doctests broke silently
-      # once (PR #49) because they were never run in CI.
+      # once because they were never run in CI.
       - name: Doctests
         run: cargo test --workspace --locked --doc
 
-  # The KiCAD action plugin is Python, so cargo never sees it. Its only real
-  # logic is the server-PID bookkeeping (#103), where an unconditional
-  # os.remove let one KiCAD session delete another's record and leak an
-  # unreapable server. The tests stub pcbnew/wx, so no KiCAD is needed.
+  # The KiCad action plugin is Python, so cargo never sees it. Its only real
+  # logic is the server-PID bookkeeping, where an unconditional
+  # os.remove let one KiCad session delete another's record and leak an
+  # unreapable server. The tests stub pcbnew/wx, so no KiCad is needed.
   plugin:
     name: Plugin (Python)
     runs-on: ubuntu-latest
@@ -59,7 +59,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Test
-        run: python -m unittest discover -s plugin/tests -v
+        run: python -m unittest discover -s kicad-plugin/tests -v
 
   # schematic-viewer is intentionally outside the workspace (Tauri app), so
   # --workspace never touches it. Without this job a viewer break ships
@@ -98,7 +98,7 @@ jobs:
       # --all-targets so tests, benches and examples are linted too. Without it
       # test code is never checked, and it had accumulated real findings: eight
       # `MutexGuard` held across an await, a dropped coordinate that left half
-      # of a transform assertion unwritten, and a handful of style lints (#121).
+      # of a transform assertion unwritten, and a handful of style lints.
       - run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
   # Dependency license gate (deny.toml): stops an AGPL-incompatible license

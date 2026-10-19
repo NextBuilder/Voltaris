@@ -1,9 +1,9 @@
-//! Canonical KiCAD pin coordinate transforms.
+//! Canonical KiCad pin coordinate transforms.
 //!
 //! This is THE single authoritative implementation. All toolset code must
 //! call these functions.
 //!
-//! # KiCAD Coordinate System Rules (verified against eeschema via
+//! # KiCad Coordinate System Rules (verified against eeschema via
 //! `kicad-cli sch export netlist` — see the ground-truth tests below)
 //!
 //! 1. Symbol pin coordinates are in **Y-up** library space.
@@ -33,7 +33,7 @@ pub struct PinTransform {
     /// Component origin in schematic space (mm).
     pub comp_x: f64,
     pub comp_y: f64,
-    /// Component rotation in degrees (KiCAD convention).
+    /// Component rotation in degrees (KiCad convention).
     pub rotation_deg: f64,
     /// Mirror flags from the symbol instance.
     pub mirror_x: bool,
@@ -123,7 +123,7 @@ pub fn transform_direction(angle_deg: f64, t: PinTransform) -> f64 {
 /// This is the PCB counterpart of [`transform_pin`]. Unlike symbol pins,
 /// `.kicad_pcb` pad coordinates are already in **Y-down** board orientation,
 /// so there is no Y-up→Y-down flip — but the rotation sense is the same
-/// screen-CCW-in-Y-down convention KiCAD uses everywhere:
+/// screen-CCW-in-Y-down convention KiCad uses everywhere:
 ///
 /// ```text
 /// board_x = fp_x + lx * cos(θ) + ly * sin(θ)
@@ -131,7 +131,7 @@ pub fn transform_direction(angle_deg: f64, t: PinTransform) -> f64 {
 /// ```
 ///
 /// Note the sign pattern: this is **not** the textbook rotation matrix.
-/// The textbook form (`-ly*sin`, `+lx*sin`) agrees with KiCAD at 0° and 180°
+/// The textbook form (`-ly*sin`, `+lx*sin`) agrees with KiCad at 0° and 180°
 /// but reflects the footprint end-for-end about its origin at ±90°, which
 /// silently reports e.g. a connector's pin 1 at the wrong end.
 ///
@@ -157,7 +157,7 @@ pub fn transform_pad(
 }
 
 /// Rotate the offset `(dx, dy)` about `(origin_x, origin_y)` by
-/// `rotation_deg`, screen-CCW in KiCAD's Y-down space, and return the absolute
+/// `rotation_deg`, screen-CCW in KiCad's Y-down space, and return the absolute
 /// point.
 ///
 /// This is the bare rotation step shared by [`transform_pad`] and by
@@ -197,7 +197,7 @@ pub fn rotate_about(
     )
 }
 
-/// Axis-aligned bounding box of a circular arc given in KiCAD's three-point
+/// Axis-aligned bounding box of a circular arc given in KiCad's three-point
 /// form: `(start …) (mid …) (end …)`, where `mid` is any point on the arc
 /// strictly between the endpoints.
 ///
@@ -211,7 +211,7 @@ pub fn rotate_about(
 ///
 /// Collinear (or coincident) input has no finite circle; the bbox of the
 /// three points themselves is returned, which is exact for the degenerate
-/// straight "arc" KiCAD would render.
+/// straight "arc" KiCad would render.
 ///
 /// Returns `(min_x, min_y, max_x, max_y)`.
 ///
@@ -298,13 +298,13 @@ pub fn arc_bbox(start: (f64, f64), mid: (f64, f64), end: (f64, f64)) -> (f64, f6
     (min_x, min_y, max_x, max_y)
 }
 
-/// Round to the six decimals KiCAD writes, so arithmetic noise never reaches
-/// the file. `+ 0.0` turns `-0` into the `0` KiCAD writes.
+/// Round to the six decimals KiCad writes, so arithmetic noise never reaches
+/// the file. `+ 0.0` turns `-0` into the `0` KiCad writes.
 pub fn round6(v: f64) -> f64 {
     (v * 1_000_000.0).round() / 1_000_000.0 + 0.0
 }
 
-/// Snap a coordinate to KiCAD's schematic grid (default 1.27 mm = 50 mil).
+/// Snap a coordinate to KiCad's schematic grid (default 1.27 mm = 50 mil).
 ///
 /// Rounded, because 132 × 1.27 is `167.64000000000001` in `f64` (#744).
 pub fn snap_to_grid(value: f64, grid: f64) -> f64 {
@@ -324,7 +324,7 @@ pub fn points_coincident(x1: f64, y1: f64, x2: f64, y2: f64, tol: f64) -> bool {
 /// Check whether point (px, py) lies on line segment (x1,y1)→(x2,y2)
 /// within a tolerance. Used for T-junction detection.
 pub fn point_on_segment(px: f64, py: f64, x1: f64, y1: f64, x2: f64, y2: f64, tol: f64) -> bool {
-    // Segment must be axis-aligned (KiCAD wires are always H or V)
+    // Segment must be axis-aligned (KiCad wires are always H or V)
     if (x1 - x2).abs() < tol {
         // Vertical segment
         (px - x1).abs() <= tol && py >= y1.min(y2) - tol && py <= y1.max(y2) + tol
@@ -332,7 +332,7 @@ pub fn point_on_segment(px: f64, py: f64, x1: f64, y1: f64, x2: f64, y2: f64, to
         // Horizontal segment
         (py - y1).abs() <= tol && px >= x1.min(x2) - tol && px <= x1.max(x2) + tol
     } else {
-        false // Diagonal — should never occur for KiCAD wires
+        false // Diagonal — should never occur for KiCad wires
     }
 }
 
@@ -544,7 +544,7 @@ mod tests {
         assert!(
             (x - bad_x).abs() + (y - bad_y).abs() > 1.0,
             "transform_pad matches the textbook (Y-up) rotation matrix; \
-             KiCAD's Y axis points down, so the sin terms must swap sign"
+             KiCad's Y axis points down, so the sin terms must swap sign"
         );
     }
 
@@ -687,7 +687,7 @@ mod tests {
     }
 
     /// Collinear points have no circumcircle; the three-point hull is the
-    /// exact bbox of the straight segment KiCAD renders for such an arc.
+    /// exact bbox of the straight segment KiCad renders for such an arc.
     #[test]
     fn arc_bbox_collinear_degrades_to_point_hull() {
         assert_bbox(
@@ -698,7 +698,7 @@ mod tests {
     }
 
     /// A real corner fillet from an Edge.Cuts outline (RoyalBlue54L NFC
-    /// antenna demo, KiCAD-authored): quarter arc, center (148.94971,
+    /// antenna demo, KiCad-authored): quarter arc, center (148.94971,
     /// 71.060695), r = 1, in Y-down board coordinates. Its −Y extreme
     /// coincides with the end tangent point at y = 70.060695.
     #[test]

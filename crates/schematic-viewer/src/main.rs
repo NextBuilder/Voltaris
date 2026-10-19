@@ -102,7 +102,7 @@ fn compute_watch_dirs(entries: &[SheetEntry]) -> HashSet<PathBuf> {
 }
 
 /// Whether a changed path is a genuine schematic edit worth re-walking the
-/// tree for. KiCAD periodically writes its own `_autosave-*.kicad_sch` and
+/// tree for. KiCad periodically writes its own `_autosave-*.kicad_sch` and
 /// `~*.kicad_sch` (lock) files into the same directory as the real sheets —
 /// these fire on a timer independent of any real edit, and reacting to them
 /// wastes a full parallel re-render *and* can eat the debounce window right
@@ -140,7 +140,7 @@ struct ViewerState {
 // ─── Binary discovery ───────────────────────────────────────────────────────
 
 /// Resolve kicad-cli: explicit override → platform candidates → PATH.
-/// Candidate lists mirror `plugin/settings_dialog.py::detect_kicad_cli`.
+/// Candidate lists mirror `kicad-plugin/settings_dialog.py::detect_kicad_cli`.
 fn resolve_kicad_cli(override_path: Option<String>) -> String {
     if let Some(p) = override_path {
         if !p.is_empty() {
@@ -173,7 +173,7 @@ fn resolve_kicad_cli(override_path: Option<String>) -> String {
     "kicad-cli".to_string() // hope it's on PATH
 }
 
-/// Resolve the KiCAD GUI binary for "Open in KiCAD".
+/// Resolve the KiCad GUI binary for "Open in KiCad".
 fn resolve_kicad_binary() -> String {
     let candidates: &[&str] = if cfg!(target_os = "windows") {
         &[
@@ -194,7 +194,7 @@ fn resolve_kicad_binary() -> String {
     "kicad".to_string()
 }
 
-/// KiCAD's own lock-file convention for a file it has open: `~<name>.lck`
+/// KiCad's own lock-file convention for a file it has open: `~<name>.lck`
 /// in the same directory.
 fn kicad_lock_path(target: &Path) -> PathBuf {
     let dir = target.parent().unwrap_or(Path::new("."));
@@ -230,10 +230,10 @@ fn render_batch_dir() -> PathBuf {
 /// Why render from copies at all: kicad-cli holds every `.kicad_sch` in the
 /// exported tree open *without write sharing* for the entire export
 /// (verified directly on Windows: concurrent write-opens fail with a
-/// sharing violation, which KiCAD's GUI surfaces as the misleading "You do
+/// sharing violation, which KiCad's GUI surfaces as the misleading "You do
 /// not have write permissions to: ..." dialog when a user's save lands
 /// mid-export). Rendering from a temp snapshot means no kicad-cli process
-/// ever holds the user's real files open, so a KiCAD save can never collide
+/// ever holds the user's real files open, so a KiCad save can never collide
 /// with a render, no matter how many renders run in parallel. It also keeps
 /// kicad-cli's transient `~<project>.lck` file out of the real project
 /// folder.
@@ -254,7 +254,7 @@ fn snapshot_tree(root: &Path, entries: &[SheetEntry], snap_dir: &Path) -> HashMa
                 std::fs::create_dir_all(dest.parent()?).ok()?;
                 // Explicit read + write rather than fs::copy: std's
                 // File::open shares read/write/delete access, so the copy
-                // itself can never block a concurrent KiCAD save either.
+                // itself can never block a concurrent KiCad save either.
                 let bytes = std::fs::read(live).ok()?;
                 std::fs::write(&dest, bytes).ok()?;
                 Some(dest)
@@ -311,7 +311,7 @@ fn render_to_svg_in(cli: &str, schematic: &Path, output_dir: &Path) -> Result<St
     if !output.status.success() {
         // kicad-cli's exit code can lie: with a pre-existing foreign or
         // unparseable project lock file present it completes the entire
-        // export and still exits -1 (verified against KiCAD 10 on Windows).
+        // export and still exits -1 (verified against KiCad 10 on Windows).
         // Trust the artifact over the exit code; only a missing or empty
         // SVG is a real failure.
         let produced = std::fs::metadata(&svg_path)
@@ -542,8 +542,8 @@ fn refresh(state: tauri::State<'_, ViewerState>) -> Result<String, String> {
     Ok(svg)
 }
 
-/// Opens the currently *active* sheet in KiCAD — not necessarily the root —
-/// so "Open in KiCAD" matches whatever the user is actually looking at.
+/// Opens the currently *active* sheet in KiCad — not necessarily the root —
+/// so "Open in KiCad" matches whatever the user is actually looking at.
 #[tauri::command]
 fn open_in_kicad(state: tauri::State<'_, ViewerState>) -> Result<(), String> {
     let root = state
@@ -572,17 +572,17 @@ fn open_in_kicad(state: tauri::State<'_, ViewerState>) -> Result<(), String> {
     let project = root.with_extension("kicad_pro");
     let target = if project.exists() { project } else { active };
 
-    // KiCAD marks an open project/file with a `~<name>.lck` file in the
-    // same directory (confirmed against a real KiCAD 10 session). Spawning
+    // KiCad marks an open project/file with a `~<name>.lck` file in the
+    // same directory (confirmed against a real KiCad 10 session). Spawning
     // kicad.exe against an already-locked project produces a warning dialog
-    // that, if declined, still leaves a new blank KiCAD window running —
+    // that, if declined, still leaves a new blank KiCad window running —
     // checking first avoids that stray window entirely. Known tradeoff: a
-    // stale lock left behind by a crashed KiCAD would incorrectly block a
+    // stale lock left behind by a crashed KiCad would incorrectly block a
     // legitimate open; not attempting to validate lock freshness here.
     if kicad_lock_path(&target).exists() {
         let name = target.file_name().unwrap_or_default().to_string_lossy();
         return Err(format!(
-            "'{}' is already open in another KiCAD window — switch to that window instead of opening a new one.",
+            "'{}' is already open in another KiCad window — switch to that window instead of opening a new one.",
             name
         ));
     }
@@ -590,7 +590,7 @@ fn open_in_kicad(state: tauri::State<'_, ViewerState>) -> Result<(), String> {
     Command::new(resolve_kicad_binary())
         .arg(&target)
         .spawn()
-        .map_err(|e| format!("Failed to launch KiCAD: {}", e))?;
+        .map_err(|e| format!("Failed to launch KiCad: {}", e))?;
     Ok(())
 }
 
@@ -647,11 +647,11 @@ fn build_watcher(
     Ok(watcher)
 }
 
-/// How long file events must stay quiet before a re-render starts. A KiCAD
+/// How long file events must stay quiet before a re-render starts. A KiCad
 /// save rewrites every modified sheet file in a burst spread over a second
 /// or two (observed: ~24 files across 2 seconds on a real 20-sheet board),
 /// so rendering must begin *after* the burst ends, not on its first event —
-/// a leading-edge debounce reads files KiCAD is still writing.
+/// a leading-edge debounce reads files KiCad is still writing.
 const QUIET_WINDOW: Duration = Duration::from_millis(600);
 
 /// Upper bound on waiting for quiet, so a pathological never-ending event
@@ -912,7 +912,7 @@ mod tests {
 
     #[test]
     fn kicad_lock_path_matches_real_kicad_convention() {
-        // Verified against a real KiCAD 10 session: opening
+        // Verified against a real KiCad 10 session: opening
         // "MultiSheet.kicad_pro" produces "~MultiSheet.kicad_pro.lck" in
         // the same directory.
         let path = Path::new("/proj/MultiSheet.kicad_pro");

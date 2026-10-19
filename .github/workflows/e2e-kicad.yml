@@ -1,13 +1,13 @@
-name: E2E (real KiCAD)
+name: E2E (real KiCad)
 
-# Full-stack verification against a real KiCAD installation:
+# Full-stack verification against a real KiCad installation:
 #   - the e2e test drives the shipped binary over stdio through
 #     create → place → wire → ERC → Gerber export → DRC using real kicad-cli
-#   - the conformance suite round-trips every schematic in KiCAD's demo corpus
+#   - the conformance suite round-trips every schematic in KiCad's demo corpus
 #   - the PCM package is assembled and schema-validated
 #
 # Runs weekly, on demand, as the reusable release gate, and for a PR only when
-# a maintainer applies `run:e2e-kicad`. Installing KiCAD costs several minutes,
+# a maintainer applies `run:e2e-kicad`. Installing KiCad costs several minutes,
 # so this remains an opt-in PR lane rather than an ordinary required check.
 # `release.yml` calls this workflow at the tag commit and cannot publish until
 # the call succeeds.
@@ -47,9 +47,9 @@ jobs:
           key: e2e-kicad
 
       # Pinned: an unpinned install would silently switch what E2E tests the
-      # day KiCAD 11 ships, while metadata.json still declares kicad_version
+      # day KiCad 11 ships, while metadata.json still declares kicad_version
       # 10.x. Bump deliberately alongside the supported-version claim.
-      - name: Install KiCAD
+      - name: Install KiCad
         run: choco install kicad --version=10.0.5 --no-progress --yes
 
       - name: Locate kicad-cli and demos

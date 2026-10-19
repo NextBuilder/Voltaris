@@ -188,7 +188,7 @@ fn outline_items(primitives: &[OutlinePrimitive], width: f64) -> Vec<prost_types
 
 /// What a board-mutating tool should do after its IPC attempt.
 pub(crate) enum BoardWrite<T = ()> {
-    /// KiCAD applied the change; report `"source": "ipc"`. Carries whatever the
+    /// KiCad applied the change; report `"source": "ipc"`. Carries whatever the
     /// IPC call returned, for tools that echo it back — the placed footprint,
     /// for instance.
     Ipc(T),
@@ -197,7 +197,7 @@ pub(crate) enum BoardWrite<T = ()> {
     /// Carries *why*, because the caller's user has a different next move for
     /// each — start KiCad, or open this board in the one already running.
     File(NoLiveBoard),
-    /// KiCAD answered and refused. The caller must return this result and must
+    /// KiCad answered and refused. The caller must return this result and must
     /// NOT touch the file.
     Refused(CallToolResult),
 }
@@ -259,17 +259,17 @@ impl NoLiveBoard {
 /// Two failure modes that used to look alike are kept apart here, both of which
 /// silently corrupted work before:
 ///
-/// * The board reached over IPC is whichever one KiCAD has open, so a request
+/// * The board reached over IPC is whichever one KiCad has open, so a request
 ///   naming a *different* board would edit the wrong one — `ensure_board_is_active`
 ///   rejects that up front (issue: `add_board_outline` writing into the open board).
-/// * A file-only edit is invisible to a KiCAD holding this board open and is
+/// * A file-only edit is invisible to a KiCad holding this board open and is
 ///   discarded by its next save. So the fallback gate is the typed transport
 ///   classification, never a text match. A KiCad that answers — even with an
 ///   error — fails closed unless it proves this board is not open. An unreachable
 ///   transport permits the file path when this server has never observed the
 ///   board live, or when a previously observed exact-board lock has vanished
 ///   after a clean editor close.
-/// * A reachable KiCAD that does not hold this board is a third answer, not a
+/// * A reachable KiCad that does not hold this board is a third answer, not a
 ///   refusal: it has no unsaved state for a board it never opened, so the file
 ///   is authoritative and the edit proceeds there.
 pub(crate) async fn attempt_ipc_write<T, F>(
@@ -298,8 +298,8 @@ where
             // permission is #577's question, not this one's.
             LiveBoard::Rejected(message) | LiveBoard::Unserved { message, .. } => {
                 BoardWrite::Refused(CallToolResult::error(format!(
-                    "KiCAD rejected the {what} over IPC: {message}. \
-                 The board file was not modified — KiCAD is reachable and may hold this \
+                    "KiCad rejected the {what} over IPC: {message}. \
+                 The board file was not modified — KiCad is reachable and may hold this \
                  board open, so editing the file directly could be silently overwritten."
                 )))
             }
@@ -399,11 +399,11 @@ fn board_lock_refusal_from(
     }
 }
 
-/// Refuse a direct file edit when KiCAD is reachable AND holds this very
+/// Refuse a direct file edit when KiCad is reachable AND holds this very
 /// board open: pcbnew saves from its in-memory state, so the file edit would
 /// be silently discarded on its next save — success reported, nothing kept
 /// (#192). For tools with no IPC implementation this guard is the honest
-/// alternative to [`attempt_ipc_write`]'s fallback. A reachable KiCAD holding
+/// alternative to [`attempt_ipc_write`]'s fallback. A reachable KiCad holding
 /// a *different* board (or none) does not interfere with this file. An
 /// unreachable transport also proceeds after shared board-session evidence
 /// proves a clean close of this previously observed board.
@@ -415,8 +415,8 @@ pub(crate) async fn refuse_if_board_open_in_kicad(
     Ok(
         match live_board::observe(ctx, board_path, |_, _| Ok(())).await? {
             LiveBoard::Answered(()) => Some(CallToolResult::error(format!(
-                "KiCAD currently holds this board open, and a {what} written to the file would \
-                 be discarded by KiCAD's next save. Close the board in KiCAD (or make the edit \
+                "KiCad currently holds this board open, and a {what} written to the file would \
+                 be discarded by KiCad's next save. Close the board in KiCad (or make the edit \
                  there) and retry — this tool has no IPC path for a live board yet."
             ))),
             // KiCad answered at all, so it may hold this board; a rejection is
@@ -1138,7 +1138,7 @@ pub fn tools() -> Vec<ToolDef> {
                 "type": "object",
                 "properties": {
                     "board":       { "type": "string" },
-                    "layer_name":  { "type": "string", "description": "KiCAD layer name (e.g. 'In1.Cu')" },
+                    "layer_name":  { "type": "string", "description": "KiCad layer name (e.g. 'In1.Cu')" },
                     "layer_type":  { "type": "string", "description": "Type: 'signal', 'power', 'mixed', 'jumper'", "default": "signal" }
                 },
                 "required": ["board", "layer_name"]
@@ -1153,7 +1153,7 @@ pub fn tools() -> Vec<ToolDef> {
                 "type": "object",
                 "properties": {
                     "board":  { "type": "string" },
-                    "layer":  { "type": "string", "description": "KiCAD layer name (e.g. 'F.Cu')" }
+                    "layer":  { "type": "string", "description": "KiCad layer name (e.g. 'F.Cu')" }
                 },
                 "required": ["board", "layer"]
             }),
@@ -1260,9 +1260,9 @@ pub fn tools() -> Vec<ToolDef> {
         .with_board_access(crate::tools::BoardAccess::LivePreferredWithFallback),
         tool!(
             "add_zone",
-            "Add a copper fill zone polygon on a specified layer and net. Tries KiCAD IPC \
-             first — with KiCAD live on this board the zone is created through the API and \
-             refilled, so it shows up at once and is undoable there. Only when no live KiCAD \
+            "Add a copper fill zone polygon on a specified layer and net. Tries KiCad IPC \
+             first — with KiCad live on this board the zone is created through the API and \
+             refilled, so it shows up at once and is undoable there. Only when no live KiCad \
              answers does it fall back to inserting the (zone …) S-expression into the file, \
              and that result carries a warning, because a file-only edit is invisible to an \
              open pcbnew and is lost on its next save. Refuses a net the board does not \
@@ -1274,9 +1274,9 @@ pub fn tools() -> Vec<ToolDef> {
         tool!(
             "import_svg_logo",
             "Import an SVG file as filled silkscreen or copper artwork (a logo, icon, or other \
-             graphic). Curved paths are flattened into polygon outlines since KiCAD's board \
-             format doesn't support Bezier curves in filled shapes. Tries KiCAD IPC first, \
-             falls back to a direct file edit if KiCAD isn't running.",
+             graphic). Curved paths are flattened into polygon outlines since KiCad's board \
+             format doesn't support Bezier curves in filled shapes. Tries KiCad IPC first, \
+             falls back to a direct file edit if KiCad isn't running.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1310,7 +1310,7 @@ enum OutlineIpcOutcome {
 /// Partition a live board's `KotPcbShape` items into Edge.Cuts segment KIIDs
 /// and the kinds of any non-segment Edge.Cuts shapes.
 ///
-/// Pure so it can be tested without a live KiCAD; the decode is guarded by the
+/// Pure so it can be tested without a live KiCad; the decode is guarded by the
 /// type URL per the #244 rule — a pad-shaped `Any` must not be mistaken for a
 /// shape.
 fn partition_edge_cuts_shapes(items: &[prost_types::Any]) -> (Vec<String>, Vec<&'static str>) {
@@ -1378,7 +1378,7 @@ async fn handle_set_board_size(
     let y2 = oy + height;
     let w = 0.05_f64;
 
-    // Try IPC first (live board in KiCAD, undo-aware); fall through to file
+    // Try IPC first (live board in KiCad, undo-aware); fall through to file
     // edit. Both paths REPLACE the existing outline: since the first release
     // this tool only ever appended, so every resize added a second rectangle
     // to Edge.Cuts and the board failed DRC with a self-intersecting outline
@@ -1408,8 +1408,8 @@ async fn handle_set_board_size(
                 "source": "ipc"
             })))
         }
-        // The refusal is Voltaris's, not KiCAD's — do not route it through the
-        // Refused arm, whose wording attributes the rejection to KiCAD (#230).
+        // The refusal is Voltaris's, not KiCad's — do not route it through the
+        // Refused arm, whose wording attributes the rejection to KiCad (#230).
         BoardWrite::Ipc(OutlineIpcOutcome::NotPlainSegments(kinds)) => {
             return Ok(outline_not_replaceable(&kinds))
         }
@@ -1938,11 +1938,11 @@ async fn handle_add_layer(
     // Fail closed on a name KiCad does not define. The layer set is closed, and
     // a board carrying an unknown name does not open at all — so writing one
     // returns success and hands back a file the user cannot load. Verified
-    // against KiCAD 10: `(53 "User.8" user)` loads, `(53 "TestLayer" user)` is
+    // against KiCad 10: `(53 "User.8" user)` loads, `(53 "TestLayer" user)` is
     // refused with "Failed to load board".
     if !voltaris_sexp::layers::is_canonical_name(&layer_name) {
         return Ok(CallToolResult::error(format!(
-            "'{layer_name}' is not a KiCAD layer name, and a board containing one \
+            "'{layer_name}' is not a KiCad layer name, and a board containing one \
              cannot be opened. Names are fixed: F.Cu, B.Cu, In1.Cu..In30.Cu, \
              User.1..User.45, and the technical layers (Edge.Cuts, F.Mask, …). \
              To give a layer your own label, add the canonical layer and set its \
@@ -2412,7 +2412,7 @@ async fn handle_add_mounting_hole(
 
     // A mounting hole is a footprint, so the same rule as every other
     // board-mutating tool applies (see `attempt_ipc_write`): the request must
-    // name the board KiCAD has open, and only an IPC transport that was never
+    // name the board KiCad has open, and only an IPC transport that was never
     // reached may fall back to editing the file.
     let requested_board = board_path.clone();
     let lib_id_ipc = spec.lib_id.clone();
@@ -2525,9 +2525,9 @@ async fn handle_add_board_text(
 
 /// Shared implementation of `add_zone` and its `add_copper_pour` alias.
 ///
-/// IPC first: with KiCAD live on the board, the zone is created through the
+/// IPC first: with KiCad live on the board, the zone is created through the
 /// API and refilled, so it appears immediately and is part of the user's undo
-/// stack. Only when no live KiCAD answers does this fall back to inserting the
+/// stack. Only when no live KiCad answers does this fall back to inserting the
 /// `(zone …)` S-expression, which is reported with an explicit warning — a
 /// file-only edit is invisible to an open pcbnew and is discarded by its next
 /// save (#192), and that is exactly what `add_zone` used to do unconditionally.
@@ -2619,7 +2619,7 @@ pub(crate) async fn add_zone_impl(
         return Ok(CallToolResult::error(format!(
             "Net '{net_name}' is not declared in {}'s net table. On this legacy-format board \
              a zone must reference a declared net id — writing it anyway would attach the \
-             copper to net 0, the unconnected pseudo-net (#192). Declare it first with \
+             copper to net 0, the unconnected pseudo-net. Declare it first with \
              add_net, or check the name with get_nets_list.",
             board_path.display()
         )));
@@ -2777,7 +2777,7 @@ mod layers_block_tests {
     #[test]
     fn layers_canonical_names_match_kicads_own_enum() {
         // Guards voltaris_sexp::layers::is_canonical_name against drift: the
-        // authority is KiCAD's BoardLayer enum, shipped in the API protos.
+        // authority is KiCad's BoardLayer enum, shipped in the API protos.
         // Variant name -> file name is `BL_` off, remaining `_` to `.`.
         use voltaris_ipc::gen::kiapi::board::types::BoardLayer;
         let sentinels = ["BL_UNKNOWN", "BL_UNDEFINED", "BL_UNSELECTED"];
@@ -4450,7 +4450,7 @@ mod mounting_hole_tests {
     }
 
     /// A rep0 endpoint that completes every round-trip with an error status —
-    /// a live KiCAD saying no. Mirrors the helper of the same name in
+    /// a live KiCad saying no. Mirrors the helper of the same name in
     /// `pcb_components`, which guards `place_component`'s fallback.
     pub(super) fn spawn_rejecting_kicad() -> crate::test_support::MockIpcServer {
         crate::test_support::MockIpcServer::spawn("rejecting-board", |_| {
@@ -4484,9 +4484,9 @@ mod mounting_hole_tests {
     }
 
     /// The bug: `add_mounting_hole` only ever edited the board file. Against a
-    /// KiCAD holding the board open, the hole never appeared in the session and
+    /// KiCad holding the board open, the hole never appeared in the session and
     /// the next save discarded it — three calls, a success JSON each time, zero
-    /// footprints on the board. A reachable KiCAD must now fail closed.
+    /// footprints on the board. A reachable KiCad must now fail closed.
     #[tokio::test]
     async fn a_reachable_kicad_that_rejects_never_touches_the_file() {
         let dir = tempfile::tempdir().unwrap();
@@ -4510,7 +4510,7 @@ mod mounting_hole_tests {
         assert_eq!(
             std::fs::read_to_string(&board).unwrap(),
             before,
-            "a reachable KiCAD that says no must never trigger the file fallback"
+            "a reachable KiCad that says no must never trigger the file fallback"
         );
     }
 
@@ -4520,7 +4520,7 @@ mod mounting_hole_tests {
         let board = blank_board(dir.path());
 
         // Empty ipc_address is classified TransportUnreachable, so no live
-        // KiCAD can be holding this board.
+        // KiCad can be holding this board.
         let ctx = ctx_with_ipc(String::new());
         let args = json!({
             "board": board.to_str().unwrap(),
@@ -4612,7 +4612,7 @@ mod mounting_hole_name_tests {
         ] {
             assert!(
                 !pretty.join(format!("{absent}.kicad_mod")).is_file(),
-                "{absent} exists in the installed library; the premise of #462 changed"
+                "{absent} exists in the installed library; the premise of this check changed"
             );
         }
     }
@@ -4806,8 +4806,8 @@ mod rounded_outline_tests {
 
 /// The board-graphics tools (`set_board_size`, `add_board_outline`,
 /// `add_board_text`, `import_svg_logo`) went to IPC on `with_ipc(..).is_ok()`,
-/// which conflated "no KiCAD there" with "KiCAD said no" and ignored the
-/// `board` argument entirely. Both halves are covered here: a reachable KiCAD
+/// which conflated "no KiCad there" with "KiCad said no" and ignored the
+/// `board` argument entirely. Both halves are covered here: a reachable KiCad
 /// that refuses must leave the file alone, and an unreachable one must still
 /// produce the file edit.
 #[cfg(test)]
@@ -4845,7 +4845,7 @@ mod board_write_gate_tests {
         assert_eq!(
             std::fs::read_to_string(&board).unwrap(),
             before,
-            "a reachable KiCAD refused, so the file must be untouched"
+            "a reachable KiCad refused, so the file must be untouched"
         );
     }
 
@@ -4854,7 +4854,7 @@ mod board_write_gate_tests {
         let dir = tempfile::tempdir().unwrap();
         let board = blank_board(dir.path());
 
-        // Empty ipc_address classifies as TransportUnreachable: no live KiCAD
+        // Empty ipc_address classifies as TransportUnreachable: no live KiCad
         // can be holding this board, so the file edit is safe.
         let ctx = ctx_with_ipc(String::new());
         let res = handle_add_board_outline(&board_args(&board), &ctx)

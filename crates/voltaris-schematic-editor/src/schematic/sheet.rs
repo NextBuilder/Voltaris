@@ -22,7 +22,7 @@ impl SheetPin {
         SheetPin {
             name: name.into(),
             pin_type: pin_type.into(),
-            // A sheet pin's `at` must carry all three values — KiCAD refuses
+            // A sheet pin's `at` must carry all three values — KiCad refuses
             // to load the whole schematic when the rotation is absent.
             at: At::with_rotation(x, y, 0.0),
             uuid: uuid::Uuid::new_v4().to_string(),
@@ -78,7 +78,7 @@ impl SheetPin {
 // ---- SheetInstance --------------------------------------------------------------
 
 /// One `(path ... (page ...))` entry under a `(project "name" ...)` block inside
-/// a sheet's `(instances ...)`. Tracks the page number KiCAD's page navigator
+/// a sheet's `(instances ...)`. Tracks the page number KiCad's page navigator
 /// shows for this sheet, per project.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SheetInstance {
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn new_pin_serializes_with_rotation() {
-        // KiCAD requires `(at x y rotation)` on a sheet pin — a two-value `at`
+        // KiCad requires `(at x y rotation)` on a sheet pin — a two-value `at`
         // makes it refuse to load the whole schematic (#303).
         let out = crate::sexp::writer::write(&SheetPin::new("VCC", "input", 90.0, 55.0).to_sexp());
         assert!(

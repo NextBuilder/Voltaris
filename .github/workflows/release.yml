@@ -29,7 +29,7 @@ env:
 
 jobs:
   real-kicad-acceptance:
-    name: Real KiCAD acceptance
+    name: Real KiCad acceptance
     permissions:
       contents: read
     uses: ./.github/workflows/e2e-kicad.yml
@@ -102,7 +102,7 @@ jobs:
           path: ${{ env.BINARY_NAME }}-${{ env.RELEASE_ARTIFACT_LABEL }}-${{ matrix.target }}.*
 
   pcm-package:
-    name: KiCAD PCM plugin package (${{ matrix.platform }})
+    name: KiCad PCM plugin package (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
@@ -238,7 +238,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate PCM package against KiCAD schema (release gate)
+      - name: Validate PCM package against KiCad schema (release gate)
         shell: bash
         run: |
           set -euo pipefail

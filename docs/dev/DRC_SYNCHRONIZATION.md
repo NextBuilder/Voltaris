@@ -1,4 +1,4 @@
-# DRC source synchronization (#408, part of #574)
+# DRC source synchronization
 
 Both DRC tools share `tools::drc`, which owns source selection and execution
 ordering. Their existing summary/filter formats remain separate. `cli::run_drc`

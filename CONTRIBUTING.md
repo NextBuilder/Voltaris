@@ -24,7 +24,7 @@ Open an [issue](https://github.com/NextBuilder/Voltaris/issues) with:
    `python packaging/build-claude-plugin.py`
 4. Open a pull request that explains what changed and how you tested it.
 
-The developer guide is in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), and the full tool list
+The developer guide is in [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md), and the full tool list
 is in [docs/TOOLS.md](docs/TOOLS.md).
 
 By contributing you agree that your work is licensed under the

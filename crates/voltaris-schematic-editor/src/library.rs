@@ -236,7 +236,7 @@ fn unit_suffix_of<'a>(name: &'a str, base: &str) -> Option<&'a str> {
 ///
 /// Returns `false` when `lib_id` cannot be resolved from the installed
 /// libraries — callers MUST surface that as an error: a symbol instance
-/// without an embedded definition is invisible to KiCAD's netlister and
+/// without an embedded definition is invisible to KiCad's netlister and
 /// yields empty pin lists downstream (#34).
 #[must_use]
 pub fn ensure_lib_symbol(
@@ -525,8 +525,8 @@ pub fn library_exists(library_name: &str, src: &dyn SymbolLibrarySource) -> bool
 }
 
 /// Symbol names similar to the one in `lib_id`, for did-you-mean hints when a
-/// lib_id doesn't resolve (#34: LLM callers habitually reach for KiCAD ≤9
-/// names like `Device:CP` that KiCAD 10 renamed). Returns full `Library:Name`
+/// lib_id doesn't resolve (#34: LLM callers habitually reach for KiCad ≤9
+/// names like `Device:CP` that KiCad 10 renamed). Returns full `Library:Name`
 /// ids, closest first, at most `limit`.
 pub fn suggest_symbols(lib_id: &str, limit: usize, src: &dyn SymbolLibrarySource) -> Vec<String> {
     let parts: Vec<&str> = lib_id.splitn(2, ':').collect();
@@ -579,13 +579,13 @@ pub fn suggest_symbols(lib_id: &str, limit: usize, src: &dyn SymbolLibrarySource
 
 /// Rank `candidates` by similarity to `wanted` (already lowercased), keeping
 /// at most `limit`, closest first. Pure so it's unit-testable without an
-/// installed KiCAD.
+/// installed KiCad.
 fn rank_candidates(wanted: &str, candidates: Vec<String>, limit: usize) -> Vec<String> {
     let mut scored: Vec<(usize, String)> = candidates
         .into_iter()
         .filter_map(|name| {
             let lower = name.to_lowercase();
-            // Stylized matches cover the classic KiCAD ≤9 shorthands the
+            // Stylized matches cover the classic KiCad ≤9 shorthands the
             // renames expanded (CP → C_Polarized, R_POT_TRIM →
             // R_Potentiometer_Trim); substring containment covers truncations;
             // otherwise edit distance, capped so unrelated names don't surface.

@@ -101,7 +101,7 @@ Generate the Gerbers, BOM and placement files for JLCPCB.
 | [Setup & configuration](docs/SETUP.md) | Manual install, config files, other AI clients |
 | [All tools](docs/TOOLS.md) | Every tool, grouped by toolset |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Fixes for common problems |
-| [Development](docs/DEVELOPMENT.md) | Build from source and contribute |
+| [Developer docs](docs/dev/README.md) | Build from source, architecture, contributing |
 | [Privacy](PRIVACY.md) | No accounts, no telemetry — what is sent and when |
 
 ## ⚠️ Good to know

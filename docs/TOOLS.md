@@ -8,7 +8,7 @@ Canonical reference for every MCP tool exposed by Voltaris. Generated from the R
 - Per-tool names + descriptions: `crates/voltaris-core/src/tools/<toolset>.rs` (each `tool!(…)` in the `tools()` vec)
 
 Compatibility notes for removed or narrowed arguments are recorded in
-[`docs/API_MIGRATIONS.md`](docs/API_MIGRATIONS.md).
+[`docs/dev/API_MIGRATIONS.md`](dev/API_MIGRATIONS.md).
 
 ## Overview
 
@@ -58,7 +58,7 @@ and Windows servers do not.
 
 ### `project` · 7 tools
 **Purpose:** Create, open, save, rename, snapshot KiCad projects, and launch the live schematic viewer.
-**Source:** [`crates/voltaris-core/src/tools/project.rs`](crates/voltaris-core/src/tools/project.rs)
+**Source:** [`crates/voltaris-core/src/tools/project.rs`](../crates/voltaris-core/src/tools/project.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -72,7 +72,7 @@ and Windows servers do not.
 
 ### `editor_navigation` · 5 tools
 **Purpose:** Observe and semantically navigate exact KiCad editor, document, sheet, selection, and cross-probe context.
-**Source:** [`crates/voltaris-core/src/tools/editor_navigation.rs`](crates/voltaris-core/src/tools/editor_navigation.rs)
+**Source:** [`crates/voltaris-core/src/tools/editor_navigation.rs`](../crates/voltaris-core/src/tools/editor_navigation.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -88,7 +88,7 @@ and Windows servers do not.
 
 ### `sch_components` · 18 tools
 **Purpose:** Add, edit, move, rotate, and delete schematic symbols.
-**Source:** [`crates/voltaris-core/src/tools/sch_components.rs`](crates/voltaris-core/src/tools/sch_components.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_components.rs`](../crates/voltaris-core/src/tools/sch_components.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -113,7 +113,7 @@ and Windows servers do not.
 
 ### `sch_wiring` · 20 tools
 **Purpose:** Wires, net labels, power symbols, junctions, no-connects, pin-to-pin connections.
-**Source:** [`crates/voltaris-core/src/tools/sch_wiring.rs`](crates/voltaris-core/src/tools/sch_wiring.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_wiring.rs`](../crates/voltaris-core/src/tools/sch_wiring.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -140,7 +140,7 @@ and Windows servers do not.
 
 ### `sch_bus` · 4 tools
 **Purpose:** Buses, bus entries, and fanning a group of pins out onto a bus.
-**Source:** [`crates/voltaris-core/src/tools/sch_bus.rs`](crates/voltaris-core/src/tools/sch_bus.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_bus.rs`](../crates/voltaris-core/src/tools/sch_bus.rs)
 
 | Tool | Description |
 |---|---|
@@ -151,7 +151,7 @@ and Windows servers do not.
 
 ### `sch_analysis` · 15 tools
 **Purpose:** Net connectivity, pin queries, trace paths, overlap/orphan detection.
-**Source:** [`crates/voltaris-core/src/tools/sch_analysis.rs`](crates/voltaris-core/src/tools/sch_analysis.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_analysis.rs`](../crates/voltaris-core/src/tools/sch_analysis.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -173,7 +173,7 @@ and Windows servers do not.
 
 ### `sch_batch` · 12 tools
 **Purpose:** Bulk add, edit, delete, and move schematic elements in one call.
-**Source:** [`crates/voltaris-core/src/tools/sch_batch.rs`](crates/voltaris-core/src/tools/sch_batch.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_batch.rs`](../crates/voltaris-core/src/tools/sch_batch.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -192,7 +192,7 @@ and Windows servers do not.
 
 ### `sch_export` · 10 tools
 **Purpose:** Export schematic to SVG/PDF/PNG/netlist, run ERC, and synchronize a live PCB.
-**Source:** [`crates/voltaris-core/src/tools/sch_export.rs`](crates/voltaris-core/src/tools/sch_export.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_export.rs`](../crates/voltaris-core/src/tools/sch_export.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -209,7 +209,7 @@ and Windows servers do not.
 
 ### `sch_hierarchy` · 14 tools
 **Purpose:** Sheet files and hierarchical sheets: create a schematic file and set its page size, add/edit/move/delete/duplicate a sheet, hierarchy and page-numbering queries, import/add/edit/delete sheet pins, pin/label sync validation.
-**Source:** [`crates/voltaris-core/src/tools/sch_hierarchy.rs`](crates/voltaris-core/src/tools/sch_hierarchy.rs)
+**Source:** [`crates/voltaris-core/src/tools/sch_hierarchy.rs`](../crates/voltaris-core/src/tools/sch_hierarchy.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -234,7 +234,7 @@ and Windows servers do not.
 
 ### `pcb_board` · 13 tools
 **Purpose:** Board outline, layers, physical stackup, zones, mounting holes, board text, SVG logo import.
-**Source:** [`crates/voltaris-core/src/tools/pcb_board.rs`](crates/voltaris-core/src/tools/pcb_board.rs)
+**Source:** [`crates/voltaris-core/src/tools/pcb_board.rs`](../crates/voltaris-core/src/tools/pcb_board.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -254,7 +254,7 @@ and Windows servers do not.
 
 ### `pcb_components` · 20 tools
 **Purpose:** Place, refresh, move, rotate, flip, align, duplicate and repair PCB footprints; inspect pads; inspect and edit a placed footprint's graphics and 3D models.
-**Source:** [`crates/voltaris-core/src/tools/pcb_components.rs`](crates/voltaris-core/src/tools/pcb_components.rs)
+**Source:** [`crates/voltaris-core/src/tools/pcb_components.rs`](../crates/voltaris-core/src/tools/pcb_components.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -265,7 +265,7 @@ and Windows servers do not.
 | `flip_component` | Set a placed footprint to F.Cu or B.Cu. On a board open in KiCad 10.0.6+, uses KiCad's native FlipItems IPC command, including the 3D-model transform. Falls back to a revision-aware file edit only when no live KiCad holds the board; an older reachable KiCad returns `unsupported_capability`. The file path refuses unsupported 3D-model geometry. |
 | `delete_component` | Remove a footprint from the board via KiCad IPC. |
 | `edit_component` | Update the value or other properties of a placed footprint via KiCad IPC. |
-| `repair_corrupted_footprints` | Dry-run and atomically repair the exact legacy corruption from issue #244: anonymous layerless pads that replaced footprint drawing shapes. Restores the affected shapes from the registered library while preserving live placement, identity, pad nets and non-shape children; apply requires the dry-run revision and is one KiCad undo commit. |
+| `repair_corrupted_footprints` | Dry-run and atomically repair a known legacy corruption: anonymous layerless pads that replaced footprint drawing shapes. Restores the affected shapes from the registered library while preserving live placement, identity, pad nets and non-shape children; apply requires the dry-run revision and is one KiCad undo commit. |
 | `find_component` | Find a footprint by reference designator and return its position. |
 | `update_footprints_from_library` | Plan or atomically apply KiCad's Update Footprints from Library operation to placed footprints on the live board. Defaults to a non-mutating dry run; apply requires its exact plan revision. Preserves placed-instance state and pad nets while refreshing supported library-owned content. |
 | `list_board_footprint_graphics` | List the graphic items inside a footprint placed on the board — silkscreen, fabrication, and courtyard artwork — with the UUID needed to edit one. Reports `editable`, plus `outlines` and `holes` for polygons. Requires KiCad running with the board open. |
@@ -281,7 +281,7 @@ and Windows servers do not.
 
 ### `pcb_routing` · 15 tools
 **Purpose:** Traces, vias, copper pours, net classes, differential pairs, and strict Specctra SES import.
-**Source:** [`crates/voltaris-core/src/tools/pcb_routing.rs`](crates/voltaris-core/src/tools/pcb_routing.rs)
+**Source:** [`crates/voltaris-core/src/tools/pcb_routing.rs`](../crates/voltaris-core/src/tools/pcb_routing.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -303,7 +303,7 @@ and Windows servers do not.
 
 ### `placement` · 5 tools
 **Purpose:** Placement quality and automation — score, plan decoupling rows, plan BGA fanouts; every plan reports its own before/after score.
-**Source:** [`crates/voltaris-core/src/tools/placement.rs`](crates/voltaris-core/src/tools/placement.rs)
+**Source:** [`crates/voltaris-core/src/tools/placement.rs`](../crates/voltaris-core/src/tools/placement.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -317,7 +317,7 @@ and Windows servers do not.
 
 ### `pcb_export` · 14 tools
 **Purpose:** Gerber, PDF, SVG, 3D model, BOM, revision-bound Specctra DSN, pick-and-place, DRC, DXF/GenCAD/IPC-2581/ODB++.
-**Source:** [`crates/voltaris-core/src/tools/pcb_export.rs`](crates/voltaris-core/src/tools/pcb_export.rs)
+**Source:** [`crates/voltaris-core/src/tools/pcb_export.rs`](../crates/voltaris-core/src/tools/pcb_export.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -342,7 +342,7 @@ and Windows servers do not.
 
 ### `library` · 17 tools
 **Purpose:** Search, register, and author symbol and footprint libraries — create symbols and footprints, edit pads, graphics, metadata and 3D models.
-**Source:** [`crates/voltaris-core/src/tools/library.rs`](crates/voltaris-core/src/tools/library.rs)
+**Source:** [`crates/voltaris-core/src/tools/library.rs`](../crates/voltaris-core/src/tools/library.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -370,7 +370,7 @@ and Windows servers do not.
 
 ### `integration` · 9 tools
 **Purpose:** JLCPCB parts database, local Freerouting MCP routing, datasheet URLs.
-**Source:** [`crates/voltaris-core/src/tools/integration.rs`](crates/voltaris-core/src/tools/integration.rs)
+**Source:** [`crates/voltaris-core/src/tools/integration.rs`](../crates/voltaris-core/src/tools/integration.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -395,7 +395,7 @@ the router or relying on the KiCad ActionPlugin workflow.
 
 ### `verification` · 10 tools
 **Purpose:** DRC, design rules, layer constraints, clearance checks, KiCad UI control. ERC lives in `sch_export` (`run_erc`), not here.
-**Source:** [`crates/voltaris-core/src/tools/verification.rs`](crates/voltaris-core/src/tools/verification.rs)
+**Source:** [`crates/voltaris-core/src/tools/verification.rs`](../crates/voltaris-core/src/tools/verification.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -416,7 +416,7 @@ the router or relying on the KiCad ActionPlugin workflow.
 
 ### `config` · 7 tools
 **Purpose:** User preferences, project rules, design rules, fab constraints. **Call `load_user_config` at session start.**
-**Source:** [`crates/voltaris-core/src/tools/config.rs`](crates/voltaris-core/src/tools/config.rs)
+**Source:** [`crates/voltaris-core/src/tools/config.rs`](../crates/voltaris-core/src/tools/config.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -434,7 +434,7 @@ the router or relying on the KiCad ActionPlugin workflow.
 
 ### `design_review` · 6 tools
 **Purpose:** AI-powered design audits: decoupling, connections, power rails, DFM, BOM health.
-**Source:** [`crates/voltaris-core/src/tools/design_review.rs`](crates/voltaris-core/src/tools/design_review.rs)
+**Source:** [`crates/voltaris-core/src/tools/design_review.rs`](../crates/voltaris-core/src/tools/design_review.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -451,7 +451,7 @@ the router or relying on the KiCad ActionPlugin workflow.
 
 ### `templates` · 4 tools
 **Purpose:** Reference circuit library — USB-C, LDO, buck converter, STM32, I2C, LED — verified component values.
-**Source:** [`crates/voltaris-core/src/tools/templates.rs`](crates/voltaris-core/src/tools/templates.rs)
+**Source:** [`crates/voltaris-core/src/tools/templates.rs`](../crates/voltaris-core/src/tools/templates.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -478,7 +478,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `engineering` · 8 tools
 **Purpose:** Closed-form PCB and circuit calculators; every response names its method, validity range and warnings.
-**Source:** [`crates/voltaris-core/src/tools/engineering.rs`](crates/voltaris-core/src/tools/engineering.rs)
+**Source:** [`crates/voltaris-core/src/tools/engineering.rs`](../crates/voltaris-core/src/tools/engineering.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -497,7 +497,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `simulation` · 2 tools
 **Purpose:** Check circuits numerically before building them.
-**Source:** [`crates/voltaris-core/src/tools/simulation.rs`](crates/voltaris-core/src/tools/simulation/mod.rs)
+**Source:** [`crates/voltaris-core/src/tools/simulation.rs`](../crates/voltaris-core/src/tools/simulation.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -506,7 +506,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `signal_integrity` · 1 tool
 **Purpose:** Measure what was routed.
-**Source:** [`crates/voltaris-core/src/tools/signal_integrity.rs`](crates/voltaris-core/src/tools/signal_integrity.rs)
+**Source:** [`crates/voltaris-core/src/tools/signal_integrity.rs`](../crates/voltaris-core/src/tools/signal_integrity.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -518,7 +518,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `lcsc_import` · 1 tool
 **Purpose:** Any LCSC/JLCPCB part as KiCad symbol, footprint and 3D model.
-**Source:** [`crates/voltaris-core/src/tools/lcsc_import.rs`](crates/voltaris-core/src/tools/lcsc_import.rs)
+**Source:** [`crates/voltaris-core/src/tools/lcsc_import.rs`](../crates/voltaris-core/src/tools/lcsc_import.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -530,7 +530,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `firmware` · 1 tool
 **Purpose:** Firmware generated from the netlist, plus a pin-assignment audit for ESP32, RP2040/RP2350, STM32 and nRF52.
-**Source:** [`crates/voltaris-core/src/tools/firmware.rs`](crates/voltaris-core/src/tools/firmware.rs)
+**Source:** [`crates/voltaris-core/src/tools/firmware.rs`](../crates/voltaris-core/src/tools/firmware.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -538,7 +538,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `enclosure` · 1 tool
 **Purpose:** A printable enclosure that fits the board.
-**Source:** [`crates/voltaris-core/src/tools/enclosure.rs`](crates/voltaris-core/src/tools/enclosure.rs)
+**Source:** [`crates/voltaris-core/src/tools/enclosure.rs`](../crates/voltaris-core/src/tools/enclosure.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -546,7 +546,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `visual_review` · 1 tool
 **Purpose:** Let the model inspect the board visually.
-**Source:** [`crates/voltaris-core/src/tools/visual_review.rs`](crates/voltaris-core/src/tools/visual_review.rs)
+**Source:** [`crates/voltaris-core/src/tools/visual_review.rs`](../crates/voltaris-core/src/tools/visual_review.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -558,7 +558,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `design_checks` · 4 tools
 **Purpose:** Plain-English design rules stored as automatic checks, plus a built-in professional rule pack.
-**Source:** [`crates/voltaris-core/src/tools/design_checks.rs`](crates/voltaris-core/src/tools/design_checks.rs)
+**Source:** [`crates/voltaris-core/src/tools/design_checks.rs`](../crates/voltaris-core/src/tools/design_checks.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -569,7 +569,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `design_history` · 4 tools
 **Purpose:** Snapshots, engineering diffs and restore.
-**Source:** [`crates/voltaris-core/src/tools/design_history.rs`](crates/voltaris-core/src/tools/design_history.rs)
+**Source:** [`crates/voltaris-core/src/tools/design_history.rs`](../crates/voltaris-core/src/tools/design_history.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -580,7 +580,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `datasheet` · 1 tool
 **Purpose:** Read PDF datasheets with page citations.
-**Source:** [`crates/voltaris-core/src/tools/datasheet.rs`](crates/voltaris-core/src/tools/datasheet.rs)
+**Source:** [`crates/voltaris-core/src/tools/datasheet.rs`](../crates/voltaris-core/src/tools/datasheet.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -588,7 +588,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `block_diagram` · 1 tool
 **Purpose:** The real architecture, drawn from the netlist.
-**Source:** [`crates/voltaris-core/src/tools/block_diagram.rs`](crates/voltaris-core/src/tools/block_diagram.rs)
+**Source:** [`crates/voltaris-core/src/tools/block_diagram.rs`](../crates/voltaris-core/src/tools/block_diagram.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -600,7 +600,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 
 ### `manufacturing` · 3 tools
 **Purpose:** Design-to-fab pipeline: export Gerber+BOM+positions package, validate for fab house, estimate cost.
-**Source:** [`crates/voltaris-core/src/tools/manufacturing.rs`](crates/voltaris-core/src/tools/manufacturing.rs)
+**Source:** [`crates/voltaris-core/src/tools/manufacturing.rs`](../crates/voltaris-core/src/tools/manufacturing.rs)
 
 | Tool | Description |
 |------|-------------|
@@ -626,7 +626,7 @@ These carry footprints and a `nets` map, so `apply_template` also returns a wiri
 3. **Cross-toolset cleanups** (historical notes):
    - `search_footprints` and `get_symbol_info` were originally in `verification`; moved to `library` where they belong semantically. Users who were loading `verification` for these will be auto-redirected by the smart "tool not loaded" error.
    - `get_drc_violations` (`pcb_export`) and `run_drc` (`verification`) run the same kicad-cli check. Their tool descriptions now cross-reference each other and steer the LLM toward `run_drc` for interactive use (cleaner summary with error/warning counts) and `get_drc_violations` for bundling into a build package.
-     Both go through `tools::drc` for explicit `sync_live_board` / `refill_zones` ordering and source evidence, then `cli::run_drc` for parsing and item ownership. See [DRC synchronization](docs/DRC_SYNCHRONIZATION.md). Default calls remain saved-file checks; standalone refill waits for completion but does not save.
+     Both go through `tools::drc` for explicit `sync_live_board` / `refill_zones` ordering and source evidence, then `cli::run_drc` for parsing and item ownership. See [DRC synchronization](dev/DRC_SYNCHRONIZATION.md). Default calls remain saved-file checks; standalone refill waits for completion but does not save.
 
 ### Implementation notes
 

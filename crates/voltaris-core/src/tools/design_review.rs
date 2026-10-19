@@ -3,7 +3,7 @@
 //! Analyzes schematic and PCB files for common design issues. Returns structured
 //! findings that Claude can explain, prioritize, and suggest fixes for.
 //!
-//! These tools work on the S-expression files directly — no KiCAD running required.
+//! These tools work on the S-expression files directly — no KiCad running required.
 
 use super::cli;
 use crate::mcp::protocol::CallToolResult;
@@ -115,7 +115,7 @@ pub fn tools() -> Vec<ToolDef> {
             "run_design_review",
             "Run all available audit checks and produce a consolidated design review report. \
              Audits every reachable schematic sheet, and when a board is supplied also runs \
-             KiCAD's DRC, folding its errors, unconnected items and schematic-parity findings \
+             KiCad's DRC, folding its errors, unconnected items and schematic-parity findings \
              into the verdict. Reports status, coverage, and diagnostics. Returns an INCOMPLETE \
              verdict instead of approval when coverage is partial, when an audit failed, or \
              when DRC could not run. This is the tool to call when the user asks 'is my board \
@@ -2932,7 +2932,7 @@ mod net_resolution_tests {
         assert_eq!(review["errors"], 0, "{review}");
     }
 
-    /// A real three-unit part from the KiCAD demos: each ECC83 placement walks
+    /// A real three-unit part from the KiCad demos: each ECC83 placement walks
     /// its own pins and no others. The two triodes and the heater are placed
     /// apart, so a unit-agnostic walk would put pins 4/5/9 on a triode's
     /// coordinates and report nets from there.

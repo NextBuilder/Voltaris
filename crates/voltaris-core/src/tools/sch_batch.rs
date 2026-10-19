@@ -90,7 +90,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "batch_place_components",
-            "Place multiple symbols from KiCAD libraries in one write with committed-file \
+            "Place multiple symbols from KiCad libraries in one write with committed-file \
              readback. Preserves every saved hierarchy instance and preflights stale metadata \
              before any placement. Copies each library Value and Footprint unless that entry \
              explicitly overrides it. Pins that land mid-segment on an existing wire gain the \

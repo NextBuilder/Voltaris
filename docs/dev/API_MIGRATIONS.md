@@ -34,7 +34,7 @@ check comes before the file is read as well as before it is written, so a call
 that would change nothing is refused too: while KiCad holds the board, the file
 can be older than what KiCad holds. Close the board in KiCad, or make the
 change there, and retry. A KiCad that holds a different board, or none, does
-not affect these tools. Response shapes are unchanged (#791).
+not affect these tools. Response shapes are unchanged.
 
 ## Unreleased: `get_board_extents` names what KiCad will not list, and measures text boxes (minor release)
 
@@ -66,7 +66,7 @@ extent can therefore grow where a board has text boxes.
 
 A footprint point or a via layer whose `size` is present but unreadable is now
 skipped and counted in `skipped_item_count`. The point used to take the 1 mm
-default, and the via used to keep its base diameter (#688).
+default, and the via used to keep its base diameter.
 
 ## Unreleased: `update_pcb_from_schematic` places footprints with their library data (patch release)
 
@@ -101,7 +101,7 @@ where it used to be read as fully opaque. An absent opacity still defaults to
 fully opaque.
 
 Library properties (Datasheet, Description and custom fields) and each field's
-layer and visibility are not part of this change (#789).
+layer and visibility are not part of this change.
 
 ## Unreleased: grid-snapped coordinates are written as KiCad writes them (patch release)
 
@@ -110,7 +110,7 @@ writes. `bulk_move_schematic_components` used to write a symbol at
 132 × 1.27 as `(at … 167.64000000000001 …)` and report the same value as
 `placements[].new_y`. It now writes and reports `167.64`, and `add_wire`'s
 `added_wire` echo is rounded the same way. The values differ by less than
-1e-12 mm; nothing else in the request or response changes (#744).
+1e-12 mm; nothing else in the request or response changes.
 
 ## Unreleased: `open_schematic_viewer` reports a viewer that exits during startup (patch release)
 
@@ -126,14 +126,14 @@ longer, and on the stdio transport no other request is answered during it.
 The viewer no longer inherits the server's stdin and stdout, which carry the
 stdio transport's JSON-RPC stream. Its stderr is read by the server and written
 to the server log as `schematic_viewer` warnings, so that output now stops when
-the server exits (#702).
+the server exits.
 
 ## Unreleased: `get_board_extents` reads the live board and measures every item (minor release)
 
 `get_board_extents` used to ask KiCad for the box of an empty item list.
 KiCad 10.0.5 answers that with no boxes on every board, so the IPC branch never
 answered. The tool then discarded the failure and answered from the saved file,
-using only top-level `gr_line` endpoints and footprint anchor points (#688).
+using only top-level `gr_line` endpoints and footprint anchor points.
 
 It now lists each class of board item and has KiCad measure every one in
 `BBM_ITEM_ONLY` mode, which leaves footprint text out. It reads through the same
@@ -213,7 +213,7 @@ directory, is searched once. When `jar_path` is passed and is not a file, it
 reports `checked_path` and says so instead of giving download advice.
 `route_specctra_dsn` now refuses such a `jar_path` with `file_not_found` naming
 the path, where it used to answer "install Freerouting or pass jar_path"
-(#787).
+.
 
 ## Unreleased: `suggest_jlcpcb_alternatives` matches KiCad footprints and ranks by library type (minor release)
 
@@ -239,12 +239,12 @@ Results used to be ordered by price alone. Parts with fewer than `min_stock_coun
 units in stock (new, default 100) are now excluded. The rest are ranked Basic,
 then Preferred, then Extended when `prefer_basic` (new, default true) is on,
 then known price before unknown, price ascending, stock descending and LCSC
-number. A stored price of 0 is treated as unknown (#582): it sorts after every
+number. A stored price of 0 is treated as unknown: it sorts after every
 known price, and `max_price_usd` excludes it. The response adds
 `package_match` (the rule and the LCSC names searched), `value_match`,
 `ranking` (the criteria and the effective settings), `count`, `matched_count`
 and `exclusions`, which counts the parts the stock floor and the price limit
-removed (#785).
+removed.
 
 ## Unreleased: `voltaris init` refreshes stale Claude hook matchers (patch release)
 
@@ -259,7 +259,7 @@ Extra copies of Voltaris's handler, such as a hand edit can leave, are removed
 so that each hook runs once.
 The `Hooks: N entries patched` count now includes refreshed entries and a
 removed legacy handler, so it is non-zero whenever the hook settings changed
-(#739).
+.
 
 ## Unreleased: `create_schematic` and `set_schematic_page` move to `sch_hierarchy` (minor release)
 
@@ -274,9 +274,9 @@ A client that loads only `sch_components` and then calls either tool now gets
 
 `sch_components` drops to 18 tools and `sch_hierarchy` rises to 14. The two
 freed slots leave room under the 20-tool toolset cap for a symbol-mirroring
-tool (#450).
+tool.
 
-## Unreleased: autonomous placement apply retired and decoupling evidence narrowed (#754)
+## Unreleased: autonomous placement apply retired and decoupling evidence narrowed
 
 `auto_place_from_schematic` is now a deprecated diagnostic planner only. Its
 default dry-run still returns the deterministic proposed layout and placement
@@ -300,7 +300,7 @@ non-improving plans, including score ties. Use explicit moves when a
 score-neutral change is justified by design intent rather than weakening this
 safety gate.
 
-## Unreleased: bounded schematic-transfer create groups (#658, terminal increment)
+## Unreleased: bounded schematic-transfer create groups (terminal increment)
 
 `update_pcb_from_schematic` now sends creates in ordered groups of at most 32
 footprints. All groups and updates remain inside one recovery-enabled KiCad
@@ -322,7 +322,7 @@ a final Undo left the disposable board unchanged. The ignored regression is
 sole open board identified by `VOLTARIS_LIVE_CHUNK_BOARD`. Its native action names
 are version-specific test probes, not a new production API.
 
-## Unreleased: unknown IPC outcomes (#658, first increment)
+## Unreleased: unknown IPC outcomes (first increment)
 
 A delivered IPC request whose receive fails, whose envelope cannot be decoded,
 or whose status is missing is no longer reported as a KiCad rejection. A failed
@@ -375,7 +375,7 @@ Inspect these findings before loading/resaving in KiCad: KiCad may relocate
 an inconsistent pin onto another pin and join their nets without an ERC
 warning. Correct the intended side/position explicitly with `edit_sheet_pin`
 and verify the netlist. The validator does not modify either schematic, and
-the existing add/edit behavior when `side` is omitted is unchanged (#687).
+the existing add/edit behavior when `side` is omitted is unchanged.
 ## Unreleased: reading the board's physical stackup (minor release)
 
 The `pcb_board` toolset adds `get_board_stackup`. It reads the physical
@@ -389,12 +389,12 @@ optional `expected` stackup is given, every value that differs from it. The
 tool is read-only and requires the requested board to be open in KiCad; it
 never reads the board file in its place. KiCad 10 declares
 `UpdateBoardStackup` but does not implement it, so changes are made in Board
-Setup (#716). This is an additive tool and response surface planned for the
+Setup. This is an additive tool and response surface planned for the
 next minor release.
 
 ## Unreleased: installed guidance drift is reported (minor release)
 
-`get_installation_info` adds a `guidance` object (#728). From the standalone
+`get_installation_info` adds a `guidance` object. From the standalone
 binary it holds `probe_status: "ok"`, `bundle_version`, and one entry each for
 `claude` and `codex`: a `state` (`not_installed`, `current`, `out_of_sync`),
 the install `marker` (`path`, `version`, `legacy`) or `null`, and per-item
@@ -467,7 +467,7 @@ additive tool and response surface planned for the next minor release.
 `route_pad_to_pad` wrote its tracks to the board open in KiCad but read the two
 pad positions from the saved `.kicad_pcb`. After any unsaved move, including
 one made by `move_component`, the track ended where the pad had been and the
-call still reported `routed: true` (#700).
+call still reported `routed: true`.
 
 Both pads are now read from the board open in KiCad, the same lookup
 `get_component_pads` makes first. The response adds `source: "ipc"`, and
@@ -552,7 +552,7 @@ additive schema and response change is planned for the next minor release.
 `batch_connect_to_net` could only put a local label on each pin endpoint.
 `connect_to_net` draws a wire stub, lets the caller choose its direction and
 can place a global label, so a sheet built with the batch tool looked
-different from one built pin by pin (#701).
+different from one built pin by pin.
 
 The batch tool now takes `stub_length`, `direction` and `label_type`. Each one
 applies to every pin in the call, and an explicit value places exactly what
@@ -581,7 +581,7 @@ On Linux, once an update replaced the file at the serving binary's path,
 `/proc/self/exe` gained a ` (deleted)` suffix. Both tools used that path
 literally: `reload_server` failed with "could not open the Voltaris binary at
 … (deleted)", and `get_installation_info` reported
-`binary_on_disk.probe_status: "launch_failed"` (#699).
+`binary_on_disk.probe_status: "launch_failed"`.
 
 When that suffixed path does not exist, both now use it without the suffix,
 which is the installed path holding the update. `reload_server` probes and
@@ -595,7 +595,7 @@ Linux binary that was not replaced, are unaffected.
 `add_schematic_component` and `batch_place_components` wrote a bare `?` when
 the caller passed no `reference`, dropping the library symbol's prefix.
 `annotate_schematic` then numbered the symbol `1`, and a `#`-prefixed symbol
-such as `power:PWR_FLAG` lost the `#` that keeps it off the board (#669).
+such as `power:PWR_FLAG` lost the `#` that keeps it off the board.
 
 The default is now the library `Reference` property plus `?` (`R?`, `#FLG?`),
 as eeschema places a symbol, so annotation yields `R1` and `#FLG01`. It
@@ -613,7 +613,7 @@ internal units through `pcbIUScale` (1e6 IU/mm) where the text report used
 `schIUScale` (1e4 IU/mm). `run_erc` reads that JSON, so a pin
 `get_schematic_pin_locations` puts at `(100.33, 104.14)` came back from
 `run_erc` at `(1.0033, 1.0414)` — a location that cannot be found on the sheet
-(#541). Upstream fixed it in `6d8e1fe` for KiCad 10.0.7
+. Upstream fixed it in `6d8e1fe` for KiCad 10.0.7
 ([kicad#25582](https://gitlab.com/kicad/code/kicad/-/issues/25582)).
 
 `run_erc` now checks the `kicad_version` the report states — the binary that
@@ -670,7 +670,7 @@ own violation *text* the same way ("Horizontal Wire, length 0.1270 mm" for a
 `violations` array was skipped. Zero violations is what a clean schematic looks
 like, so a report Voltaris did not recognise — the configured `kicad_cli` not
 being KiCad's, a wrapper script, a truncated file, a future schema — was served
-as `total: 0, errors: 0, warnings: 0` (#581). `run_drc` already refused the
+as `total: 0, errors: 0, warnings: 0`. `run_drc` already refused the
 equivalent DRC case.
 
 `run_erc` now returns an error that says what was wrong: no `sheets` array
@@ -685,7 +685,7 @@ response field changed.
 
 `score_placement`, `auto_place_from_schematic` and
 `refine_placement_force_directed` treated every Edge.Cuts outline as its
-bounding box (#594). On a concave, notched, rounded, rotated or
+bounding box. On a concave, notched, rounded, rotated or
 multi-boundary board, a part could sit inside the bounding box but off the
 board and still score as inside it, or be placed there.
 
@@ -725,7 +725,7 @@ KiCad DRC.
 `list_design_rules` treated a preferences file that failed to parse, or failed
 to read for any reason, as if it did not exist. The load answered with
 Voltaris's defaults and said "User preferences loaded."; the next save then
-wrote those defaults, plus the one key being set, over the user's file (#580).
+wrote those defaults, plus the one key being set, over the user's file.
 
 A configuration file now has four states that are never merged:
 
@@ -761,7 +761,7 @@ silently reset must now repair or remove it.
 ## Unreleased: `get_schematic_component` and `list_schematic_components` return every property (minor release)
 
 Both tools answered from a fixed list of keys, so neither reported a custom
-property such as `LCSC` or `MPN` (#679).
+property such as `LCSC` or `MPN`.
 
 Each now carries one `properties` object: every property on the placed symbol
 by name, standard and custom alike. `get_schematic_component` reads it from the
@@ -775,7 +775,7 @@ No tool, argument, or existing response field was renamed or removed.
 
 `add_schematic_component` and `batch_place_components` snap the requested
 position to KiCad's 1.27 mm schematic grid; `add_power_symbol` wrote it as
-given (#662). Wires and labels are snapped too, so a power symbol left off the
+given. Wires and labels are snapped too, so a power symbol left off the
 grid could not be reached by them: ERC reported the endpoint off grid and the
 power pin unconnected.
 
@@ -1043,7 +1043,7 @@ The tool now returns a structured `unsupported_capability` error and leaves the
 board byte-identical. There is no supported replacement call in the bundled
 stable KiCad IPC protocol. If v0.12.0 already changed a board, close it, make a
 backup, remove only the injected `(active_layer "...")` line, and reopen it.
-See [Troubleshooting](TROUBLESHOOTING.md#a-board-no-longer-opens-after-set_active_layer).
+See [Troubleshooting](../TROUBLESHOOTING.md#a-board-no-longer-opens-after-set_active_layer).
 
 ## Unreleased: a stale-target refusal is bounded, not one line per symbol (patch release)
 
@@ -1052,7 +1052,7 @@ that check refused, `error.reason` carried one `"{reference}: observed [...],
 expected [...]"` line per stale symbol. A sheet goes stale as a whole — copy a
 `.kicad_sch` to a new filename stem and every symbol records the old project
 name — so the answer repeated one fact once per symbol: 18 535 B of `reason` and
-a 37 301 B response for a 46-symbol sheet, growing linearly with the sheet (#592).
+a 37 301 B response for a 46-symbol sheet, growing linearly with the sheet.
 
 `reason` now names the expected instance identity once, states how many of the
 sheet's placed symbols are stale, and groups the symbols by their diagnosis,
@@ -1083,7 +1083,7 @@ A no-connect marker is a sheet item at a coordinate, so
 protected moved away. The junction pass then saw
 an unprotected pin, and where that pin had landed mid-span on a wire it wrote a
 dot — putting the pin the caller had explicitly declared unconnected onto that
-net (#626). ERC reported the stranded marker; nothing reported the new
+net. ERC reported the stranded marker; nothing reported the new
 connection.
 
 All three now treat the marker as intent attached to a pin. The marker is
@@ -1098,9 +1098,8 @@ changes meaning, and `junctions_added_count` on a move or bulk shift can now be
 `0` where it was `1`, which is the fix.
 
 `move_region` and `replace_component` now inherit this contract together with
-their whole-mutation junction reconciliation as documented above (#623,
-#625). `batch_place_components` reconciles its newly placed pins as documented
-above (#622).
+their whole-mutation junction reconciliation as documented above. `batch_place_components` reconciles its newly placed pins as documented
+above.
 
 A placement change that cannot follow a marker one-to-one now **refuses before
 writing** instead of orphaning it:
@@ -1159,7 +1158,7 @@ A turn relocates a symbol's pin endpoints exactly as a move does, but only
 left and arrived at. A pin turned off a wire left its dot behind with nothing
 to justify it, and — the half that changes the design rather than the picture —
 a pin turned *onto* a wire mid-span got no dot, so KiCad left it off the net it
-visibly touches (#615).
+visibly touches.
 
 `rotate_schematic_component` now makes the same reconciliation call, with the
 same rules: a dot is pruned when nothing is left to justify it, and one is
@@ -1209,7 +1208,7 @@ exceptions. This changes refusals, not success-response shapes or tool counts.
 `annotate_schematic` returned the string "Annotation complete." whatever it
 had done, including nothing: two symbols that already shared a designator were
 never candidates, the file was left byte-identical, and KiCad's netlister then
-merged them into one component (#454). It also rewrote only the
+merged them into one component. It also rewrote only the
 `(instances …)` reference of a `?` symbol and left its `(property "Reference"
 …)` behind, so KiCad and Voltaris's own readers disagreed about the designator.
 
@@ -1277,7 +1276,7 @@ A field's `(at …)` is an absolute sheet coordinate, not an offset from the
 body, so Reference and Value stayed where the old orientation had put them:
 a `Device:LED` placed horizontally and then turned to 90° kept its designator
 2.54mm above the origin, which is the middle of the vertical body and the wire
-into its anode (#612).
+into its anode.
 
 The turn now rotates each field's position about the symbol origin, so a
 symbol placed unrotated and turned afterwards ends up field-for-field
@@ -1304,7 +1303,7 @@ rotation.
 `trace_from_point`'s answer to "what is at this point" listed wires and labels
 only. A component pin and a junction dot at the same coordinate were omitted,
 and no `pins_here` or `junctions_here` key was present to be empty, so a caller
-could not tell the two had been skipped (#539).
+could not tell the two had been skipped.
 
 The response gains two arrays, always present:
 
@@ -1367,7 +1366,7 @@ wrong-typed options, integer-number compatibility, and no-write-on-refusal.
 
 `add_schematic_component`, every entry of `batch_place_components`, and
 `add_power_symbol` now copy the resolved library symbol's `Value` and
-`Footprint` onto the placed instance (#506). Previously, placement derived
+`Footprint` onto the placed instance. Previously, placement derived
 `Value` from the name after `:` in `lib_id` and always wrote an empty
 `Footprint`, even when the embedded library definition already carried both.
 KiCad's netlister reads the instance fields and does not fall back to that
@@ -1397,7 +1396,7 @@ discovery probed the candidate path as a file — so it never found anything.
 A Voltaris launched by an MCP client with no `ipc_address` and no
 `KICAD_API_SOCKET` reported the transport unreachable even with KiCad running,
 and every hybrid tool took its direct-file fallback while KiCad held the board
-open (#529). Discovery now looks the same path up in the pipe namespace.
+open. Discovery now looks the same path up in the pipe namespace.
 
 For a Windows caller this means:
 
@@ -1419,7 +1418,7 @@ lifetime — see `docs/TROUBLESHOOTING.md`.
 `check_clearance` returned the straight-line distance between two footprints'
 placement anchors under a description that said "physical clearance". Read as
 copper-to-copper spacing, a `21.125` answer stood in for a courtyard gap of
-about 3 mm (#410). Footprint size and shape were never considered.
+about 3 mm. Footprint size and shape were never considered.
 
 Stage 1 changed nothing about the number and everything about what the response
 says it is:
@@ -1466,7 +1465,7 @@ this additive release does not remove it. This terminal stage closes #410.
 One footprint-less symbol — a legitimate state for a generic `Device:R` whose
 package has not been chosen yet, and until #506 every symbol Voltaris itself
 placed — failed the whole sync with *KiCad netlist node is missing footprint*,
-naming no component and blocking every other one (#507).
+naming no component and blocking every other one.
 
 Such a component is now **reported, not fatal**, the way eeschema's own Update
 PCB dialog says "footprint not assigned" and continues:
@@ -1492,7 +1491,7 @@ removed.
 
 ## Unreleased: IPC health responses say why KiCad did not answer (minor release)
 
-`check_kicad_ui` and `open_project` gain an `ipc_failure` field (#532). It is
+`check_kicad_ui` and `open_project` gain an `ipc_failure` field. It is
 `{ "kind", "message" }` when a failure kind was established, where `kind` is
 one of `not_configured`, `no_listener`, `access_denied`, `handshake_failed`,
 `transport_error`, or `request_failed`. `request_failed` means the request
@@ -1608,7 +1607,7 @@ end.
 A placement's field anchors follow the mirror. `Reference` and `Value` are
 positioned through the same transform as the symbol body, which previously
 hardcoded an unmirrored frame, so a mirrored symbol's field text sat on its
-unmirrored side (#101).
+unmirrored side.
 
 Responses add `mirror_x` and `mirror_y`, at the top level and in each `units[]`
 entry, for every tool that shares the committed-file component readback:
@@ -1634,7 +1633,7 @@ and `export_manufacturing_package` all run `kicad-cli pcb drc` through one
 path, and that path never passed `--schematic-parity`. KiCad gates the parity
 test behind that flag; without it, KiCad 10 still writes the `schematic_parity`
 key as an *empty* array, so the parser from #245 read "never asked" as
-"checked, none found" and every board reported parity `0` (#516). The flag is
+"checked, none found" and every board reported parity `0`. The flag is
 now always sent.
 
 Two visible consequences:
@@ -1667,7 +1666,7 @@ existing field was renamed or removed.
 `add_mounting_hole` wrote `MountingHole:MountingHole_{drill:.1}mm`. KiCad 10
 ships no plain `MountingHole_3.2mm` — 3.2 mm exists only as the M3 family — and
 spells round sizes without a decimal (`MountingHole_3mm`), so the default call
-and every integer size produced a name no stock KiCad resolves (#462).
+and every integer size produced a name no stock KiCad resolves.
 
 The lib_id now comes from a table of the footprints KiCad 10 ships (`3.2` →
 `MountingHole_3.2mm_M3`, `3` → `MountingHole_3mm`, `4.3` →
@@ -1762,7 +1761,7 @@ next minor release.
 
 Both tools counted copper layers by finding the substring `signal)` in the
 board text, which misses every `power`, `mixed` and `jumper` copper layer and
-quoted a six-layer board as two-layer (#461). Both now read the `(layers …)`
+quoted a six-layer board as two-layer. Both now read the `(layers …)`
 table through the same function `get_board_info` uses, so the three tools
 report one number for one file.
 
@@ -1888,7 +1887,7 @@ error as permission to edit the saved file directly.
 ## Unreleased: `score_placement` reports interface filter caps (minor release)
 
 `score_placement`'s decoupling deduction no longer fires on a capacitor placed on
-a connector's own pins for cable/EMI filtering (#411). A cap beyond its value
+a connector's own pins for cable/EMI filtering. A cap beyond its value
 family's limit from the nearest shared-net IC is exempted only when a `J*`
 connector carries **every** net that cap carries and its courtyard edge is within
 that same limit of the cap's center. The cap must be on the connector's face,
@@ -2042,8 +2041,7 @@ follow a committed write: inspect/reload the file before retrying to avoid a
 duplicate placement. This observes saved files only and does not claim an
 atomic snapshot of the complete hierarchy or unsaved editor state.
 
-See [Schematic project ownership](PROJECT_OWNERSHIP.md#placement-instance-validation)
-for the acceptance matrix and limits. This additive response change is planned
+This additive response change is planned
 for the next minor release; no tool or argument was renamed or removed.
 
 ## Unreleased: schematic ownership conflicts (minor release)
@@ -2054,8 +2052,7 @@ of these cases silently inherited unrelated libraries or treated the schematic
 as projectless. `error.paths` names the schematic directory and every candidate
 root. Restore the saved hierarchy or separate the independent document from the
 unrelated project before retrying. Loose schematics with no candidate project
-and adjacent library-table authority remain supported. See
-[Schematic project ownership](PROJECT_OWNERSHIP.md) for the behavior and limits.
+and adjacent library-table authority remain supported.
 
 ## Unreleased: Rust Specctra export is the default
 
@@ -2076,7 +2073,7 @@ then apply the existing correction policy. Board exports share one stable live
 snapshot without saving the editor. Missing pad geometry or concurrent edits
 refuse export before creating output. Other manufacturers and no-assembly
 exports are unchanged. Review legacy anchor-compensation offsets to avoid double
-correction; see [coordinates and evidence](JLCPCB_CPL_CORRECTIONS.md#matching-and-coordinates).
+correction; see [coordinates and evidence](../JLCPCB_CPL_CORRECTIONS.md#matching-and-coordinates).
 
 ## Unreleased: JLCPCB manufacturing files use vendor-ready names and schema
 
@@ -2099,7 +2096,7 @@ native geometry export. The optional `jlcpcb_cpl_corrections_path` input points
 to a versioned project JSON policy; exact designator overrides take precedence
 over the first matching project footprint prefix, which takes precedence over
 Voltaris's independently verified built-in rules. See
-[JLCPCB CPL corrections](JLCPCB_CPL_CORRECTIONS.md) for the policy schema.
+[JLCPCB CPL corrections](../JLCPCB_CPL_CORRECTIONS.md) for the policy schema.
 
 The response adds `placement_orientation` at the top level and on the
 `pick_and_place` artifact. It records policy provenance, each applied rule with
@@ -2123,7 +2120,7 @@ identical without it.
 | `export_manufacturing_package.quantity` | Omit it from export. Manufacturing files are quantity-independent; pass `quantity` to `estimate_cost` for pricing context. |
 | `validate_for_manufacturing.schematic` | Run the board validator without it. Use `check_bom_health(schematic)` for the separate schematic/BOM review. |
 | `estimate_cost.schematic` | Omit it. The estimator counts placed board footprints, which are the components relevant to assembly pricing. |
-| `move_connected.*` (all parameters) | The tool now refuses unconditionally: it never implemented the connected move and silently delegated to a plain symbol move while reporting connections preserved (#315). Use `move_schematic_component`, then re-route the affected nets. The parameters return when the wire-carrying move is actually built. |
+| `move_connected.*` (all parameters) | The tool now refuses unconditionally: it never implemented the connected move and silently delegated to a plain symbol move while reporting connections preserved. Use `move_schematic_component`, then re-route the affected nets. The parameters return when the wire-carrying move is actually built. |
 
 These removals narrow the schema to behavior Voltaris can verify. They do not change
 the generated files or analysis because the removed values had no implementation.
@@ -2132,7 +2129,7 @@ the generated files or analysis because the removed values had no implementation
 
 `flip_component` previously refused unconditionally whenever KiCad was
 reachable, because the vendored IPC protocol had no footprint-flip command
-(#604). KiCad 10.0.6 added a native `FlipItems` command, so a board that is
+. KiCad 10.0.6 added a native `FlipItems` command, so a board that is
 open live in KiCad **10.0.6 or newer** now flips through that command inside
 one KiCad undo transaction — the same transform the GUI's **F** key performs,
 including the footprint's 3D-model offset/rotation — and reports
@@ -2174,7 +2171,7 @@ copper item instead.
 `score_placement` always read the saved `.kicad_pcb` file, even when KiCad held
 that exact board open live with unsaved moves or edits. A hard courtyard-overlap
 introduced by a live `move_component` could be entirely absent from the response
-with no error and no indication the answer was stale (#595).
+with no error and no indication the answer was stale.
 
 The tool now prefers the exact board's live IPC snapshot (via `SaveDocumentToString`,
 the same read-only mechanism `run_drc`'s `sync_live_board` uses) when KiCad has it

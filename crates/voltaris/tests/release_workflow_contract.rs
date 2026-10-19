@@ -56,7 +56,7 @@ fn release_pcm_validation_uses_the_effective_release_version() {
         .as_array()
         .expect("PCM package steps must be an array")
         .iter()
-        .find(|step| step["name"] == "Validate PCM package against KiCAD schema (release gate)")
+        .find(|step| step["name"] == "Validate PCM package against KiCad schema (release gate)")
         .expect("release workflow must validate PCM packages");
     let script = validation["run"]
         .as_str()

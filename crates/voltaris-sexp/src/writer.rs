@@ -1,8 +1,8 @@
-//! Text-based S-expression editor for KiCAD files.
+//! Text-based S-expression editor for KiCad files.
 //!
 //! All modifications are performed as **targeted string edits** on the raw file
 //! content rather than full parse → serialize round-trips. This preserves
-//! KiCAD's exact formatting and avoids the "single-line collapse" corruption
+//! KiCad's exact formatting and avoids the "single-line collapse" corruption
 //! that sexpdata.dumps() caused in the Python backend.
 //!
 //! # Usage Pattern (all handlers must follow this)
@@ -94,7 +94,7 @@ pub fn apply_edits(mut content: String, mut edits: Vec<SexpEdit>) -> String {
 /// Write `content` to `path` atomically with fsync.
 ///
 /// Writes to a scratch sibling file first, then renames. This prevents
-/// corrupted writes if the process is killed mid-write. The KiCAD MCP
+/// corrupted writes if the process is killed mid-write. The KiCad MCP
 /// protocol requires that reads immediately after writes see the new data,
 /// so fsync is mandatory.
 ///
@@ -663,7 +663,7 @@ pub fn find_block_with_leading_whitespace(
 /// `(symbol_instances` — and skips matches inside quoted strings, so a property
 /// value like `"(label foo)"` is never mistaken for a block.
 ///
-/// Prefer this over `rfind("\n  (tag")`: KiCAD's own writers indent with tabs
+/// Prefer this over `rfind("\n  (tag")`: KiCad's own writers indent with tabs
 /// while this crate's writer uses two spaces, so a fixed-width literal silently
 /// finds nothing in eeschema-saved files.
 pub fn find_block_starts(content: &str, tag: &str) -> Vec<usize> {
@@ -720,7 +720,7 @@ pub fn find_enclosing_block(content: &str, tag: &str, pos: usize) -> Option<(usi
 /// Byte ranges of the direct child S-expression blocks of the first
 /// `(parent_tag …)` block in `content`.
 ///
-/// This is indentation-agnostic and string-aware. It is intended for KiCAD
+/// This is indentation-agnostic and string-aware. It is intended for KiCad
 /// root files where callers need to distinguish top-level schematic/board
 /// items from nested library definitions or properties.
 pub fn find_direct_child_blocks(content: &str, parent_tag: &str) -> Vec<(usize, usize)> {
@@ -791,8 +791,8 @@ pub fn find_enclosing_direct_child_block(
 
 // ─── UUID Generation ─────────────────────────────────────────────────────────
 
-/// Generate a new KiCAD-compatible UUID string.
-/// KiCAD 9+ requires UUIDs to be quoted in S-expressions: `(uuid "abc-123")`.
+/// Generate a new KiCad-compatible UUID string.
+/// KiCad 9+ requires UUIDs to be quoted in S-expressions: `(uuid "abc-123")`.
 pub fn new_uuid() -> String {
     uuid::Uuid::new_v4().to_string()
 }

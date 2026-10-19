@@ -348,7 +348,7 @@ fn courtyard_of<'a>(scan: &'a [FootprintCourtyard], reference: &str) -> &'a Foot
 ///
 /// C1 (rotated 90°): root `(at 141.605 99.695 90)`; its courtyard is a single
 /// `fp_circle` center (2.5, 0), end (7.75, 0) → r = 5.25, local bbox
-/// (−2.75, −5.25, 7.75, 5.25). KiCAD's Y-down CCW rotation at 90° maps
+/// (−2.75, −5.25, 7.75, 5.25). KiCad's Y-down CCW rotation at 90° maps
 /// (x, y) → (y, −x), so the corners land on (∓5.25, ±2.75 / ∓7.75) with hull
 /// (−5.25, −7.75, 5.25, 2.75); plus the anchor:
 /// (136.355, 91.945, 146.855, 102.445).
@@ -724,7 +724,7 @@ fn collect_boards(root: &std::path::Path) -> Vec<PathBuf> {
 #[test]
 fn every_installed_demo_board_scans_losslessly() {
     let Some(root) = demo_dirs() else {
-        eprintln!("SKIP: no KiCAD demos found (set KICAD_DEMOS to enable)");
+        eprintln!("SKIP: no KiCad demos found (set KICAD_DEMOS to enable)");
         return;
     };
     let boards = collect_boards(&root);
@@ -796,7 +796,7 @@ fn every_installed_demo_board_scans_losslessly() {
 #[test]
 fn every_installed_demo_board_indexes_consistently() {
     let Some(root) = demo_dirs() else {
-        eprintln!("SKIP: no KiCAD demos found (set KICAD_DEMOS to enable)");
+        eprintln!("SKIP: no KiCad demos found (set KICAD_DEMOS to enable)");
         return;
     };
     let boards = collect_boards(&root);
@@ -932,7 +932,7 @@ fn unlocked_is_not_a_spelling_of_locked() {
 #[test]
 fn installed_demo_boards_report_genuinely_locked_footprints() {
     let Some(root) = demo_dirs() else {
-        eprintln!("SKIP: no KiCAD demos found (set KICAD_DEMOS to enable)");
+        eprintln!("SKIP: no KiCad demos found (set KICAD_DEMOS to enable)");
         return;
     };
 

@@ -68,7 +68,7 @@ pub struct Wire {
 }
 
 /// Extract all wires from a parsed schematic tree.
-/// Handles both KiCAD 8/9 format `(start)(end)` and KiCAD 10 format `(pts (xy)(xy))`.
+/// Handles both KiCad 8/9 format `(start)(end)` and KiCad 10 format `(pts (xy)(xy))`.
 pub fn extract_wires(tree: &SexpNode) -> Vec<Wire> {
     extract_schematic_lines(tree, "wire")
 }
@@ -128,7 +128,7 @@ fn extract_schematic_lines(tree: &SexpNode, kind: &str) -> Vec<Wire> {
     tree.find_all(kind)
         .iter()
         .filter_map(|node| {
-            // Try KiCAD 10 format first: (pts (xy X Y) (xy X Y))
+            // Try KiCad 10 format first: (pts (xy X Y) (xy X Y))
             let (x1, y1, x2, y2) = if let Some(pts) = node.find("pts") {
                 let xy_nodes = pts.find_all("xy");
                 if xy_nodes.len() >= 2 {
@@ -141,7 +141,7 @@ fn extract_schematic_lines(tree: &SexpNode, kind: &str) -> Vec<Wire> {
                     return None;
                 }
             } else {
-                // Fall back to KiCAD 8/9 format: (start X Y) (end X Y)
+                // Fall back to KiCad 8/9 format: (start X Y) (end X Y)
                 let (x1, y1) = parse_start(node)?;
                 let (x2, y2) = parse_end(node)?;
                 (x1, y1, x2, y2)
@@ -211,10 +211,10 @@ pub enum LabelKind {
 /// step and the label attaches correctly but renders backwards, over whatever
 /// it points at. eeschema always writes both, and the pairing is exactly:
 /// rotation 0/90 → `left`, 180/270 → `right` (confirmed against 692 labels in
-/// KiCAD 10-authored schematics: 0→left ×297, 90→left ×6, 180→right ×298,
+/// KiCad 10-authored schematics: 0→left ×297, 90→left ×6, 180→right ×298,
 /// 270→right ×5, with no counter-examples).
 pub fn label_justify(rotation: f64) -> &'static str {
-    // Normalize: KiCAD stores 0/90/180/270, but tolerate 360, negatives, and
+    // Normalize: KiCad stores 0/90/180/270, but tolerate 360, negatives, and
     // the f64 the tool layer hands us.
     let deg = ((rotation % 360.0) + 360.0) % 360.0;
     if deg < 180.0 {
@@ -237,7 +237,7 @@ pub struct Label {
 pub fn extract_labels(tree: &SexpNode) -> Vec<Label> {
     let mut labels = Vec::new();
 
-    // KiCAD's tag for a plain net label is `label` — there is no `net_label`
+    // KiCad's tag for a plain net label is `label` — there is no `net_label`
     // in the .kicad_sch format, so matching that name found nothing in any
     // real schematic (and hid every plain label from the net graph).
     for (kind_str, kind) in &[
@@ -279,7 +279,7 @@ pub struct SymbolInstance {
     pub value: String,
     pub footprint: String,
     /// Name of the `lib_symbols` entry this instance actually resolves through,
-    /// when KiCAD wrote a `(lib_name …)` because the sheet carries a locally
+    /// when KiCad wrote a `(lib_name …)` because the sheet carries a locally
     /// edited copy of the library symbol. Resolve with
     /// [`SymbolInstance::lib_symbol_name`] or [`find_lib_symbol`] — matching on
     /// `lib_id` alone picks the wrong definition, or none (#143).
@@ -298,7 +298,7 @@ pub struct SymbolInstance {
 
 impl SymbolInstance {
     /// The `lib_symbols` entry name this instance resolves through: `lib_name`
-    /// when KiCAD wrote one, otherwise `lib_id`. Mirrors eeschema's
+    /// when KiCad wrote one, otherwise `lib_id`. Mirrors eeschema's
     /// `SCH_SYMBOL::GetSchSymbolLibraryName()`.
     pub fn lib_symbol_name(&self) -> &str {
         self.lib_name.as_deref().unwrap_or(&self.lib_id)
@@ -731,7 +731,7 @@ pub fn extract_symbol_instances(tree: &SexpNode) -> Vec<SymbolInstance> {
         .collect()
 }
 
-/// Resolve an instance's embedded `lib_symbols` definition the way KiCAD does:
+/// Resolve an instance's embedded `lib_symbols` definition the way KiCad does:
 /// by `lib_name` when the instance carries one, otherwise by `lib_id`.
 ///
 /// `lib_syms` is the `find_all("symbol")` list of the sheet's `lib_symbols`
@@ -760,7 +760,7 @@ pub fn extract_all_net_labels(tree: &SexpNode) -> Vec<Label> {
 /// Every power symbol on the sheet, as the [`Label`] it electrically is.
 ///
 /// A `power:GND` symbol names the net it touches exactly as a label does —
-/// KiCAD takes the name from the placed symbol's `Value`, which is why editing
+/// KiCad takes the name from the placed symbol's `Value`, which is why editing
 /// that field re-rails the connection. Feed these to the net graph alongside
 /// [`extract_labels`] or the rails come back unnamed.
 ///
@@ -782,8 +782,8 @@ pub fn extract_power_symbol_labels(tree: &SexpNode) -> Vec<Label> {
         let Some(sym) = find_lib_symbol(&lib_syms, &inst) else {
             continue;
         };
-        // KiCAD marks a power symbol with `(power)` — `(power global)` or
-        // `(power local)` since KiCAD 9.
+        // KiCad marks a power symbol with `(power)` — `(power global)` or
+        // `(power local)` since KiCad 9.
         if sym.find("power").is_none() {
             continue;
         }
@@ -812,7 +812,7 @@ pub fn extract_power_symbol_labels(tree: &SexpNode) -> Vec<Label> {
 pub struct LibPin {
     pub number: String,
     pub name: String,
-    /// KiCAD's electrical type — `power_in`, `passive`, `no_connect`, … — read
+    /// KiCad's electrical type — `power_in`, `passive`, `no_connect`, … — read
     /// from `(pin <type> <style> …)`. Empty when the pin declares none.
     pub electrical_type: String,
     /// Position in symbol-local Y-up space (mm).
@@ -824,9 +824,9 @@ pub struct LibPin {
 
 /// Parse pins from a library symbol definition node.
 /// Extract every pin of a library symbol, including pins nested inside unit
-/// sub-symbols. KiCAD stores pins under children like `(symbol "Device:R_1_1"
+/// sub-symbols. KiCad stores pins under children like `(symbol "Device:R_1_1"
 /// (pin …))`, so a direct-children-only scan finds ZERO pins for standard
-/// library parts — the bug the first real-KiCAD e2e run caught in
+/// library parts — the bug the first real-KiCad e2e run caught in
 /// `connect_pins` ("Pin '2' not found on 'R1'").
 pub fn extract_lib_pins(sym_node: &SexpNode) -> Vec<LibPin> {
     let mut out = Vec::new();
@@ -836,7 +836,7 @@ pub fn extract_lib_pins(sym_node: &SexpNode) -> Vec<LibPin> {
 
 /// Unit-aware variant of [`extract_lib_pins`] for multi-unit symbols (#35).
 ///
-/// KiCAD names unit sub-symbols `Name_N_M` where `N` is the unit number
+/// KiCad names unit sub-symbols `Name_N_M` where `N` is the unit number
 /// (`0` = drawn on every unit) and `M` is the body style. The unit-agnostic
 /// [`extract_lib_pins`] superimposes every unit's pins onto one placement —
 /// for an LM2904 that reports both op-amps' pins at the same instance. This
@@ -924,13 +924,13 @@ fn parse_lib_pin(node: &SexpNode) -> Option<LibPin> {
 /// Compute the schematic-space pin endpoint (where wires connect) for a lib pin
 /// given a component's placement transform.
 pub fn pin_endpoint(pin: &LibPin, t: PinTransform) -> (f64, f64) {
-    // In the KiCAD symbol format the pin's (at x y angle) IS the electrical
+    // In the KiCad symbol format the pin's (at x y angle) IS the electrical
     // connection point: the angle points from that tip TOWARD the symbol body,
     // and the drawn pin line extends `length` mm inward. Adding length here
     // would land on the body-attachment end — 1 pin-length away from where
-    // KiCAD actually joins wires (eeschema's ERC reports pin positions at the
+    // KiCad actually joins wires (eeschema's ERC reports pin positions at the
     // (at) point, and pin tips land exactly on the body outline only after
-    // adding length — verified against Device:R in the KiCAD 10 libraries).
+    // adding length — verified against Device:R in the KiCad 10 libraries).
     transform_pin(pin.local_x, pin.local_y, t)
 }
 
@@ -1190,7 +1190,7 @@ fn escape_quoted_text(value: &str) -> String {
 pub fn format_net_label(net: &str, x: f64, y: f64, rotation: f64) -> String {
     let uuid = crate::writer::new_uuid();
     let net = escape_quoted_text(net);
-    // The tag must be `label`: KiCAD has no `net_label` in its schematic
+    // The tag must be `label`: KiCad has no `net_label` in its schematic
     // format and refuses to load a file containing one ("Failed to load
     // schematic"), so emitting that made the whole schematic unopenable.
     //
@@ -1215,7 +1215,7 @@ mod power_symbol_tests {
 
     /// A sheet holding a `power:GND`, a `PWR_FLAG` (power symbol too, but with
     /// a `power_out` pin) and a plain `Device:R` that must be ignored for not
-    /// being a power symbol at all. Library bodies are shaped like KiCAD 10's
+    /// being a power symbol at all. Library bodies are shaped like KiCad 10's
     /// own — `(power global)`, pin in a `_1_1` sub-symbol at the anchor.
     fn sheet() -> SexpNode {
         let power_lib = |name: &str, pin_type: &str| {
@@ -1380,7 +1380,7 @@ mod pin_endpoint_tests {
     use super::*;
 
     fn device_r_pin(number: &str, local_y: f64, rotation: f64) -> LibPin {
-        // Device:R in the KiCAD 10 libraries: (pin ... (at 0 3.81 270) (length 1.27))
+        // Device:R in the KiCad 10 libraries: (pin ... (at 0 3.81 270) (length 1.27))
         // and (at 0 -3.81 90) — the (at) point is the electrical tip; the angle
         // points toward the body.
         LibPin {
@@ -1594,7 +1594,7 @@ mod label_tag_tests {
         assert!(pin.find("uuid").is_some());
     }
 
-    /// KiCAD's schematic format has no `net_label` tag — a file containing one
+    /// KiCad's schematic format has no `net_label` tag — a file containing one
     /// fails to load outright ("Failed to load schematic" from kicad-cli 10.0.3,
     /// verified against a file identical but for this tag). The plain net label
     /// is `label`.
@@ -1603,7 +1603,7 @@ mod label_tag_tests {
         let sexp = format_net_label("VCC", 100.0, 80.0, 0.0);
         assert!(
             sexp.contains("(label \"VCC\""),
-            "must emit KiCAD's (label) tag, got: {sexp}"
+            "must emit KiCad's (label) tag, got: {sexp}"
         );
         assert!(!sexp.contains("(net_label"));
     }
@@ -1656,7 +1656,7 @@ mod label_justify_tests {
     use super::*;
 
     /// The pairing eeschema itself writes, sampled from 692 labels across
-    /// KiCAD 10-authored schematics: 0→left, 90→left, 180→right, 270→right.
+    /// KiCad 10-authored schematics: 0→left, 90→left, 180→right, 270→right.
     #[test]
     fn justify_follows_the_rotation_eeschema_pairs_it_with() {
         assert_eq!(label_justify(0.0), "left");

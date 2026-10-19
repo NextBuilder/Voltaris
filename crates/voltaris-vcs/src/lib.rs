@@ -1,7 +1,7 @@
 //! Project-scoped git checkpointing on pure-Rust gix.
 //!
 //! This crate exists so the vcs toolset's safety policy has one home:
-//! operations are scoped to KiCAD design files, destructive operations
+//! operations are scoped to KiCad design files, destructive operations
 //! re-verify the repository root immediately before acting, and restores go
 //! through a recovery branch so nothing is ever lost. The full policy lands
 //! with the toolset (port plan T2.1); this scaffold proves the gix

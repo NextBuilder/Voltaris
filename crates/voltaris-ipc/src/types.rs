@@ -361,7 +361,7 @@ pub struct IpcPadDefinition {
 /// the library `.kicad_mod` source.
 ///
 /// Points are pre-transform: `build_footprint_item` rotates and translates
-/// them into absolute board coordinates before emission, because KiCAD
+/// them into absolute board coordinates before emission, because KiCad
 /// serializes `FootprintInstance` children in absolute board space (see the
 /// `transform` module docs / issue #23).
 #[derive(Debug, Clone, PartialEq)]
@@ -419,7 +419,7 @@ pub enum IpcGraphicDefinition {
 }
 
 impl IpcGraphicDefinition {
-    /// The KiCAD layer name this item draws on.
+    /// The KiCad layer name this item draws on.
     pub fn layer(&self) -> &str {
         match self {
             Self::Line { layer, .. }
@@ -447,7 +447,7 @@ impl IpcGraphicDefinition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpcTrack {
     /// KIID of the track, needed to delete it via delete_track. Empty only if
-    /// KiCAD returned a track without an id.
+    /// KiCad returned a track without an id.
     pub uuid: String,
     pub net_name: String,
     pub layer: String,

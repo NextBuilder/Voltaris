@@ -1,14 +1,14 @@
 """
 Voltaris -- Action Plugin launcher.
 
-This thin Python plugin registers a menu item in KiCAD's Tools menu.
+This thin Python plugin registers a menu item in KiCad's Tools menu.
 Clicking it opens a settings dialog where users can configure paths
 and start/stop the compiled Rust MCP server binary.
 
-Installation (KiCAD PCM):
-  The plugin appears in KiCAD's Plugin and Content Manager.
+Installation (KiCad PCM):
+  The plugin appears in KiCad's Plugin and Content Manager.
   After installation the binary is placed in the plugin directory.
-  KiCAD loads this __init__.py automatically.
+  KiCad loads this __init__.py automatically.
 """
 
 import atexit
@@ -18,7 +18,7 @@ import subprocess
 import sys
 import threading
 
-import pcbnew  # Available inside KiCAD
+import pcbnew  # Available inside KiCad
 
 # Import the settings dialog (same directory)
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
@@ -93,10 +93,10 @@ def _write_pid_file(pid):
 def _clear_pid_file(pid):
     """Remove the PID file only while it still records ``pid``.
 
-    Every KiCAD session writes the same file. Removing it unconditionally
+    Every KiCad session writes the same file. Removing it unconditionally
     lets the session whose server exits last delete a record written by a
     session whose server is still running: the survivor becomes untracked,
-    so no later start_server preflight can ever reap it (#103).
+    so no later start_server preflight can ever reap it.
     """
     try:
         with open(_PID_FILE) as f:
@@ -112,15 +112,15 @@ def _clear_pid_file(pid):
 
 
 def _terminate_owned_server():
-    """Kill the server this session spawned, on KiCAD exit.
+    """Kill the server this session spawned, on KiCad exit.
 
     _run_server sits on a daemon thread, so interpreter shutdown drops the
-    thread without touching the child. The server then outlives KiCAD,
+    thread without touching the child. The server then outlives KiCad,
     holding the HTTP port and serving from a possibly pre-update binary --
     an http-transport server never reads stdin, so parent death is invisible
     to it and nothing else ends it.
 
-    Best-effort by nature: a hard kill of KiCAD runs no atexit handler, which
+    Best-effort by nature: a hard kill of KiCad runs no atexit handler, which
     is why the preflight reap stays.
     """
     process = _server_process
@@ -217,7 +217,7 @@ def start_server():
         )
         return False
 
-    # Orphan from a previous KiCAD session may still be holding the port.
+    # Orphan from a previous KiCad session may still be holding the port.
     _kill_tracked()
 
     if _server_thread and _server_thread.is_alive():
@@ -242,7 +242,7 @@ def is_server_running():
     return os.path.exists(_PID_FILE)
 
 
-# ─── KiCAD Action Plugin entry point ─────────────────────────────────────────
+# ─── KiCad Action Plugin entry point ─────────────────────────────────────────
 
 class VoltarisPlugin(pcbnew.ActionPlugin):
     def defaults(self):
@@ -257,7 +257,7 @@ class VoltarisPlugin(pcbnew.ActionPlugin):
 
     def Run(self):
         """Open the settings dialog. Server start/stop is handled via dialog buttons."""
-        # Get the KiCAD main window as parent for the dialog
+        # Get the KiCad main window as parent for the dialog
         parent = wx.GetTopLevelWindows()[0] if wx.GetTopLevelWindows() else None
 
         dlg = VoltarisSettingsDialog(
@@ -282,6 +282,6 @@ class VoltarisPlugin(pcbnew.ActionPlugin):
         _sync_native_bridge()
 
 
-# Register the plugin with KiCAD
+# Register the plugin with KiCad
 _sync_native_bridge()
 VoltarisPlugin().register()

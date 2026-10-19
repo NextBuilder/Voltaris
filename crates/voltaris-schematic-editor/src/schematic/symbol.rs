@@ -26,7 +26,7 @@ pub struct SymbolInstance {
 #[derive(Debug, Clone)]
 pub struct Symbol {
     /// Name of the `lib_symbols` entry this instance actually resolves through,
-    /// when it differs from `lib_id`. KiCAD writes it for symbols whose library
+    /// when it differs from `lib_id`. KiCad writes it for symbols whose library
     /// definition was edited inside this sheet: the edited copy is stored under
     /// a derived name (`"R_1"`) while `lib_id` keeps the upstream provenance
     /// (`"Device:R"`). Resolve with [`Symbol::lib_symbol_name`], never `lib_id`
@@ -36,7 +36,7 @@ pub struct Symbol {
     pub at: At,
     pub mirror: Option<String>,
     pub unit: u32,
-    /// `(exclude_from_sim …)`, present in KiCAD 8+ files. `None` for older
+    /// `(exclude_from_sim …)`, present in KiCad 8+ files. `None` for older
     /// files that omit it, so a round-trip doesn't invent the token.
     pub exclude_from_sim: Option<bool>,
     pub in_bom: bool,
@@ -46,7 +46,7 @@ pub struct Symbol {
     pub uuid: String,
     pub properties: Vec<Property>,
     /// Every child `to_sexp` does not rebuild from a field above — `pin`,
-    /// `instances`, and anything else KiCAD writes that we don't model —
+    /// `instances`, and anything else KiCad writes that we don't model —
     /// preserved verbatim.
     pub raw_sub_nodes: Vec<SexpNode>,
 }
@@ -142,7 +142,7 @@ impl Symbol {
     }
 
     /// The `lib_symbols` entry name this instance resolves through: `lib_name`
-    /// when KiCAD wrote one, otherwise `lib_id`. Mirrors eeschema's
+    /// when KiCad wrote one, otherwise `lib_id`. Mirrors eeschema's
     /// `SCH_SYMBOL::GetSchSymbolLibraryName()`.
     pub fn lib_symbol_name(&self) -> &str {
         self.lib_name.as_deref().unwrap_or(&self.lib_id)

@@ -263,7 +263,7 @@ impl std::fmt::Debug for ToolDef {
 // ─── ToolContext ──────────────────────────────────────────────────────────────
 
 /// Shared context passed to every tool handler.
-/// Contains config, the tool router, lazily-initialized KiCAD clients, and the
+/// Contains config, the tool router, lazily-initialized KiCad clients, and the
 /// per-call observer (used by `get_recent_calls` / `server_stats` meta-tools).
 pub struct ToolContext {
     pub config: ServerConfig,
@@ -1143,7 +1143,7 @@ pub fn project_name_for(sch_path: &std::path::Path) -> String {
 }
 
 /// Minimal valid blank schematic, with a freshly generated root `(uuid ...)`.
-/// The root UUID is mandatory: KiCAD's netlister resolves symbol instance
+/// The root UUID is mandatory: KiCad's netlister resolves symbol instance
 /// paths against it and silently forms no wire-only nets when it's missing.
 pub fn blank_schematic_template() -> String {
     voltaris_sexp::schematic::format_blank_schematic()
@@ -1185,7 +1185,7 @@ pub(crate) fn placed_pins(
 }
 
 /// Whether a reference belongs to a symbol that names a net rather than
-/// consuming one — a power symbol, a `PWR_FLAG`. KiCAD prefixes those with `#`
+/// consuming one — a power symbol, a `PWR_FLAG`. KiCad prefixes those with `#`
 /// and keeps them out of the netlist as components.
 ///
 /// Deliberately not `LabelKind::PowerSymbol`, which `extract_power_symbol_labels`
@@ -1406,10 +1406,10 @@ pub(crate) fn add_pin_midwire_junctions(
 
 /// A symbol-instance property positioned in absolute sheet coordinates, with
 /// eeschema's default 1.27mm font. The `(at)` node is mandatory: a property
-/// written without one is defaulted to the sheet origin by KiCAD, which is how
+/// written without one is defaulted to the sheet origin by KiCad, which is how
 /// every `#PWR` reference used to pile up in the top-left corner (PR #95).
 ///
-/// Hidden properties get KiCAD 10's property-level `(hide yes)` — a sibling
+/// Hidden properties get KiCad 10's property-level `(hide yes)` — a sibling
 /// before `(effects)`, exactly as eeschema writes instances (PR #96); the
 /// legacy hide-inside-effects form renders the same but round-trips dirty.
 ///
@@ -1641,9 +1641,9 @@ mod arg_helper_tests {
     }
 }
 
-// ─── KiCAD config directory detection ────────────────────────────────────────
+// ─── KiCad config directory detection ────────────────────────────────────────
 
-/// Find the KiCAD user config directory by probing for installed version directories.
+/// Find the KiCad user config directory by probing for installed version directories.
 /// Checks versions in descending order: 10.0, 9.0, 8.0, then bare "kicad".
 pub fn kicad_config_dir() -> std::path::PathBuf {
     let base = kicad_config_base();
@@ -1658,7 +1658,7 @@ pub fn kicad_config_dir() -> std::path::PathBuf {
     base.join("10.0")
 }
 
-/// Platform-specific base directory for KiCAD configs.
+/// Platform-specific base directory for KiCad configs.
 fn kicad_config_base() -> std::path::PathBuf {
     #[cfg(target_os = "windows")]
     {
@@ -1709,7 +1709,7 @@ pub fn lib_symbol_not_found_error(
     let suggestions = voltaris_schematic_editor::library::suggest_symbols(lib_id, 3, src);
     if !suggestions.is_empty() {
         msg.push_str(&format!(
-            " Did you mean: {}? (KiCAD 10 renamed several older symbol names)",
+            " Did you mean: {}? (KiCad 10 renamed several older symbol names)",
             suggestions.join(", ")
         ));
     }
@@ -1942,13 +1942,13 @@ fn moved_pin_anchors(
     moves
 }
 
-/// Roots under which KiCAD ships its bundled libraries — the directory that
+/// Roots under which KiCad ships its bundled libraries — the directory that
 /// directly contains `symbols/`, `footprints/` and `3dmodels/`.
 fn kicad_share_roots() -> Vec<std::path::PathBuf> {
     crate::kicad_install::share_roots()
 }
 
-/// Find directories holding a bundled KiCAD library kind — `"symbols"`,
+/// Find directories holding a bundled KiCad library kind — `"symbols"`,
 /// `"footprints"` or `"3dmodels"`.
 ///
 /// The matching environment variable wins when KiCad has exported it (it does

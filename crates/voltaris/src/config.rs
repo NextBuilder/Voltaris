@@ -10,7 +10,7 @@ pub struct Config {
     #[serde(default = "default_kicad_cli")]
     pub kicad_cli: String,
 
-    /// Path to the KiCAD binary (for launching the UI)
+    /// Path to the KiCad binary (for launching the UI)
     #[serde(default = "default_kicad_binary")]
     pub kicad_binary: String,
 
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn legacy_ipc_socket_path_alias_still_works() {
-        // settings.json written by the KiCAD plugin dialog uses the alias.
+        // settings.json written by the KiCad plugin dialog uses the alias.
         let f = write_temp("json", r#"{"ipc_socket_path": "ipc://test.sock"}"#);
         let c = Config::load_from(f.path()).unwrap();
         assert_eq!(c.ipc_address, "ipc://test.sock");

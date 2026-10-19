@@ -1,4 +1,4 @@
-//! `library` toolset — create and manage footprints, symbols, and KiCAD library tables.
+//! `library` toolset — create and manage footprints, symbols, and KiCad library tables.
 //!
 //! Operations are file-based (S-expression manipulation + directory scanning).
 //! No IPC or kicad-cli is required for most tools.
@@ -113,7 +113,7 @@ pub fn tools() -> Vec<ToolDef> {
                                 "layers": {
                                     "type": "array",
                                     "items": { "type": "string" },
-                                    "description": "Explicit canonical KiCAD pad layers. Defaults to F.Cu/F.Paste/F.Mask for SMD and *.Cu/*.Mask otherwise."
+                                    "description": "Explicit canonical KiCad pad layers. Defaults to F.Cu/F.Paste/F.Mask for SMD and *.Cu/*.Mask otherwise."
                                 },
                                 "rotation": {
                                     "type": "number",
@@ -137,7 +137,7 @@ pub fn tools() -> Vec<ToolDef> {
                         "type": "object",
                         "description": "Optional 3D model to associate with the footprint.",
                         "properties": {
-                            "path": { "type": "string", "description": "Path to the 3D model file (.step/.wrl); absolute or a KiCAD env-var path like ${KICAD9_3DMODEL_DIR}/..." },
+                            "path": { "type": "string", "description": "Path to the 3D model file (.step/.wrl); absolute or a KiCad env-var path like ${KICAD9_3DMODEL_DIR}/..." },
                             "offset": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }, "description": "{x,y,z} in mm (default 0,0,0)" },
                             "scale": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }, "description": "{x,y,z} (default 1,1,1)" },
                             "rotate": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }, "description": "{x,y,z} in degrees (default 0,0,0)" }
@@ -181,7 +181,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "register_footprint_library",
-            "Register a local footprint library directory in the KiCAD global or project library table.",
+            "Register a local footprint library directory in the KiCad global or project library table.",
             json!({
                 "type": "object",
                 "properties": {
@@ -222,7 +222,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "create_symbol",
-            "Create a new KiCAD schematic symbol and append it to a .kicad_sym library file. \
+            "Create a new KiCad schematic symbol and append it to a .kicad_sym library file. \
              Supports single-unit symbols (via `pins`) and multi-unit parts like dual/quad \
              op-amps or gate banks (via `units` + optional `power_pins`). By default each unit \
              gets a rectangular body sized to its pins. Omitted edge-axis coordinates are \
@@ -242,12 +242,12 @@ pub fn tools() -> Vec<ToolDef> {
                     "glyph": {
                         "type": "string",
                         "enum": ["rectangle", "opamp", "buffer", "inverter", "schmitt", "schmitt_inverter", "and", "nand", "or", "nor", "xor", "xnor"],
-                        "description": "Symbol-level default body shape. 'rectangle' (default) uses the pin x/y you supply; the others draw a fixed conventional shape and auto-place pins by type (x/y ignored). Op-amp/gate inputs are placed in the order listed, top-to-bottom (KiCAD's op-amp convention is + on top, - on bottom). Inverting glyphs (inverter/schmitt_inverter/nand/nor/xnor) draw the same body as their base and put the inversion bubble on the output pin. If a glyph's pins don't fit (wrong input count, not exactly one output), it falls back to a rectangle and reports a warning."
+                        "description": "Symbol-level default body shape. 'rectangle' (default) uses the pin x/y you supply; the others draw a fixed conventional shape and auto-place pins by type (x/y ignored). Op-amp/gate inputs are placed in the order listed, top-to-bottom (KiCad's op-amp convention is + on top, - on bottom). Inverting glyphs (inverter/schmitt_inverter/nand/nor/xnor) draw the same body as their base and put the inversion bubble on the output pin. If a glyph's pins don't fit (wrong input count, not exactly one output), it falls back to a rectangle and reports a warning."
                     },
                     "pins": {
                         "type": "array",
                         "description": "Pin definitions. x/y size and position the rectangle body rather than fixing the pins: see the per-pin `x`. They are ignored entirely when a `glyph` is set.",
-                        "items": pin_item_schema("Pin electrical type — exactly one of KiCAD's 12 values. Note: NC pins are 'no_connect' (not 'not_connected').", false)
+                        "items": pin_item_schema("Pin electrical type — exactly one of KiCad's 12 values. Note: NC pins are 'no_connect' (not 'not_connected').", false)
                     },
                     "show_pin_names": { "type": "boolean", "description": "Show pin names on the symbol (default true).", "default": true },
                     "show_pin_numbers": { "type": "boolean", "description": "Show pin numbers on the symbol (default true).", "default": true },
@@ -266,7 +266,7 @@ pub fn tools() -> Vec<ToolDef> {
                                 "pins": {
                                     "type": "array",
                                     "description": "Pins for this unit. x/y are ignored when the unit has a `glyph`.",
-                                    "items": pin_item_schema("Pin electrical type — exactly one of KiCAD's 12 values. Note: NC pins are 'no_connect' (not 'not_connected').", false)
+                                    "items": pin_item_schema("Pin electrical type — exactly one of KiCad's 12 values. Note: NC pins are 'no_connect' (not 'not_connected').", false)
                                 },
                                 "graphics": symbol_graphics_schema()
                             },
@@ -275,8 +275,8 @@ pub fn tools() -> Vec<ToolDef> {
                     },
                     "power_pins": {
                         "type": "array",
-                        "description": "Shared power pins (V+/V-, VCC/GND). Only meaningful with `units`: they become a dedicated final 'power unit' (e.g. Unit C of a dual op-amp, Unit E of a quad gate) placed once, following KiCAD's own 74xx convention. This avoids drawing the power pins on every unit (which would each need wiring to pass ERC). The power unit is always a rectangle.",
-                        "items": pin_item_schema("Pin electrical type — exactly one of KiCAD's 12 values (power pins are usually 'power_in'). Note: NC pins are 'no_connect' (not 'not_connected').", true)
+                        "description": "Shared power pins (V+/V-, VCC/GND). Only meaningful with `units`: they become a dedicated final 'power unit' (e.g. Unit C of a dual op-amp, Unit E of a quad gate) placed once, following KiCad's own 74xx convention. This avoids drawing the power pins on every unit (which would each need wiring to pass ERC). The power unit is always a rectangle.",
+                        "items": pin_item_schema("Pin electrical type — exactly one of KiCad's 12 values (power pins are usually 'power_in'). Note: NC pins are 'no_connect' (not 'not_connected').", true)
                     }
                 },
                 "required": ["library_path", "name", "reference_prefix"]
@@ -311,7 +311,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "register_symbol_library",
-            "Register a .kicad_sym library file in the KiCAD global or project symbol table. \
+            "Register a .kicad_sym library file in the KiCad global or project symbol table. \
              Reports whether the entry was inserted, left unchanged, or updated — an existing \
              nickname is kept as-is unless replace_existing is set.",
             json!({
@@ -541,7 +541,7 @@ fn point_toward(from: (f64, f64), toward: (f64, f64), d: f64) -> (f64, f64) {
 
 /// Ordered vertices of a rectangle outline whose corner nearest `(px, py)` is
 /// chamfered by `chamfer` mm (clamped to 40% of the shorter side) — the F.Fab
-/// pin-1 marker. Clockwise, KiCAD footprint Y-down.
+/// pin-1 marker. Clockwise, KiCad footprint Y-down.
 fn chamfered_rect_points(
     min_x: f64,
     min_y: f64,
@@ -576,7 +576,7 @@ fn chamfered_rect_points(
 }
 
 /// Emit the `(model ...)` block when a `model` object with a non-empty `path`
-/// is present. Path is passed through verbatim (absolute or KiCAD env-var).
+/// is present. Path is passed through verbatim (absolute or KiCad env-var).
 fn build_model_sexp(args: &serde_json::Value) -> String {
     let model = match args.get("model") {
         Some(m) if m.is_object() => m,
@@ -2552,7 +2552,7 @@ struct PinGeom {
     name: String,
 }
 
-/// The point where a pin meets the symbol body. In KiCAD symbols the pin's
+/// The point where a pin meets the symbol body. In KiCad symbols the pin's
 /// connection endpoint (the "bulb", where wires attach) is at `(x, y)` and the
 /// pin extends by `length` in its orientation to reach the body outline. Angles
 /// are 0=E, 90=N, 180=W, 270=S with Y up, so the body-attach point (root) is
@@ -2735,7 +2735,7 @@ fn grow_to(lo: &mut f64, hi: &mut f64, needed: f64) {
     *hi = ((centre + half) / SYMBOL_GRID).ceil() * SYMBOL_GRID + 0.0;
 }
 
-/// KiCAD's 12 valid pin electrical types — the first token of a
+/// KiCad's 12 valid pin electrical types — the first token of a
 /// `(pin TYPE line …)` S-expression. Anything else makes eeschema refuse to
 /// load the library ("Failed to load schematic"-class parse error), so the
 /// value is validated instead of interpolated verbatim (#55).
@@ -2754,7 +2754,7 @@ const ALLOWED_PIN_ELECTRICAL_TYPES: [&str; 12] = [
     "no_connect",
 ];
 
-/// Error when any pin's electrical type is not one of KiCAD's 12 valid values
+/// Error when any pin's electrical type is not one of KiCad's 12 valid values
 /// (#55) — eeschema refuses to load a library with a bad type, so nothing must
 /// be written in that case. Shared by the rectangle and glyph paths.
 fn validate_pin_types(pins_val: &[serde_json::Value]) -> anyhow::Result<()> {
@@ -2769,7 +2769,7 @@ fn validate_pin_types(pins_val: &[serde_json::Value]) -> anyhow::Result<()> {
                 ""
             };
             anyhow::bail!(
-                "invalid pin electrical type \"{}\" on pin \"{}\"{} — KiCAD accepts exactly one of: {}",
+                "invalid pin electrical type \"{}\" on pin \"{}\"{} — KiCad accepts exactly one of: {}",
                 pin_type,
                 number,
                 hint,
@@ -2862,7 +2862,7 @@ fn parse_symbol_items(args: &serde_json::Value) -> Result<SymbolItems, CallToolR
 
 /// A conventional body shape for a symbol unit. `Rectangle` is the default (a
 /// derived box around caller-positioned pins); the others draw a fixed op-amp or
-/// logic-gate glyph copied from KiCAD's stock libraries and auto-place the pins.
+/// logic-gate glyph copied from KiCad's stock libraries and auto-place the pins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Glyph {
     Rectangle,
@@ -2916,7 +2916,7 @@ impl Glyph {
     }
 
     /// Inverting glyphs draw the same body as their non-inverting base and mark
-    /// the inversion with an `inverted` output pin (matching KiCAD's own gates,
+    /// the inversion with an `inverted` output pin (matching KiCad's own gates,
     /// which carry the bubble on the pin rather than as a body circle).
     fn is_inverting(self) -> bool {
         matches!(
@@ -2957,7 +2957,7 @@ fn is_power_pin(p: &serde_json::Value) -> bool {
 
 /// Lay out power pins for a standalone rectangular power unit: vertical, V+/V-
 /// style — even-indexed pins enter from the top (pointing down), odd from the
-/// bottom (pointing up), matching KiCAD's multi-unit op-amp power unit. Any
+/// bottom (pointing up), matching KiCad's multi-unit op-amp power unit. Any
 /// caller x/y is replaced. Same spread (bulbs at y = ±7.62) as the multi-unit
 /// `power_pins` path so a single op-amp's power unit matches a dual's.
 fn layout_power_unit(power: &[serde_json::Value]) -> Vec<serde_json::Value> {
@@ -3011,7 +3011,7 @@ fn power_pins_need_layout(power: &[serde_json::Value]) -> bool {
     !power.is_empty() && power.iter().all(|pin| pin["angle"].is_null())
 }
 
-/// Normalize a caller-supplied pin graphic style to a valid KiCAD token,
+/// Normalize a caller-supplied pin graphic style to a valid KiCad token,
 /// defaulting to `line`.
 fn pin_style_token(s: Option<&str>) -> &'static str {
     match s {
@@ -3027,11 +3027,11 @@ fn pin_style_token(s: Option<&str>) -> &'static str {
     }
 }
 
-/// Default pin name/number text height (KiCAD's default).
+/// Default pin name/number text height (KiCad's default).
 const PIN_TEXT: f64 = 1.27;
 /// Smaller pin-name height for glyph units. The fixed op-amp/gate bodies are
-/// compact (KiCAD's own gates keep pin names empty on them), so real pin names
-/// at the default 1.27 mm collide; 0.762 mm (KiCAD's standard small text) fits
+/// compact (KiCad's own gates keep pin names empty on them), so real pin names
+/// at the default 1.27 mm collide; 0.762 mm (KiCad's standard small text) fits
 /// them without enlarging the body and breaking the library-matching shape.
 const GLYPH_PIN_NAME_TEXT: f64 = 0.762;
 
@@ -3093,7 +3093,7 @@ fn emit_pin(
     )
 }
 
-// ── Glyph geometry (coordinates copied verbatim from KiCAD 10's stock symbols)
+// ── Glyph geometry (coordinates copied verbatim from KiCad 10's stock symbols)
 
 fn fmt_pts(pts: &[(f64, f64)]) -> String {
     pts.iter()
@@ -3119,7 +3119,7 @@ fn g_arc(s: (f64, f64), m: (f64, f64), e: (f64, f64), fill: &str) -> String {
 }
 
 /// The OR/NOR body (also the base of XOR/XNOR): a concave back arc, two back
-/// stubs, two front arcs meeting at the apex, and KiCAD's fill-outline polyline.
+/// stubs, two front arcs meeting at the apex, and KiCad's fill-outline polyline.
 fn or_body() -> String {
     let mut b = g_arc((-3.81, 3.81), (-2.589, 0.0), (-3.81, -3.81), "none");
     b.push_str(&g_polyline(
@@ -3215,7 +3215,7 @@ fn glyph_geom(g: Glyph) -> GlyphGeom {
                 0.254,
                 "background",
             );
-            // Hysteresis mark (from KiCAD's 74HC14).
+            // Hysteresis mark (from KiCad's 74HC14).
             body.push_str(&g_polyline(
                 &[(-2.54, -1.27), (-0.635, -1.27), (-0.635, 1.27), (0.0, 1.27)],
                 0.254,
@@ -3423,7 +3423,7 @@ fn build_glyph_unit(
 /// a glyph that didn't fit its pins and fell back to a rectangle). Shared by the
 /// single- and multi-unit paths.
 ///
-/// Errors (#55) when a pin's electrical type is not one of KiCAD's 12 valid
+/// Errors (#55) when a pin's electrical type is not one of KiCad's 12 valid
 /// values — the caller must not write anything to disk in that case.
 /// Glyph units keep their fixed library-matching shape, so `show_names` only
 /// reaches the rectangle path.
@@ -4203,7 +4203,7 @@ async fn handle_create_symbol(
         Err(e) => return Ok(e),
     };
     let value_str = args["value"].as_str().unwrap_or(name);
-    // `~` is KiCAD's legacy "no datasheet" placeholder. Its library loader
+    // `~` is KiCad's legacy "no datasheet" placeholder. Its library loader
     // normalises it to the empty string and its schematic lib_symbols loader
     // does not, so a symbol carrying `~` never matches its own library copy in
     // ERC. Write the normalised form on both paths.
@@ -4269,7 +4269,7 @@ async fn handle_create_symbol(
         let pins_val = pins;
         // A single-unit triangular glyph (op-amp/buffer/inverter/schmitt) has no
         // room for power-pin names on its narrow apex, so if it carries power
-        // pins, split them onto a dedicated rectangular power unit (like KiCAD's
+        // pins, split them onto a dedicated rectangular power unit (like KiCad's
         // multi-unit op-amps) instead of drawing them on the triangle.
         // Only when the glyph is the thing actually drawn. Supplied geometry
         // supersedes the glyph, and the split exists solely because a
@@ -4345,7 +4345,7 @@ async fn handle_create_symbol(
     } else {
         // Multi-unit: each signal unit is NAME_1_1..NAME_N_1, and the power
         // pins (if any) become a dedicated FINAL unit rather than being drawn
-        // on every unit. KiCAD's own multi-unit parts do this (e.g. 74LS00 has
+        // on every unit. KiCad's own multi-unit parts do this (e.g. 74LS00 has
         // the four gates as units 1..4 and VCC/GND as unit 5). It means the
         // power pins appear on exactly one placed unit instead of on every
         // unit, where each duplicate would otherwise need wiring to pass ERC.
@@ -6597,7 +6597,7 @@ mod tests {
         assert!(ux.abs() < 1e-9 && (uy - -2.46).abs() < 1e-9, "up {ux},{uy}");
     }
 
-    /// A pin for the body-sizing tests. `"~"` is KiCAD's "unnamed" sentinel, so
+    /// A pin for the body-sizing tests. `"~"` is KiCad's "unnamed" sentinel, so
     /// it contributes no name width.
     fn test_pin(x: f64, y: f64, angle: f64, length: f64, name: &str) -> PinGeom {
         PinGeom {
@@ -8677,7 +8677,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_symbol_rejects_not_connected_with_suggestion() {
-        // KiCAD's enum is `no_connect`; `not_connected` used to be interpolated
+        // KiCad's enum is `no_connect`; `not_connected` used to be interpolated
         // verbatim, producing a library eeschema refuses to load (#55).
         let tmp = tempfile::tempdir().unwrap();
         let lib = tmp.path().join("nc.kicad_sym");
@@ -8708,7 +8708,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_symbol_rejects_dual_electrical_type() {
-        // "output bidirectional" is two types in one string — KiCAD expects
+        // "output bidirectional" is two types in one string — KiCad expects
         // exactly one (#55, bug 2).
         let tmp = tempfile::tempdir().unwrap();
         let lib = tmp.path().join("dual_type.kicad_sym");
@@ -9064,7 +9064,7 @@ mod tests {
     #[tokio::test]
     async fn glyph_opamp_draws_triangle_and_orders_inputs_top_to_bottom() {
         // Inputs are placed in the order listed, top first. Passing + then -
-        // gives KiCAD's convention (+ on top, - on bottom).
+        // gives KiCad's convention (+ on top, - on bottom).
         let c = make_symbol(
             "opamp",
             json!([
@@ -9094,7 +9094,7 @@ mod tests {
     async fn glyph_opamp_with_power_splits_into_a_rect_power_unit() {
         // A single op-amp carrying its own supply: the triangle has no room for
         // power-pin names, so V+/V- go to a dedicated rectangular power unit
-        // (unit 2), like KiCAD's multi-unit op-amps.
+        // (unit 2), like KiCad's multi-unit op-amps.
         let c = make_symbol(
             "opamp",
             json!([
@@ -9192,7 +9192,7 @@ mod tests {
         ]);
         let schmitt = make_symbol("schmitt", pins.clone()).await;
         let schmitt_inv = make_symbol("schmitt_inverter", pins).await;
-        // The hysteresis mark (from KiCAD's 74HC14) is present on both.
+        // The hysteresis mark (from KiCad's 74HC14) is present on both.
         for (g, c) in [("schmitt", &schmitt), ("schmitt_inverter", &schmitt_inv)] {
             assert!(
                 c.contains("(xy -1.905 -1.27)") && c.contains("(xy -1.905 1.27)"),

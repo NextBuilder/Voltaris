@@ -1,4 +1,4 @@
-//! Auto-generated protobuf types from KiCAD 10 API .proto files.
+//! Auto-generated protobuf types from KiCad 10 API .proto files.
 //! These are compiled by prost-build in build.rs.
 
 pub mod kiapi {

@@ -8,7 +8,7 @@ kicad-cli pcb export pos --format csv --units mm --side both --exclude-dnp --out
 ```
 
 The source board is the exact benchmark design used for the JLCPCB uploader
-validation recorded in Voltaris issue #518. JLCPCB accepted the uncorrected CPL
+validation recorded in upstream Konnect issue #518. JLCPCB accepted the uncorrected CPL
 but rendered U1 (`SOIC-8_3.9x4.9mm_P1.27mm`) 90 degrees off. The fixture keeps
 KiCad's native `Package` column so correction matching is tested after the real
 geometry export rather than against a hand-authored approximation.

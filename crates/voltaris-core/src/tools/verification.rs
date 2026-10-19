@@ -1,7 +1,7 @@
-//! `verification` toolset — DRC, design rules, KiCAD UI management, routing utilities.
+//! `verification` toolset — DRC, design rules, KiCad UI management, routing utilities.
 //!
 //! DRC delegates to `kicad-cli`. Design rules are read/written as S-expressions.
-//! KiCAD UI management uses process inspection + subprocess spawning.
+//! KiCad UI management uses process inspection + subprocess spawning.
 
 use crate::mcp::protocol::CallToolResult;
 use crate::tool;
@@ -48,7 +48,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "set_design_rules",
-            "Set board-level design rules (clearance, trace width, via size) in the sibling KiCAD \
+            "Set board-level design rules (clearance, trace width, via size) in the sibling KiCad \
              project file. Refuses while KiCad holds the board open, because KiCad's next save \
              rewrites the project file from its own copy.",
             json!({
@@ -67,7 +67,7 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "get_design_rules",
-            "Return the current design rule constraints defined in the sibling KiCAD project file.",
+            "Return the current design rule constraints defined in the sibling KiCad project file.",
             json!({
                 "type": "object",
                 "properties": {
@@ -145,14 +145,14 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "launch_kicad_ui",
-            "Launch the KiCAD GUI application and optionally open a project file.",
+            "Launch the KiCad GUI application and optionally open a project file.",
             json!({
                 "type": "object",
                 "properties": {
                     "project": { "type": "string", "description": "Path to .kicad_pro file to open (optional)" },
                     "wait_ready": {
                         "type": "boolean",
-                        "description": "Wait until KiCAD IPC is responsive before returning",
+                        "description": "Wait until KiCad IPC is responsive before returning",
                         "default": true
                     },
                     "timeout_seconds": {
@@ -338,25 +338,25 @@ fn project_rules_mut(
 ) -> anyhow::Result<&mut serde_json::Map<String, serde_json::Value>> {
     let project = project
         .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("KiCAD project root must be a JSON object"))?;
+        .ok_or_else(|| anyhow::anyhow!("KiCad project root must be a JSON object"))?;
     let board = project
         .entry("board")
         .or_insert_with(|| json!({}))
         .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("KiCAD project 'board' must be a JSON object"))?;
+        .ok_or_else(|| anyhow::anyhow!("KiCad project 'board' must be a JSON object"))?;
     let design_settings = board
         .entry("design_settings")
         .or_insert_with(|| json!({}))
         .as_object_mut()
         .ok_or_else(|| {
-            anyhow::anyhow!("KiCAD project 'board.design_settings' must be a JSON object")
+            anyhow::anyhow!("KiCad project 'board.design_settings' must be a JSON object")
         })?;
     design_settings
         .entry("rules")
         .or_insert_with(|| json!({}))
         .as_object_mut()
         .ok_or_else(|| {
-            anyhow::anyhow!("KiCAD project 'board.design_settings.rules' must be a JSON object")
+            anyhow::anyhow!("KiCad project 'board.design_settings.rules' must be a JSON object")
         })
 }
 
@@ -516,18 +516,18 @@ fn project_design_settings_mut(
 ) -> anyhow::Result<&mut serde_json::Map<String, Value>> {
     let project = project
         .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("KiCAD project root must be a JSON object"))?;
+        .ok_or_else(|| anyhow::anyhow!("KiCad project root must be a JSON object"))?;
     let board = project
         .entry("board")
         .or_insert_with(|| json!({}))
         .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("KiCAD project 'board' must be a JSON object"))?;
+        .ok_or_else(|| anyhow::anyhow!("KiCad project 'board' must be a JSON object"))?;
     board
         .entry("design_settings")
         .or_insert_with(|| json!({}))
         .as_object_mut()
         .ok_or_else(|| {
-            anyhow::anyhow!("KiCAD project 'board.design_settings' must be a JSON object")
+            anyhow::anyhow!("KiCad project 'board.design_settings' must be a JSON object")
         })
 }
 
@@ -739,7 +739,7 @@ async fn handle_get_predefined_sizes(
     })))
 }
 
-// ─── KiCAD UI management ──────────────────────────────────────────────────────
+// ─── KiCad UI management ──────────────────────────────────────────────────────
 
 const KICAD_GUI_PROCESS_NAMES: &[&str] = &["kicad", "pcbnew", "eeschema"];
 
@@ -786,7 +786,7 @@ fn ui_running(process_detected: bool, ipc_responsive: bool) -> bool {
     process_detected || ipc_responsive
 }
 
-/// Resolve the KiCAD binary path from config or well-known locations.
+/// Resolve the KiCad binary path from config or well-known locations.
 fn find_kicad_binary(config_binary: &str, config_cli: &str) -> String {
     crate::kicad_install::find_gui(config_binary, config_cli)
         .map(|path| path.to_string_lossy().into_owned())
@@ -927,7 +927,7 @@ async fn handle_launch_kicad_ui(
                             serde_json::to_string(&json!({
                                 "launched": true,
                                 "ipc_ready": false,
-                                "note": "KiCAD launched but IPC not yet responsive within timeout"
+                                "note": "KiCad launched but IPC not yet responsive within timeout"
                             }))
                             .unwrap(),
                         ));
@@ -944,7 +944,7 @@ async fn handle_launch_kicad_ui(
             ))
         }
         Err(e) => Ok(CallToolResult::error(format!(
-            "Failed to launch KiCAD ({}): {}",
+            "Failed to launch KiCad ({}): {}",
             binary, e
         ))),
     }
@@ -1304,7 +1304,7 @@ async fn handle_check_clearance(
         "anchor_distance_mm": anchor_distance_mm,
         "distance_mm": anchor_distance_mm,
         // A collection takes a self-describing plural noun
-        // (docs/NAMING_CONVENTIONS.md): what it holds is field names.
+        // (docs/dev/NAMING_CONVENTIONS.md): what it holds is field names.
         "deprecated_fields": ["distance_mm"],
         "note": "anchor-to-anchor distance only; not pad, trace or courtyard clearance — \
                  footprint size and shape are not considered. Use run_drc for clearance."

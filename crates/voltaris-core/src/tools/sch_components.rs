@@ -40,7 +40,7 @@ pub fn tools() -> Vec<ToolDef> {
     vec![
         tool!(
             "add_schematic_component",
-            "Add a symbol from a KiCAD library to the schematic. The symbol is snapped \
+            "Add a symbol from a KiCad library to the schematic. The symbol is snapped \
              to the 1.27mm schematic grid. Preserves every saved hierarchy instance, reports \
              committed-file readback, copies the library Value and Footprint unless explicitly \
              overridden, and refuses stale instance metadata before writing. \
@@ -190,7 +190,7 @@ pub fn tools() -> Vec<ToolDef> {
             // No parameters: the handler refuses unconditionally, and the
             // schema-parameter guard (rightly) refuses a schema that advertises
             // arguments nothing reads. The old parameters are documented in
-            // docs/API_MIGRATIONS.md alongside #285's removals.
+            // docs/dev/API_MIGRATIONS.md alongside #285's removals.
             json!({
                 "type": "object",
                 "properties": {},
@@ -451,7 +451,7 @@ async fn handle_add_schematic_component(
     // Load via voltaris-schematic-editor
     let mut sch = cse::Schematic::load(&sch_path)?;
 
-    // KiCAD's netlister resolves instances against the ROOT sheet's uuid and
+    // KiCad's netlister resolves instances against the ROOT sheet's uuid and
     // the project's name, and silently forms no wire-only nets for symbols
     // whose path doesn't resolve. On a child sheet both differ from this
     // file's own stem and uuid, which is what left hierarchical designs
@@ -3242,7 +3242,7 @@ async fn handle_move_connected(
     // claim work it does not do: refuse until the wire-carrying move exists
     // (it needs #120's connectivity model to know which wires to stretch).
     Ok(CallToolResult::error(
-        "move_connected is not implemented: it used to move the symbol and leave          every wire behind while reporting the connections preserved. Use          move_schematic_component (moves the symbol only), then re-route or use          connect_pins for the affected nets. Wire-carrying moves are tracked in          issue #315 and depend on the connectivity work in #120.",
+        "move_connected is not implemented: it used to move the symbol and leave          every wire behind while reporting the connections preserved. Use          move_schematic_component (moves the symbol only), then re-route or use          connect_pins for the affected nets.",
     ))
 }
 
@@ -4518,7 +4518,7 @@ mod tests {
         let sch = cse::Schematic::load(&path).unwrap();
         let root_uuid = sch.uuid.clone().expect("root uuid present");
         let sym = sch.symbols.by_reference("R1").unwrap();
-        // KiCAD only forms wire-only nets when the instance path is exactly
+        // KiCad only forms wire-only nets when the instance path is exactly
         // "/<root-uuid>"; the project key mirrors eeschema (file stem).
         assert!(
             sym.has_instance_path("amp", &format!("/{}", root_uuid)),
@@ -5204,7 +5204,7 @@ mod tests {
             .unwrap();
         let before = std::fs::read_to_string(&path).unwrap();
 
-        // Device:CP is the KiCAD ≤9 name; 10 renamed it to C_Polarized (#34).
+        // Device:CP is the KiCad ≤9 name; 10 renamed it to C_Polarized (#34).
         let result = handle_add_schematic_component(
             &json!({
                 "schematic": path.display().to_string(),

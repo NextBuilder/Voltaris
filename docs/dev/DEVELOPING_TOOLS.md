@@ -1,7 +1,7 @@
 # Developing Tools
 
 Use this checklist when adding or changing an MCP tool. Start with
-`CONTRIBUTING.md`, `docs/NAMING_CONVENTIONS.md`, and the related handler module;
+`CONTRIBUTING.md`, `docs/dev/NAMING_CONVENTIONS.md`, and the related handler module;
 the safest implementation usually follows an existing neighboring tool.
 
 ## Choose The Backend And Gate

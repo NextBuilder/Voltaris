@@ -1,18 +1,18 @@
-# Developer Guide — Voltaris
+# Developer guide
 
 Internal reference for developing and maintaining the Rust port.
 
 New to the codebase? Start with the map in
-[docs/DEVELOPER_OVERVIEW.md](docs/DEVELOPER_OVERVIEW.md), then return here for
+[docs/dev/DEVELOPER_OVERVIEW.md](DEVELOPER_OVERVIEW.md), then return here for
 the detailed implementation reference and current statistics.
 
 Repository-wide naming, public API, branch, and pull-request rules live in
-[docs/NAMING_CONVENTIONS.md](docs/NAMING_CONVENTIONS.md).
+[docs/dev/NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md).
 
 ## Quick Start
 
 For tool implementation or review, read
-[the reliability contract](docs/RELIABILITY_CONTRACT.md) before choosing argument,
+[the reliability contract](RELIABILITY_CONTRACT.md) before choosing argument,
 mutation, result, or recovery handling. Reuse the existing structured errors,
 document-binding, transaction and readback helpers; document remaining gaps.
 The contract also describes the evidence required for a changed behavior and
@@ -122,7 +122,7 @@ Voltaris/
 │   │       ├── client.rs             # NNG req/rep client, all methods implemented
 │   │       ├── builders.rs           # Protobuf message construction helpers (mm→nm conversion)
 │   │       ├── transform.rs          # Rigid-body child transform — KiCad 10 stores footprint
-│   │       │                         # children in ABSOLUTE board coords (#23)
+│   │       │                         # children in ABSOLUTE board coords
 │   │       └── types.rs              # Public types (IpcFootprint, IpcTrack, etc.)
 │   │
 │   └── schematic-viewer/            # Tauri desktop app (separate from workspace)
@@ -131,7 +131,7 @@ Voltaris/
 │       ├── src/main.rs               # Multi-sheet watcher + snapshot-isolated incremental kicad-cli SVG rendering + Tauri commands, 20 unit tests
 │       └── frontend/index.html       # Pan/zoom SVG viewer, sheet selector, auto-refresh
 │
-├── plugin/                           # Python thin launcher (runs inside KiCad)
+├── kicad-plugin/                           # Python thin launcher (runs inside KiCad)
 │   ├── __init__.py                   # pcbnew.ActionPlugin — settings dialog (PCB Editor only)
 │   ├── settings_dialog.py            # wxPython settings UI (paths, server control)
 │   ├── native_bridge.py              # authenticated KiCad 10 native Specctra export bridge
@@ -210,7 +210,7 @@ replacement:
 For journal diagnosis and recovery, use `voltaris transaction status`,
 `voltaris transaction recover`, and the explicit force-gated `voltaris
 transaction abandon` escape hatch documented in
-[Troubleshooting](docs/TROUBLESHOOTING.md#transaction-recovery-is-blocked-by-divergent-content).
+[Troubleshooting](../TROUBLESHOOTING.md#transaction-recovery-is-blocked-by-divergent-content).
 
 ### Which board a read answers about
 
@@ -226,7 +226,7 @@ and a `source_evidence` object carrying `board_state`,
 Both it and the write gates in `pcb_board.rs` read KiCad's answer through
 `tools/live_board.rs`, which owns the classification itself — including the
 rule that a board this process watched KiCad hold is never treated as safely
-absent afterwards, however KiCad stops answering (#240). The policies differ on
+absent afterwards, however KiCad stops answering. The policies differ on
 purpose (a stale read is disclosable, a stale write destroys work); the reading
 of the evidence does not.
 
@@ -237,7 +237,7 @@ unsaved state. A board this process watched KiCad hold, whose IPC endpoint then
 disappears, is refused under `auto` for the same reason. An explicit `saved`
 request may still inspect that snapshot, and says so in its `reason`.
 
-`get_layer_list` and `get_netclasses` are the first consumers (#542). The
+`get_layer_list` and `get_netclasses` are the first consumers. The
 broader per-tool inventory is tracked in #574.
 
 ### kicad-cli v10 (Subprocess)
@@ -320,7 +320,7 @@ Most in-handler errors still use `CallToolResult::error("free text")` or bubble 
 
 ### One value KiCad does not reject: an unrepresentable layer
 
-`builders::layer_from_name` maps a layer name to a `BoardLayer`, and anything it does not know becomes `BL_UNDEFINED`. KiCad 10.0.5 does **not** validate that field on an incoming item — it indexes its layer bitset with whatever arrives — so `BL_UNDEFINED` is answered with an access violation that terminates the process and takes the user's unsaved board with it (#237). Voltaris sees only an NNG receive timeout.
+`builders::layer_from_name` maps a layer name to a `BoardLayer`, and anything it does not know becomes `BL_UNDEFINED`. KiCad 10.0.5 does **not** validate that field on an incoming item — it indexes its layer bitset with whatever arrives — so `BL_UNDEFINED` is answered with an access violation that terminates the process and takes the user's unsaved board with it. Voltaris sees only an NNG receive timeout.
 
 So on any path that puts a layer into a message bound for KiCad, use **`builders::try_layer_from_name`**, which refuses instead. `client.rs::build_footprint_item` validates the root layer, every pad layer and every graphic layer before it builds a single child; the `*.Cu`/`*.Mask`/`*.Paste` wildcards KiCad itself writes are expanded rather than mapped, so they are skipped.
 
@@ -341,7 +341,7 @@ Each `CallRecord` includes: `call_id`, `ts` (unix ms), `tool`, `toolset` (option
 
 The observer is constructed once by `McpHandler::new` and stashed on both the handler and `ToolContext` so meta-tools can reach it. IO failures on the JSONL file never fail the tool call — they `tracing::warn!` and are silently dropped. Tests construct an in-memory-only observer via `ToolContext::new(...)` (no `log_path`).
 
-Source: [`crates/voltaris-core/src/observability.rs`](crates/voltaris-core/src/observability.rs).
+Source: [`crates/voltaris-core/src/observability.rs`](../../crates/voltaris-core/src/observability.rs).
 
 ## Tool Routing (Starter Kit + On-Demand Loading)
 
@@ -353,13 +353,13 @@ The server does NOT expose all 253 tools (260 total with the 7 meta-tools) in `t
 - **Error recovery**: if the LLM calls an unloaded tool, `handler.rs` returns an actionable error naming the toolset that owns it (so the LLM can load it and retry in one hop — no extra `list_toolboxes` round-trip).
 - **`auto_load_toolsets` (config key, default `false`)**: when set, a miss in `dispatch_tool` loads the owning toolset and executes the call in the same hop instead of returning `toolset_not_loaded` -- fewer round trips, at the cost of toolsets accumulating monotonically for the rest of the session (`unload_toolset` still prunes, but a tool call reloads its toolset right back). Off by default because the router's whole point is keeping `tools/list` small; turn it on only if your client would rather eat the context growth than handle one recoverable error per miss. Set via `voltaris.toml`/`settings.json` (`auto_load_toolsets = true`) or the equivalent `ServerConfig` field when embedding.
 
-- **`eager_toolsets` (config key, default `false`)**: pre-loads every toolset at startup via `ToolRouter::load_all`, so the *first* `tools/list` is the full catalogue. This is for MCP clients that cache the initial tool list and never act on `notifications/tools/list_changed` — for those, a tool absent from the first listing can never be called at all, because `load_toolset` reports the names it loaded but returns no schemas and the client has nothing to invoke (#134, #169). Note `auto_load_toolsets` does **not** cover this case: it fires on a tool *call*, so it only helps a caller that already knows the tool name. Costs ~25K tokens per listing against the ~2K baseline, which is the router's entire reason for existing — hence off by default.
+- **`eager_toolsets` (config key, default `false`)**: pre-loads every toolset at startup via `ToolRouter::load_all`, so the *first* `tools/list` is the full catalogue. This is for MCP clients that cache the initial tool list and never act on `notifications/tools/list_changed` — for those, a tool absent from the first listing can never be called at all, because `load_toolset` reports the names it loaded but returns no schemas and the client has nothing to invoke. Note `auto_load_toolsets` does **not** cover this case: it fires on a tool *call*, so it only helps a caller that already knows the tool name. Costs ~25K tokens per listing against the ~2K baseline, which is the router's entire reason for existing — hence off by default.
 
 The router is defined in `crates/voltaris-core/src/router/mod.rs`.
 
 ## Build Requirements
 
-- Rust toolchain pinned by [`rust-toolchain.toml`](rust-toolchain.toml) (currently 1.96.0) —
+- Rust toolchain pinned by [`rust-toolchain.toml`](../../rust-toolchain.toml) (currently 1.96.0) —
   rustup picks it up automatically, and CI compiles with the same version. The pinned
   version IS the MSRV: bump it deliberately, in its own commit, after running the full
   local gate on the new version.

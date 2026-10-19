@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Typed KiCAD schematic parser and manipulator with lossless round-trips"
+description = "Typed KiCad schematic parser and manipulator with lossless round-trips"
 
 [dependencies]
 thiserror.workspace = true

@@ -1,8 +1,8 @@
 //! Issue #23 regression tests: footprint moves must carry the children along.
 //!
-//! KiCAD serializes a FootprintInstance's pads/graphics/fields in ABSOLUTE
+//! KiCad serializes a FootprintInstance's pads/graphics/fields in ABSOLUTE
 //! board coordinates and re-creates them verbatim from an UpdateItems message.
-//! These tests stand up a mock KiCAD (same NNG rep0 approach as
+//! These tests stand up a mock KiCad (same NNG rep0 approach as
 //! mock_server_test.rs) serving a footprint at (100,100) and assert that
 //! move/rotate requests arrive with every child transformed, not just the
 //! anchor.
@@ -148,7 +148,7 @@ fn mk_model(filename: &str) -> prost_types::Any {
 }
 
 /// An R1 footprint anchored at (100,100) with two pads, a silk segment, and
-/// a reference field, all in absolute board coordinates like KiCAD sends.
+/// a reference field, all in absolute board coordinates like KiCad sends.
 fn mk_footprint_r1() -> kiapi::board::types::FootprintInstance {
     kiapi::board::types::FootprintInstance {
         id: Some(kiapi::common::types::Kiid {
@@ -182,7 +182,7 @@ enum UpdateBehavior {
     Ignore,
 }
 
-/// Mock KiCAD serving `fp` for GetItems and recording the UpdateItems it
+/// Mock KiCad serving `fp` for GetItems and recording the UpdateItems it
 /// receives.
 fn spawn_footprint_mock(fp: kiapi::board::types::FootprintInstance) -> (MockKicad, CapturedUpdate) {
     spawn_footprints_mock(vec![fp])
@@ -398,7 +398,7 @@ fn rotate_footprint_rotates_children_around_anchor() {
 
     assert_eq!(sent.orientation.unwrap().value_degrees, 90.0);
 
-    // KiCAD-positive rotation is counterclockwise on screen (Y axis down):
+    // KiCad-positive rotation is counterclockwise on screen (Y axis down):
     // pad at (99,100) rotates to (100,101); pad at (101,100) to (100,99).
     assert_eq!(pad_positions_mm(&sent), vec![(100.0, 101.0), (100.0, 99.0)]);
 

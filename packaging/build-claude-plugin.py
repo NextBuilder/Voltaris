@@ -15,7 +15,7 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "crates" / "voltaris" / "assets"
 TEMPLATE = ROOT / "packaging" / "claude-plugin"
-EXTRA_REFERENCES = {"voltaris": {"reliability-contract.md": ROOT / "docs" / "RELIABILITY_CONTRACT.md"}}
+EXTRA_REFERENCES = {"voltaris": {"reliability-contract.md": ROOT / "docs" / "dev" / "RELIABILITY_CONTRACT.md"}}
 SKILL_KEYS = {"name", "description", "license", "allowed-tools", "metadata"}
 AGENT_DROP = {"tools"}
 

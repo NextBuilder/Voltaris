@@ -125,7 +125,7 @@ and macOS the socket is a filesystem entry and its metadata is read. On Windows
 KiCad's `ipc://` endpoint is a **named pipe**, which has no filesystem presence
 at all, so the same path is looked up in the pipe namespace (`\\.\pipe\`)
 instead. Before that was true, Windows detected nothing and every setup had to
-be configured by hand (#529); if you are on a Voltaris older than that fix, set
+be configured by hand; if you are on a Voltaris older than that fix, set
 `ipc_address` or `KICAD_API_SOCKET` explicitly.
 
 If the address is unresolved, both of the following must be correct — neither
@@ -134,8 +134,7 @@ happens automatically:
 1. **The socket path in Voltaris's plugin settings** (inside KiCad)
 2. **The Voltaris server registration in your AI client's MCP config**
 
-Step by step (based on the diagnostic guide contributed in
-#18):
+Step by step:
 
 1. Open KiCad normally.
 2. Go to **Edit → Preferences → Plugins** and check **"Enable KiCad API"**.
@@ -153,7 +152,7 @@ Step by step (based on the diagnostic guide contributed in
 5. Confirm your AI client (Claude Code, Claude Desktop, …) has the `voltaris`
    MCP server registered in its own config (`.mcp.json` or
    `claude_desktop_config.json`) pointing at the `voltaris` binary — see
-   [examples/](../examples/). This registration is separate from the KiCad
+   [examples/](examples). This registration is separate from the KiCad
    plugin settings.
 6. Restart the AI client session so it spawns a fresh Voltaris process that
    reads the saved settings.
@@ -333,7 +332,7 @@ board already saved by an affected release.
 
 Open the affected board in KiCad, load `pcb_components`, and call
 `repair_corrupted_footprints` with the board path. Its default dry run scans
-for #244's exact signature: an anonymous pad with no net and an empty layer set,
+for the exact corruption signature: an anonymous pad with no net and an empty layer set,
 paired one-for-one with a drawing shape missing from the registered footprint
 library. It refuses ambiguous pad layouts or an unavailable library rather
 than guessing. Optionally pass `references` to restrict the scan.
@@ -452,9 +451,8 @@ re-fetch `tools/list` in response. If newly loaded tools never show up:
 1. Check your client honors `notifications/tools/list_changed` (most current MCP
    clients do; some cache the initial tool list forever).
 2. Disable any competing tool-search or tool-filter layer sitting between the
-   model and the server. A Chrome-extension "tool search" that shadowed the real
-   tool list caused exactly this in
-   #67.
+   model and the server. A browser-extension "tool search" that shadows the real
+   tool list causes exactly this.
 3. Re-issue `tools/list` (e.g. restart the client session) — the loaded toolset
    state lives in the server process and survives a list refresh.
 
@@ -462,10 +460,7 @@ If your client caches the initial tool list and never re-fetches it, none of the
 above helps: the tools are loaded server-side, but the client has no schema to
 invoke them with. `load_toolset` reports the names it loaded and *not* their
 schemas, so a model can see a tool named in the reply and still be unable to
-call it. That is the symptom in
-#134 and
-#169 — reported against
-Claude Desktop.
+call it. That is the symptom some older Claude Desktop builds showed.
 
 For clients that cache the initial list but do not also cap the number of
 callable tools, the fix is to make the *first* listing complete:
@@ -487,8 +482,7 @@ tool name — so it does nothing for a client whose tool list is stale.
 ## VS Code Copilot says a tool is "currently disabled by the user"
 
 That exact message comes from the VS Code Copilot client layer, not Voltaris.
-In the confirmed report in
-#325, the attempted calls did
+In confirmed reports, the attempted calls did
 not appear in Voltaris's `get_recent_calls` output because Copilot refused them
 before they reached the server.
 
@@ -499,7 +493,7 @@ Two Copilot behaviors make the normal toolset settings ineffective:
   later therefore remain unavailable to the model.
 - With `eager_toolsets = true`, Voltaris advertises its full catalog at startup,
   but Copilot applies its own total callable-tool budget across all configured
-  MCP servers. The #325 reporter measured a 128-tool ceiling and saw only an
+  MCP servers. Users have measured a 128-tool ceiling and saw only an
   arbitrary, changing subset of Voltaris tools exposed. Tools outside that
   subset produced "currently disabled by the user."
 
@@ -513,18 +507,14 @@ Current options are:
    need below the client's budget.
 2. Use an MCP client that honors `tools/list_changed` or can expose Voltaris's
    full catalog.
-3. Use the community two-tool proxy pattern demonstrated in
-   the #325 follow-up:
+3. Use a two-tool proxy:
    expose only `voltaris_help` and `voltaris_call` to Copilot, let
    `voltaris_help()` list names or return one tool's description and schema,
    and let `voltaris_call(tool, arguments)` forward the actual call to a child
    Voltaris process started with `eager_toolsets = true`.
 
-The proxy is a community workaround attached to the issue, not code shipped or
-reviewed by Voltaris; inspect it and configure its executable path before use.
-A native compact tool-surface mode and MCP tool-directory resource are planned
-in the [client compatibility roadmap](../ROADMAP.md#4-client-compatibility),
-but are not available yet.
+The proxy is a workaround, not code shipped with Voltaris.
+A native compact tool-surface mode is planned but not available yet.
 
 ## Plugin doesn't appear in KiCad
 
@@ -540,7 +530,6 @@ active layer belongs to the editor session, not the `.kicad_pcb` document.
 
 Close the board in KiCad, make a backup copy, remove only the injected
 `(active_layer "...")` line from the board file, and reopen the board. Do not
-remove the surrounding `(setup ...)` block. Voltaris versions containing the
-fix for #610 refuse `set_active_layer` with `unsupported_capability` and leave
+remove the surrounding `(setup ...)` block. Current Voltaris versions refuse `set_active_layer` with `unsupported_capability` and leave
 the file byte-identical until stable KiCad IPC exposes a native operation with
 readback.

@@ -1,6 +1,6 @@
 //! The tool counts quoted in the docs must match the registry.
 //!
-//! CONTRIBUTING asks for `router/registry.rs`, `docs/TOOLS.md`, docs/DEVELOPMENT.md's
+//! CONTRIBUTING asks for `router/registry.rs`, `docs/TOOLS.md`, docs/dev/DEVELOPMENT.md's
 //! "Current Stats" and the README to move together, and notes that "those
 //! three counts have drifted apart before precisely because only one of them
 //! got updated". Nothing enforced it: `registry_tool_counts_match_reality`
@@ -8,7 +8,7 @@
 //! adds a tool and updates two of the four documents is green.
 //!
 //! That is not hypothetical — PRs #159 and #160 each bump `registry.rs`,
-//! `docs/TOOLS.md` and docs/DEVELOPMENT.md while leaving README.md behind, and CI has
+//! `docs/TOOLS.md` and docs/dev/DEVELOPMENT.md while leaving README.md behind, and CI has
 //! nothing to say about it.
 //!
 //! So derive the numbers from the registry and require the prose to agree.
@@ -52,11 +52,11 @@ fn required_phrases() -> Vec<(&'static str, String)> {
             format!("**{registered} tools across {toolsets} on-demand toolsets.**"),
         ),
         (
-            "docs/DEVELOPMENT.md",
+            "docs/dev/DEVELOPMENT.md",
             format!("**{toolsets} toolsets, {registered} tools** + {meta} meta-tools"),
         ),
         (
-            "docs/DEVELOPMENT.md",
+            "docs/dev/DEVELOPMENT.md",
             format!("{total} tools ({registered} registered + {meta} meta)"),
         ),
         (
@@ -79,7 +79,7 @@ fn docs_quote_the_registry_tool_counts() {
     assert!(
         wrong.is_empty(),
         "tool counts have drifted from the registry.\n{}\n\n\
-         Update registry.rs, docs/TOOLS.md, docs/DEVELOPMENT.md's \"Current Stats\" and \
+         Update registry.rs, docs/TOOLS.md, docs/dev/DEVELOPMENT.md's \"Current Stats\" and \
          the README together — see CONTRIBUTING.",
         wrong.join("\n")
     );
@@ -113,14 +113,14 @@ fn tool_directory_lists_every_registered_tool() {
 /// No file anywhere quotes a catalogue total that is not the current one.
 ///
 /// The checks above name the four files CONTRIBUTING lists, which is why
-/// `packaging/metadata.json` and `plugin/plugin.json` sat at "185 tools" while
+/// `packaging/metadata.json` and `kicad-plugin/plugin.json` sat at "185 tools" while
 /// the guarded documents said 200 — and those two are the ones users read, in
 /// the PCM package description. `docs/TROUBLESHOOTING.md` said 189.
 ///
 /// Sweeping instead of listing means a new document is covered the day it is
 /// written rather than the day someone remembers to add it here. Only
 /// three-digit counts are checked: a per-toolset count cannot reach 100 with
-/// `MAX_TOOLS_PER_TOOLSET` at 20, so docs/DEVELOPMENT.md's per-toolset tables are
+/// `MAX_TOOLS_PER_TOOLSET` at 20, so docs/dev/DEVELOPMENT.md's per-toolset tables are
 /// unambiguously not catalogue totals and are left alone.
 #[test]
 fn no_file_quotes_a_stale_catalogue_total() {
@@ -355,9 +355,9 @@ fn counts_before(line: &str, noun: &str) -> Vec<usize> {
 #[test]
 fn docs_quote_the_meta_tool_count() {
     let (_, _, meta) = counts();
-    let dev = read("docs/DEVELOPMENT.md");
+    let dev = read("docs/dev/DEVELOPMENT.md");
     assert!(
         dev.contains(&format!("{meta} meta-tools")),
-        "docs/DEVELOPMENT.md must state \"{meta} meta-tools\" — the registry defines {meta}"
+        "docs/dev/DEVELOPMENT.md must state \"{meta} meta-tools\" — the registry defines {meta}"
     );
 }

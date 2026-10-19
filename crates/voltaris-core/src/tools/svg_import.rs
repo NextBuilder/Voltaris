@@ -7,7 +7,7 @@
 //!   - `extract_polygons` — the thin `usvg` integration that walks a parsed SVG
 //!     tree and adapts its path segments into `SvgSegment`s.
 //!
-//! KiCAD's polygon format (`PolyLine`/`gr_poly`) only supports straight points
+//! KiCad's polygon format (`PolyLine`/`gr_poly`) only supports straight points
 //! and circular arcs, not cubic Bezier curves, so any curved SVG path must be
 //! flattened into a point sequence before it can become filled artwork.
 

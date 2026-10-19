@@ -1,16 +1,16 @@
-//! Protobuf message builders for KiCAD 10 IPC API.
+//! Protobuf message builders for KiCad 10 IPC API.
 //!
 //! These helpers construct the protobuf messages needed to create, update, and
 //! delete PCB items via the IPC API.
 
 use crate::gen::kiapi;
 
-/// Converts millimeters to KiCAD nanometers.
+/// Converts millimeters to KiCad nanometers.
 pub fn mm_to_nm(mm: f64) -> i64 {
     (mm * 1_000_000.0) as i64
 }
 
-/// Converts KiCAD nanometers to millimeters.
+/// Converts KiCad nanometers to millimeters.
 pub fn nm_to_mm(nm: i64) -> f64 {
     nm as f64 / 1_000_000.0
 }
@@ -41,13 +41,13 @@ pub fn net(name: &str, code: i32) -> kiapi::board::types::Net {
 /// Map a layer name string to the BoardLayer enum value, or `BlUndefined` when
 /// this build has no representation for it.
 ///
-/// Covers every layer a KiCAD 10 board or footprint can legally draw on. It
+/// Covers every layer a KiCad 10 board or footprint can legally draw on. It
 /// used to stop at `In2.Cu` and omit the four user layers, the two adhesive
 /// layers, `Margin` and `Rescue`, so an ordinary official footprint with a
 /// `Dwgs.User` outline serialised as `BL_UNDEFINED` (#237).
 ///
-/// Callers building a message for KiCAD want [`try_layer_from_name`] instead:
-/// `BL_UNDEFINED` is not something KiCAD rejects, it is something it crashes
+/// Callers building a message for KiCad want [`try_layer_from_name`] instead:
+/// `BL_UNDEFINED` is not something KiCad rejects, it is something it crashes
 /// on.
 pub fn layer_from_name(name: &str) -> kiapi::board::types::BoardLayer {
     use kiapi::board::types::BoardLayer;
@@ -107,7 +107,7 @@ pub fn layer_from_name(name: &str) -> kiapi::board::types::BoardLayer {
     }
 }
 
-/// The canonical KiCAD name for a board layer — the exact inverse of
+/// The canonical KiCad name for a board layer — the exact inverse of
 /// [`layer_from_name`] over every layer it can represent.
 ///
 /// `None` for a value with no name (including `BL_UNDEFINED`); callers
@@ -174,8 +174,8 @@ pub fn layer_name(layer: kiapi::board::types::BoardLayer) -> Option<&'static str
 
 /// As [`layer_from_name`], but refusing a name this build cannot represent.
 ///
-/// Use this on every path that puts a layer into a message bound for KiCAD.
-/// KiCAD 10.0.5 does not validate a scalar layer field: it indexes its layer
+/// Use this on every path that puts a layer into a message bound for KiCad.
+/// KiCad 10.0.5 does not validate a scalar layer field: it indexes its layer
 /// bitset with whatever arrives, so `BL_UNDEFINED` is not received as an error
 /// but as an access violation that terminates the process and discards the
 /// user's unsaved board (#237). An unrepresentable layer has to stop here,
@@ -183,7 +183,7 @@ pub fn layer_name(layer: kiapi::board::types::BoardLayer) -> Option<&'static str
 pub fn try_layer_from_name(name: &str) -> anyhow::Result<kiapi::board::types::BoardLayer> {
     match layer_from_name(name) {
         kiapi::board::types::BoardLayer::BlUndefined => anyhow::bail!(
-            "layer '{name}' has no KiCAD board layer this build can represent, so the \
+            "layer '{name}' has no KiCad board layer this build can represent, so the \
              request was not sent"
         ),
         layer => Ok(layer),
@@ -203,7 +203,7 @@ pub fn build_track(
     y2: f64,
 ) -> kiapi::board::types::Track {
     kiapi::board::types::Track {
-        id: None, // KiCAD assigns the ID
+        id: None, // KiCad assigns the ID
         start: Some(vec2(x1, y1)),
         end: Some(vec2(x2, y2)),
         width: Some(distance(width_mm)),
@@ -293,7 +293,7 @@ pub fn build_via(
     };
 
     kiapi::board::types::Via {
-        id: None, // KiCAD assigns the ID
+        id: None, // KiCad assigns the ID
         position: Some(vec2(x, y)),
         pad_stack: Some(pad_stack),
         locked: kiapi::common::types::LockedState::LsUnlocked as i32,
@@ -391,7 +391,7 @@ pub fn build_zone(spec: &ZoneSpec<'_>, net_code: i32) -> kiapi::board::types::Zo
     };
 
     kiapi::board::types::Zone {
-        id: None, // KiCAD assigns the ID
+        id: None, // KiCad assigns the ID
         r#type: ZoneType::ZtCopper as i32,
         layers: vec![layer_from_name(spec.layer) as i32],
         outline: Some(outline),
@@ -420,7 +420,7 @@ pub fn pack_any<M: prost::Message>(msg: &M, type_name: &str) -> prost_types::Any
     }
 }
 
-/// Whether a packed `Any` carries the named KiCAD message type.
+/// Whether a packed `Any` carries the named KiCad message type.
 ///
 /// A footprint definition keeps its pads, graphic shapes, text, fields and
 /// zones in **one** repeated `Any` field, so anything picking a particular kind
@@ -490,7 +490,7 @@ fn board_shape(
         }),
         layer: layer_from_name(layer) as i32,
         net: None,
-        id: None, // KiCAD assigns
+        id: None, // KiCad assigns
         locked: kiapi::common::types::LockedState::LsUnlocked as i32,
         parent: None,
     }
@@ -557,7 +557,7 @@ pub fn board_circle(
         kiapi::common::types::graphic_shape::Geometry::Circle(
             kiapi::common::types::GraphicCircleAttributes {
                 center: Some(vec2(cx, cy)),
-                // Point on the circumference -- KiCAD stores this rather than a radius scalar.
+                // Point on the circumference -- KiCad stores this rather than a radius scalar.
                 radius_point: Some(vec2(cx + r_mm, cy)),
             },
         ),
@@ -777,7 +777,7 @@ pub(crate) mod tests {
         );
         assert_eq!(zone.name, "ground pour");
         assert_eq!(zone.priority, 2);
-        assert!(zone.id.is_none(), "KiCAD assigns the id");
+        assert!(zone.id.is_none(), "KiCad assigns the id");
 
         // mm → nm, and the loop is closed for the caller.
         let outline = zone.outline.expect("outline");
@@ -905,13 +905,13 @@ pub(crate) mod tests {
         assert!(any_is(&bare, "kiapi.board.types.Pad"));
     }
 
-    /// Every layer a KiCAD 10 footprint may legally draw on has a `BoardLayer`.
+    /// Every layer a KiCad 10 footprint may legally draw on has a `BoardLayer`.
     ///
     /// `Dwgs.User` is the one that mattered: two official library footprints
     /// (`Connector_USB:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal`
     /// and `Connector:BJB_Pico_46.110.1001_Receptacle_Horizontal`) carry
     /// `Dwgs.User` children, this map returned `BL_UNDEFINED` for them, and
-    /// KiCAD 10.0.5 faults consuming that value rather than refusing the
+    /// KiCad 10.0.5 faults consuming that value rather than refusing the
     /// message — taking the user's unsaved board with it (#237).
     #[test]
     fn every_footprint_drawing_layer_maps_to_a_real_board_layer() {
@@ -960,7 +960,7 @@ pub(crate) mod tests {
 
     /// A name with no `BoardLayer` is refused rather than converted to
     /// `BL_UNDEFINED`, because nothing downstream of here can tell the two
-    /// apart and KiCAD does not validate the field.
+    /// apart and KiCad does not validate the field.
     #[test]
     fn an_unrepresentable_layer_is_refused_not_silently_undefined() {
         assert!(try_layer_from_name("F.Cu").is_ok());
@@ -1169,7 +1169,7 @@ pub(crate) mod tests {
         assert_normal_padstack_is_unpackable(&ps, "build_via");
     }
 
-    /// KiCad's own rule, enforceable without a running KiCAD.
+    /// KiCad's own rule, enforceable without a running KiCad.
     ///
     /// `PADSTACK::unpackCopperLayer` bails when `m_mode == MODE::NORMAL` and
     /// the entry's layer is not `ALL_LAYERS` (`== F_Cu`), which fails the

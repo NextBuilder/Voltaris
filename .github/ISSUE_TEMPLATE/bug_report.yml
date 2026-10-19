@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in Voltaris doesn't work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked Claude to do, and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Voltaris version
+      placeholder: "0.13.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Claude app
+      options: [Claude app (Cowork), Claude Code, Claude Desktop, Other MCP client]
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and KiCad version
+      placeholder: "Windows 11, KiCad 10.0.6"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or tool output
+      description: Paste the failing tool call's response if you have it.
+      render: text

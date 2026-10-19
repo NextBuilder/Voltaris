@@ -1,13 +1,13 @@
 //! Golden-file conformance suite.
 //!
-//! Oracle: schematics authored by eeschema itself. KiCAD installs a demo
+//! Oracle: schematics authored by eeschema itself. KiCad installs a demo
 //! corpus (`share/kicad/demos`) full of real, hierarchy-heavy, multi-unit
 //! designs — if our parser or editors disagree with anything in there, we
-//! disagree with KiCAD.
+//! disagree with KiCad.
 //!
-//! These tests locate an installed KiCAD (or `KICAD_DEMOS` env override) and
+//! These tests locate an installed KiCad (or `KICAD_DEMOS` env override) and
 //! SKIP silently when none is present, so plain CI stays green while the
-//! scheduled real-KiCAD workflow and local dev runs get full coverage.
+//! scheduled real-KiCad workflow and local dev runs get full coverage.
 //! (Same skip pattern the predecessor project used for its kicad-cli tests.)
 
 use std::path::PathBuf;
@@ -58,7 +58,7 @@ fn collect_schematics(root: &std::path::Path) -> Vec<PathBuf> {
 #[test]
 fn every_installed_demo_schematic_parses() {
     let Some(root) = demo_dirs() else {
-        eprintln!("SKIP: no KiCAD demos found (set KICAD_DEMOS to enable)");
+        eprintln!("SKIP: no KiCad demos found (set KICAD_DEMOS to enable)");
         return;
     };
     let schematics = collect_schematics(&root);
@@ -99,7 +99,7 @@ fn every_installed_demo_schematic_parses() {
 #[test]
 fn demo_corpus_structural_extraction() {
     let Some(root) = demo_dirs() else {
-        eprintln!("SKIP: no KiCAD demos found");
+        eprintln!("SKIP: no KiCad demos found");
         return;
     };
     use voltaris_sexp::schematic::{extract_symbol_instances, extract_wires};
@@ -132,7 +132,7 @@ fn demo_corpus_structural_extraction() {
 #[test]
 fn demo_files_survive_edit_cycle() {
     let Some(root) = demo_dirs() else {
-        eprintln!("SKIP: no KiCAD demos found");
+        eprintln!("SKIP: no KiCad demos found");
         return;
     };
     let schematics = collect_schematics(&root);

@@ -3,7 +3,7 @@
 //!
 //! `server.pid` only ever named the last server started through the Python
 //! ActionPlugin's toolbar button. KiCad 10 launches the binary itself —
-//! `plugin/plugin.json` declares `"runtime": { "type": "exec" }` with
+//! `kicad-plugin/plugin.json` declares `"runtime": { "type": "exec" }` with
 //! `"entrypoint": "bin/voltaris"` — so for the configuration most users are on
 //! the Python bookkeeping is never in the picture, and nothing records the
 //! server at all. An HTTP server compounds it: `run_http` never reads stdin,
@@ -533,7 +533,7 @@ mod tests {
     /// nothing else — the server still has to serve.
     /// The body is a persisted format a stranger reads by hand, so its field
     /// names are part of the contract rather than an implementation detail.
-    /// `docs/NAMING_CONVENTIONS.md` requires a filesystem path to carry the
+    /// `docs/dev/NAMING_CONVENTIONS.md` requires a filesystem path to carry the
     /// `_path` suffix, and a record already on disk cannot be renamed later
     /// without a migration — which is why this is pinned by a test and not by
     /// the reviewer who happens to read the struct next.

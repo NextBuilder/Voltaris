@@ -668,7 +668,7 @@ impl Connection<'_> {
 ///
 /// A local `NetLabel` cannot: it names a net within one sheet, so a count taken
 /// from that sheet is the whole answer. The other three can, and a reader has
-/// to know which it is holding. `GlobalLabel` and a power symbol — which KiCAD
+/// to know which it is holding. `GlobalLabel` and a power symbol — which KiCad
 /// makes a global label out of — join every same-named net in the project;
 /// `HierarchicalLabel` continues through the parent's sheet pin.
 fn reaches_beyond_this_sheet(kind: &LabelKind) -> bool {
@@ -767,7 +767,7 @@ async fn handle_find_single_pin_nets(
 
     // Each net name, the roots its labels sit on, and the first label to name
     // it. Two labels of one name on segments that never meet are still one net
-    // to KiCAD, so the roots pool.
+    // to KiCad, so the roots pool.
     struct NamedNet<'a> {
         roots: HashSet<(i64, i64)>,
         label_count: usize,
@@ -1280,7 +1280,7 @@ mod orphan_item_tests {
     }
 
     /// The reported #249 case: a label directly on a pin without a wire is a
-    /// legal KiCAD connection and connects both items.
+    /// legal KiCad connection and connects both items.
     #[tokio::test]
     async fn a_label_on_a_bare_pin_connects_both_items() {
         let items = orphans("  (label \"NC_SIG\" (at 150 150 0))\n").await;
@@ -1548,7 +1548,7 @@ mod single_pin_net_tests {
         assert_eq!(lone["pins"][0]["pin"], "2");
     }
 
-    /// `LONE`'s two labels sit on wire segments that never touch. KiCAD joins
+    /// `LONE`'s two labels sit on wire segments that never touch. KiCad joins
     /// them by name, so the pins under both roots are one net's pins — count
     /// them per root and the one pin under the far root is a second net that
     /// reaches nothing.
@@ -1650,7 +1650,7 @@ mod single_pin_net_tests {
         assert_eq!(stub["cross_sheet_unverified"], false);
     }
 
-    /// A power symbol is a global label in KiCAD, so a rail counted on one
+    /// A power symbol is a global label in KiCad, so a rail counted on one
     /// sheet is a lead, not a finding — even when, as here, the project-wide
     /// netlist agrees that `VCC` reaches exactly one pin.
     #[tokio::test]

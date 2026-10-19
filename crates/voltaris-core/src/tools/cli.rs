@@ -1,9 +1,9 @@
-//! kicad-cli subprocess wrapper for KiCAD 10.
+//! kicad-cli subprocess wrapper for KiCad 10.
 //!
 //! All exports, ERC, DRC, and annotation operations shell out to kicad-cli.
 //! This module provides a typed interface to those commands.
 //!
-//! VERIFIED against: kicad-cli from KiCAD 10.0 (C:\Program Files\KiCad\10.0\bin\kicad-cli.exe)
+//! VERIFIED against: kicad-cli from KiCad 10.0 (C:\Program Files\KiCad\10.0\bin\kicad-cli.exe)
 //! Commands validated: sch erc, sch export (bom/netlist/pdf/svg), pcb drc,
 //!   pcb export (gerbers/drill/pdf/svg/step/vrml/pos/ipcd356/dxf/gencad/ipc2581/odb),
 //!   pcb render
@@ -333,7 +333,7 @@ impl DrcReport {
     }
 }
 
-// ─── KiCAD CLI Runner ─────────────────────────────────────────────────────────
+// ─── KiCad CLI Runner ─────────────────────────────────────────────────────────
 
 /// Turn the configured `kicad_cli` value into something `Command::new` can
 /// actually start.
@@ -727,7 +727,7 @@ const ERC_JSON_SCALE_FIXED_IN: (u64, u64, u64) = (10, 0, 7);
 const KICAD_DEVELOPMENT_MINOR: u64 = 99;
 
 /// Run ERC on a schematic and return parsed violations.
-/// KiCAD 10: `sch erc --output <path> --format json <input>`
+/// KiCad 10: `sch erc --output <path> --format json <input>`
 pub async fn run_erc(cli: &str, schematic: &Path) -> Result<ErcReport> {
     run_erc_with_temp_root(cli, schematic, None).await
 }
@@ -880,7 +880,7 @@ fn parse_kicad_version(version: &str) -> Option<(u64, u64, u64)> {
 /// `parse_drc_report` makes the same decision for DRC. Fields the schema
 /// leaves optional (`items`, `pos`, `uuid`, `kicad_version`) stay optional.
 pub(crate) fn parse_erc_json(raw: &serde_json::Value) -> Result<ErcReport> {
-    // KiCAD's ERC report (https://schemas.kicad.org/erc.v1.json) nests
+    // KiCad's ERC report (https://schemas.kicad.org/erc.v1.json) nests
     // violations per sheet — { "sheets": [ { "path": …, "violations": […] } ] }
     // — with positions on the affected items. There is no top-level
     // "violations" key (that's the DRC report's shape), so reading one here
@@ -999,7 +999,7 @@ fn parse_item_pos(item: &serde_json::Value) -> Option<ReportPos> {
 // ─── DRC ─────────────────────────────────────────────────────────────────────
 
 /// Run DRC on a PCB and return parsed violations.
-/// KiCAD 10: `pcb drc --output <path> --format json --schematic-parity
+/// KiCad 10: `pcb drc --output <path> --format json --schematic-parity
 /// [--refill-zones] <input>`
 pub async fn run_drc(cli: &str, pcb: &Path, refill_zones: bool) -> Result<DrcReport> {
     let out_path = pcb.with_extension("drc.json");
@@ -1210,7 +1210,7 @@ fn schematic_svg_args<'a>(
     args
 }
 
-/// KiCAD 10: `sch export svg --output <dir> [--black-and-white]
+/// KiCad 10: `sch export svg --output <dir> [--black-and-white]
 /// [--theme <name>] <input>`
 pub async fn export_schematic_svg(
     cli: &str,
@@ -1273,7 +1273,7 @@ fn schematic_pdf_args<'a>(
     args
 }
 
-/// KiCAD 10: `sch export pdf --output <path> [--black-and-white]
+/// KiCad 10: `sch export pdf --output <path> [--black-and-white]
 /// [--pages 1] <input>`
 pub async fn export_schematic_pdf(
     cli: &str,
@@ -1356,7 +1356,7 @@ fn bom_args_with_ref_range_delimiter<'a>(
     args
 }
 
-/// KiCAD 10: `sch export bom --output <path> [--fields …] [--labels …]
+/// KiCad 10: `sch export bom --output <path> [--fields …] [--labels …]
 /// [--group-by …] [--exclude-dnp] <input>`
 ///
 /// Note: v10 BOM does NOT use `--format`. Without `--fields` kicad-cli emits
@@ -1406,7 +1406,7 @@ async fn export_bom_with_options(
     Ok(())
 }
 
-/// KiCAD 10: `sch export netlist --output <path> --format <fmt> <input>`
+/// KiCad 10: `sch export netlist --output <path> --format <fmt> <input>`
 /// Valid formats: kicadsexpr, kicadxml, cadstar, orcadpcb2, spice, spicemodel, pads, allegro
 pub async fn export_netlist(
     cli: &str,
@@ -1552,7 +1552,7 @@ async fn drill_files_in(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// KiCAD 10: `pcb export drill --output <dir> <input>`
+/// KiCad 10: `pcb export drill --output <dir> <input>`
 ///
 /// `--output` is a **directory**, not a file: kicad-cli names the outputs after
 /// the board (`<board>-PTH.drl` and `<board>-NPTH.drl`). Handing it a filename
@@ -1604,7 +1604,7 @@ fn single_file_pcb_export_args(
     args
 }
 
-/// KiCAD 10: `pcb export pdf --output <path> --mode-single [--layers <a,b>]
+/// KiCad 10: `pcb export pdf --output <path> --mode-single [--layers <a,b>]
 /// [--black-and-white] <input>`
 pub async fn export_pdf(
     cli: &str,
@@ -1632,7 +1632,7 @@ pub async fn export_pdf(
     Ok(())
 }
 
-/// KiCAD 10: `pcb export svg --output <path> --mode-single [--layers <a,b>]
+/// KiCad 10: `pcb export svg --output <path> --mode-single [--layers <a,b>]
 /// [--black-and-white] <input>`
 pub async fn export_svg_pcb(
     cli: &str,
@@ -1653,7 +1653,7 @@ pub async fn export_svg_pcb(
     Ok(())
 }
 
-/// KiCAD 10: `pcb export <format> --output <path> [--no-unspecified] <input>`
+/// KiCad 10: `pcb export <format> --output <path> [--no-unspecified] <input>`
 /// Supported 3D formats: step, vrml, glb, brep, stl, ply, stpz, u3d, xao, 3dpdf
 fn export_3d_args<'a>(
     pcb: &'a str,
@@ -1787,7 +1787,7 @@ async fn export_position_file_with_options(
     Ok(())
 }
 
-/// KiCAD 10: `pcb export ipcd356 --output <path> <input>`
+/// KiCad 10: `pcb export ipcd356 --output <path> <input>`
 pub async fn export_ipcd356(cli: &str, pcb: &Path, output: &Path) -> Result<()> {
     let args = [
         "pcb",
@@ -1801,12 +1801,12 @@ pub async fn export_ipcd356(cli: &str, pcb: &Path, output: &Path) -> Result<()> 
     Ok(())
 }
 
-/// KiCAD 10: `pcb export dxf --output <dir> [--layers <csv>] --mode-multi <input>`
+/// KiCad 10: `pcb export dxf --output <dir> [--layers <csv>] --mode-multi <input>`
 ///
 /// `--layers` takes a single comma-separated value, the same as every PCB
 /// exporter (the pdf/svg wrappers used to repeat the flag per layer, which
-/// KiCAD 10 rejects — #250). DXF differs in output shape only: one file per
-/// requested layer is written into `output_dir` (verified against KiCAD 10.0).
+/// KiCad 10 rejects — #250). DXF differs in output shape only: one file per
+/// requested layer is written into `output_dir` (verified against KiCad 10.0).
 pub async fn export_dxf(cli: &str, pcb: &Path, output_dir: &Path, layers: &[&str]) -> Result<()> {
     let output_str = output_dir.to_str().unwrap();
     let pcb_str = pcb.to_str().unwrap();
@@ -1824,7 +1824,7 @@ pub async fn export_dxf(cli: &str, pcb: &Path, output_dir: &Path, layers: &[&str
     Ok(())
 }
 
-/// KiCAD 10: `pcb export gencad --output <path> <input>`
+/// KiCad 10: `pcb export gencad --output <path> <input>`
 pub async fn export_gencad(cli: &str, pcb: &Path, output: &Path) -> Result<()> {
     let args = [
         "pcb",
@@ -1838,7 +1838,7 @@ pub async fn export_gencad(cli: &str, pcb: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
-/// KiCAD 10: `pcb export ipc2581 --output <path> --units <mm|in> [--compress] <input>`
+/// KiCad 10: `pcb export ipc2581 --output <path> --units <mm|in> [--compress] <input>`
 pub async fn export_ipc2581(
     cli: &str,
     pcb: &Path,
@@ -1861,8 +1861,8 @@ pub async fn export_ipc2581(
     Ok(())
 }
 
-/// KiCAD 10: `pcb export odb --output <path> --units <mm|in> --compression <mode> <input>`
-/// Compression modes (verified against KiCAD 10.0): `zip`, `none`, `tgz`.
+/// KiCad 10: `pcb export odb --output <path> --units <mm|in> --compression <mode> <input>`
+/// Compression modes (verified against KiCad 10.0): `zip`, `none`, `tgz`.
 pub async fn export_odb(
     cli: &str,
     pcb: &Path,
@@ -1888,14 +1888,14 @@ pub async fn export_odb(
 
 // ─── Render to image ─────────────────────────────────────────────────────────
 
-/// Render schematic to SVG (no bitmap export in KiCAD 10 CLI).
-/// KiCAD 10: `sch export svg --output <dir> <input>`
+/// Render schematic to SVG (no bitmap export in KiCad 10 CLI).
+/// KiCad 10: `sch export svg --output <dir> <input>`
 pub async fn render_schematic_svg(cli: &str, schematic: &Path, output: &Path) -> Result<PathBuf> {
     let output_dir = output.parent().unwrap_or(Path::new("."));
     export_schematic_svg(cli, schematic, output_dir, &SchematicSvgOptions::default()).await
 }
 
-/// KiCAD 10: `pcb render --output <path> --width <w> --height <h> <input>`
+/// KiCad 10: `pcb render --output <path> --width <w> --height <h> <input>`
 ///
 /// `pcb render` is the 3-D renderer and takes **no** `--layers`: passing it
 /// makes kicad-cli exit non-zero with `Unknown argument: --layers`, which is
@@ -2165,7 +2165,7 @@ mod pcb_plot_export_tests {
 mod drc_parse_tests {
     use super::*;
 
-    /// Real `kicad-cli pcb drc --format json` output (KiCAD 10.0.0, schema
+    /// Real `kicad-cli pcb drc --format json` output (KiCad 10.0.0, schema
     /// https://schemas.kicad.org/drc.v1.json), captured from the bundled
     /// `ecc83-pp` demo with its track segments removed so KiCad would actually
     /// report unconnected items. Trimmed to two entries per category; nothing
@@ -2565,7 +2565,7 @@ mod erc_parse_tests {
         );
     }
 
-    /// Shape produced by `kicad-cli sch erc --format json` (KiCAD 10.0.3,
+    /// Shape produced by `kicad-cli sch erc --format json` (KiCad 10.0.3,
     /// schema https://schemas.kicad.org/erc.v1.json), trimmed to the fields
     /// the parser touches. Captured from a real run on a 2-resistor divider.
     fn real_report() -> serde_json::Value {
@@ -3396,7 +3396,7 @@ mod bom_export_tests {
     }
 
     /// Defaults must reproduce the previous argv exactly, so a caller that
-    /// wants KiCAD's own BOM keeps getting it.
+    /// wants KiCad's own BOM keeps getting it.
     #[test]
     fn default_options_are_the_bare_kicad_cli_invocation() {
         let args = bom_args("/out/bom.csv", "/s.kicad_sch", &BomOptions::default());

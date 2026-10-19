@@ -3,7 +3,7 @@
 This is the map layer for developers who need to understand Voltaris before
 changing it. Detailed implementation notes and the authoritative current tool
 statistics remain in [`DEVELOPMENT.md`](DEVELOPMENT.md); public naming and contribution rules
-remain in [`CONTRIBUTING.md`](../CONTRIBUTING.md) and
+remain in [`CONTRIBUTING.md`](../../CONTRIBUTING.md) and
 [`NAMING_CONVENTIONS.md`](NAMING_CONVENTIONS.md).
 
 Voltaris is a Rust MCP server with KiCad integration and packaging support. An

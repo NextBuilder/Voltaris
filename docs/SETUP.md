@@ -180,7 +180,7 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 ```
 
 Restart Claude Desktop and the Voltaris tools appear. For Claude Code, drop the same
-snippet into a `.mcp.json` in your project root (see [examples/](examples/)).
+snippet into a `.mcp.json` in your project root (see [examples/](examples)).
 
 ## Schematic viewer
 
@@ -200,14 +200,13 @@ by the AI via the `open_schematic_viewer` tool.
 
 Needs the WebView2 runtime (pre-installed on Windows 10/11) and a KiCad install for
 `kicad-cli` (auto-discovered, or pass `--kicad-cli <path>`). Built separately from
-the main workspace — see [DEVELOPMENT.md](DEVELOPMENT.md) for build steps.
+the main workspace — see [DEVELOPMENT.md](dev/DEVELOPMENT.md) for build steps.
 
 ## Requirements
 
 - KiCad 10 (Windows is the most-tested platform; macOS works from the release
   binaries or a source build — see the [macOS section](#macos) above. Linux
-  compiles and passes tests in CI but hasn't had per-platform QA yet; both are
-  tracked on the [roadmap](ROADMAP.md))
+  compiles and passes tests in CI but hasn't had per-platform QA yet)
 - `kicad-cli` (ships with KiCad — used for exports, ERC, DRC)
 - For most PCB tools: KiCad running with the target board open (IPC API).
   `place_component`, `move_component`, `rotate_component`, and (on KiCad

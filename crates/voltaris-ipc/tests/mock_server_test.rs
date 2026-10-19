@@ -1,9 +1,9 @@
-//! IPC client tests against a mock KiCAD NNG server — no KiCAD required.
+//! IPC client tests against a mock KiCad NNG server — no KiCad required.
 //!
-//! A rep0 socket on inproc://<unique-name> plays KiCAD: it decodes the
+//! A rep0 socket on inproc://<unique-name> plays KiCad: it decodes the
 //! ApiRequest envelope and returns canned ApiResponse messages. This lets CI
 //! exercise the full encode → transport → decode → error-mapping path that
-//! previously only ran against a live KiCAD session.
+//! previously only ran against a live KiCad session.
 
 use nng::options::Options;
 use prost::Message;
@@ -65,7 +65,7 @@ where
                     }
                 }
                 None => {
-                    // Simulate a wedged KiCAD: never reply. The rep socket
+                    // Simulate a wedged KiCad: never reply. The rep socket
                     // can't take another request until it replies, so just
                     // park until the test ends.
                     std::thread::sleep(Duration::from_secs(20));
@@ -500,7 +500,7 @@ fn kicad_error_status_maps_to_err() {
 
     let client = KiCadIpcClient::new(&mock.url);
     // ping() swallows errors into Ok(false) by design — that's the
-    // "KiCAD unreachable" UX. It must not be Ok(true) and must not hang.
+    // "KiCad unreachable" UX. It must not be Ok(true) and must not hang.
     assert!(!client.ping().unwrap());
 
     // KiCad received this request and refused it, so it is not "unreachable":
@@ -557,7 +557,7 @@ fn empty_socket_path_is_configuration_error() {
 // ParseAndCreateItemsFromString path) and adapted to the typed create_items
 // API: the per-item accounting bugs they guard are identical.
 
-/// A mock KiCAD with one board open that answers every CreateItems with
+/// A mock KiCad with one board open that answers every CreateItems with
 /// `results`.
 fn spawn_mock_creating(results: Vec<kiapi::common::commands::ItemCreationResult>) -> MockKicad {
     spawn_mock(move |request| {
@@ -618,13 +618,13 @@ fn a_rejected_item_is_not_counted_as_created() {
     // The per-item reason is what makes this diagnosable.
     assert!(
         err.contains("ISC_INVALID_DATA") && err.contains("footprint has no pads"),
-        "must surface KiCAD's own reason: {err}"
+        "must surface KiCad's own reason: {err}"
     );
 }
 
 #[test]
 fn an_empty_result_list_still_reports_failure() {
-    // KiCAD 10.0's actual behaviour: an empty CreateItemsResponse with IRS_OK.
+    // KiCad 10.0's actual behaviour: an empty CreateItemsResponse with IRS_OK.
     let mock = spawn_mock_creating(vec![]);
     let client = KiCadIpcClient::new(&mock.url);
     let err = client

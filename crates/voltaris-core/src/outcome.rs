@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn reliability_contract_inventory_is_reviewed_and_bounded() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let inventory_path = root.join("docs/reliability-legacy-inventory.json");
+        let inventory_path = root.join("docs/dev/reliability-legacy-inventory.json");
         let bytes = std::fs::read(&inventory_path).unwrap_or_else(|error| {
             panic!(
                 "reliability inventory {} must be tracked: {error}",

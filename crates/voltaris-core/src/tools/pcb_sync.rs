@@ -506,7 +506,7 @@ fn sync_response(
         "diagnostics": plan.diagnostics,
         // Schematic components with no footprint: reported per part with what
         // the board holds for them, never planned and never fatal (#507). A
-        // collection takes a plural noun (docs/NAMING_CONVENTIONS.md); the
+        // collection takes a plural noun (docs/dev/NAMING_CONVENTIONS.md); the
         // `coverage` entry beside it is a count category and stays singular.
         "unassigned_footprints": plan.unassigned,
         // What added footprints were staged beside: the live board as KiCad
