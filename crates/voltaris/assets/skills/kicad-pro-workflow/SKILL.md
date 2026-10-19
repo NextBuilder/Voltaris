@@ -23,7 +23,10 @@ circuits numerically), kicad-pro-layout (floor plan, placement and routing metho
 kicad-board-craft (form factor, connectors and the finished look), kicad-pro-silkscreen
 (designators, labels, polarity marks and the product block) and kicad-product-board (product
 decisions, proven circuit blocks, rules measured from shipped boards, the release package and
-the scorecard).
+the scorecard). For boards beyond two layers use kicad-multilayer (stackups, vias and BGA
+fan-out measured from 21 shipped multilayer boards); for high current or high voltage use
+kicad-power-electronics; and kicad-design-masters holds the experts' rules of thumb and the
+35-board world corpus every gate can be compared against.
 
 Two habits run through every gate:
 - **Snapshot before every large change** (applying templates, re-placing, autorouting,

@@ -104,6 +104,98 @@ fn group_findings(findings: Vec<Finding>) -> Vec<Finding> {
     out
 }
 
+/// Copper layers in stack order (F.Cu, In1.Cu, In2.Cu, …, B.Cu); KiCad 9+
+/// files list B.Cu second.
+fn stack_order(layers: &[String]) -> Vec<String> {
+    let rank = |l: &str| match l {
+        "F.Cu" => 0,
+        "B.Cu" => 1000,
+        _ => l
+            .trim_start_matches("In")
+            .trim_end_matches(".Cu")
+            .parse::<i32>()
+            .unwrap_or(500),
+    };
+    let mut out = layers.to_vec();
+    out.sort_by_key(|l| rank(l));
+    out
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Reference {
+    /// Every layer the signal uses sits next to one shared ground plane
+    /// (F.Cu → In2.Cu over an In1.Cu ground plane): no ground via needed.
+    Shared,
+    /// Each layer has a ground plane beside it, but not the same one.
+    Planes,
+    /// At least one layer has no ground plane beside it (2-layer boards).
+    Loose,
+}
+
+/// What the signal's return current can follow at this via.
+fn plane_reference(
+    board: &Board,
+    v: &super::model::Via,
+    net: &str,
+    stack: &[String],
+    planes: &BTreeSet<String>,
+) -> Reference {
+    let mut used: BTreeSet<&str> = BTreeSet::new();
+    for s in &board.segments {
+        if s.net.as_deref() == Some(net)
+            && (dist(s.a, v.at) <= v.size / 2.0 + 1e-3 || dist(s.b, v.at) <= v.size / 2.0 + 1e-3)
+        {
+            used.insert(s.layer.as_str());
+        }
+    }
+    if used.len() < 2 {
+        return Reference::Loose;
+    }
+    let refs = |layer: &str| -> BTreeSet<&str> {
+        let Some(i) = stack.iter().position(|l| l == layer) else {
+            return BTreeSet::new();
+        };
+        [i.checked_sub(1), Some(i + 1)]
+            .into_iter()
+            .flatten()
+            .filter_map(|j| stack.get(j))
+            .filter(|l| planes.contains(*l))
+            .map(String::as_str)
+            .collect()
+    };
+    let mut common: Option<BTreeSet<&str>> = None;
+    let mut all_referenced = true;
+    for layer in used {
+        let r = refs(layer);
+        all_referenced &= !r.is_empty();
+        common = Some(match common {
+            None => r,
+            Some(c) => c.intersection(&r).copied().collect(),
+        });
+    }
+    if common.is_some_and(|c| !c.is_empty()) {
+        Reference::Shared
+    } else if all_referenced && stack.len() >= 4 {
+        Reference::Planes
+    } else {
+        Reference::Loose
+    }
+}
+
+/// A supply rail, not a control or sense signal named after one
+/// (VCC_IO_EN, VBUS_DET, VDD_PG carry no current).
+fn is_power_rail(net: &str) -> bool {
+    const CONTROL: &[&str] = &[
+        "EN", "ENABLE", "PG", "PGOOD", "SENSE", "SNS", "FB", "MON", "OK", "CTRL", "ON", "DET",
+        "FLT", "FAULT", "ALERT", "SEL",
+    ];
+    is_power_net(net)
+        && !short_net(net)
+            .to_ascii_uppercase()
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|w| CONTROL.contains(&w))
+}
+
 fn edge_distance(outline: Rect, p: (f64, f64)) -> f64 {
     (p.0 - outline.0)
         .min(outline.2 - p.0)
@@ -134,6 +226,14 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         eng.take("outline", 30, 30);
     }
 
+    let stack = stack_order(&board.copper_layers);
+    let ground_planes: BTreeSet<String> = board
+        .zones
+        .iter()
+        .filter(|z| z.net.as_deref().is_some_and(is_ground))
+        .flat_map(|z| z.layers.iter().cloned())
+        .filter(|l| l.ends_with(".Cu"))
+        .collect();
     let mut fast_vias = 0;
     for v in &board.vias {
         let Some(net) = v.net.as_deref() else {
@@ -143,28 +243,43 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             continue;
         }
         fast_vias += 1;
+        let reference = match plane_reference(board, v, net, &stack, &ground_planes) {
+            Reference::Shared => continue,
+            r => r,
+        };
+        // Between two different ground planes the return current finds the
+        // nearest of the many stitching vias a multilayer board carries, so
+        // a looser radius applies there and a miss is advice, not a defect.
+        let planes = reference == Reference::Planes;
+        let radius = if planes {
+            opts.return_via_mm.max(2.5)
+        } else {
+            opts.return_via_mm
+        };
         let has_return = board.vias.iter().any(|g| {
-            g.net.as_deref().is_some_and(is_ground)
-                && dist(g.at, v.at) <= opts.return_via_mm + g.size / 2.0
+            g.net.as_deref().is_some_and(is_ground) && dist(g.at, v.at) <= radius + g.size / 2.0
         }) || board.pads.iter().any(|p| {
             p.through_hole
                 && p.net.as_deref().is_some_and(is_ground)
-                && p.distance_to(v.at) <= opts.return_via_mm
+                && p.distance_to(v.at) <= radius
         });
         if !has_return {
             findings.push(Finding {
-                severity: "warning",
+                severity: if planes { "info" } else { "warning" },
                 area: "engineering",
                 check: "return_via",
                 message: format!(
-                    "{} changes layer without a ground via within {} mm, so its return current loops around",
+                    "{} changes layer without a ground via within {radius} mm, so its return current loops around",
                     short_net(net),
-                    opts.return_via_mm
                 ),
                 at: Some(v.at),
                 fix: "add_via",
             });
-            eng.take("return_via", 4, 20);
+            if planes {
+                eng.take("return_via", 1, 8);
+            } else {
+                eng.take("return_via", 4, 20);
+            }
         }
     }
 
@@ -229,8 +344,9 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         if let Some((d, ic)) = nearest {
             if d > opts.decoupling_mm {
+                let far = d > opts.decoupling_mm + 2.0;
                 findings.push(Finding {
-                    severity: "warning",
+                    severity: if far { "warning" } else { "info" },
                     area: "engineering",
                     check: "decoupling_distance",
                     message: format!(
@@ -244,7 +360,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
                     at: Some(f.at),
                     fix: "smart_place",
                 });
-                eng.take("decoupling_distance", 3, 15);
+                eng.take("decoupling_distance", if far { 3 } else { 1 }, 15);
             }
         }
     }
@@ -257,9 +373,8 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         let Some(net) = s.net.as_deref() else {
             continue;
         };
-        let poured_ground = is_ground(net) && !board.poured_layers(net).is_empty();
-        if (is_power_net(net) || is_ground(net))
-            && !poured_ground
+        if (is_power_rail(net) || is_ground(net))
+            && board.poured_layers(net).is_empty()
             && s.width + 1e-9 < opts.min_power_width
         {
             let e = thin.entry(net.to_string()).or_insert((s.width, 0.0));
@@ -268,8 +383,9 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         }
     }
     for (net, (w, length)) in thin.iter().filter(|(_, (_, l))| *l > 3.0) {
+        let serious = *w < 0.25 && *length > 20.0;
         findings.push(Finding {
-            severity: if *w < 0.25 { "warning" } else { "info" },
+            severity: if serious { "warning" } else { "info" },
             area: "engineering",
             check: "thin_power_track",
             message: format!(
@@ -282,7 +398,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             at: None,
             fix: "calc_trace_width",
         });
-        eng.take("thin_power_track", if *w < 0.25 { 2 } else { 1 }, 8);
+        eng.take("thin_power_track", if serious { 2 } else { 1 }, 8);
     }
 
     // A corner is a point where exactly two tracks of one net meet on one
@@ -323,7 +439,9 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         let n1 = (v1.0 * v1.0 + v1.1 * v1.1).sqrt();
         let n2 = (v2.0 * v2.0 + v2.1 * v2.1).sqrt();
         let cos = (v1.0 * v2.0 + v1.1 * v2.1) / (n1 * n2);
-        if cos > 0.05 {
+        // Under about 10° the two tracks lie on top of each other: solid copper,
+        // not a corner that traps etchant.
+        if cos > 0.05 && cos < 0.985 {
             acute += 1;
             findings.push(Finding {
                 severity: "warning",
@@ -345,14 +463,21 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         }
     }
 
+    // Dense multilayer boards put vias in pads on purpose and order them
+    // filled and capped; on a cheap 2-layer board it is usually an accident.
+    let dense = board.copper_layers.len() >= 4;
+    let mut via_pads = BTreeSet::new();
     for v in &board.vias {
         if let Some(p) = board
             .pads
             .iter()
             .find(|p| !p.through_hole && p.distance_to(v.at) < 1e-6)
         {
+            if !via_pads.insert((p.reference.clone(), p.number.clone())) {
+                continue;
+            }
             findings.push(Finding {
-                severity: "warning",
+                severity: if dense { "info" } else { "warning" },
                 area: "engineering",
                 check: "via_in_pad",
                 message: format!(
@@ -362,11 +487,70 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
                 at: Some(v.at),
                 fix: "delete_trace",
             });
-            eng.take("via_in_pad", 3, 12);
+            eng.take("via_in_pad", if dense { 1 } else { 3 }, 12);
         }
     }
 
+    // Rule areas: an antenna keep-out or a mechanical zone is a hard rule.
+    let mut kept_out = Vec::new();
+    for k in &board.keepouts {
+        if k.no_tracks {
+            for s in board.segments.iter().filter(|s| k.on(&s.layer)) {
+                let mid = ((s.a.0 + s.b.0) / 2.0, (s.a.1 + s.b.1) / 2.0);
+                if [s.a, s.b, mid].into_iter().any(|p| k.contains(p)) {
+                    kept_out.push((
+                        format!(
+                            "a {} track",
+                            s.net.as_deref().map(short_net).unwrap_or("unconnected")
+                        ),
+                        mid,
+                    ));
+                }
+            }
+        }
+        if k.no_vias && k.layers.iter().any(|l| l.ends_with(".Cu")) {
+            for v in board.vias.iter().filter(|v| k.contains(v.at)) {
+                kept_out.push(("a via".to_string(), v.at));
+            }
+        }
+        if k.no_pads || k.no_footprints {
+            for f in board
+                .footprints
+                .iter()
+                .filter(|f| k.owner.as_deref() != Some(f.reference.as_str()))
+            {
+                let side = if f.back { "B.Cu" } else { "F.Cu" };
+                let pads_in = k.no_pads
+                    && f.pads.iter().any(|&i| {
+                        let p = &board.pads[i];
+                        // Netless holes (mounting, NPTH) carry no copper to keep out.
+                        p.net.is_some()
+                            && k.layers.iter().any(|l| p.on_layer(l))
+                            && k.contains(p.at)
+                    });
+                let body_in = k.no_footprints && k.on(side) && k.contains(f.at);
+                if pads_in || body_in {
+                    kept_out.push((f.reference.clone(), f.at));
+                }
+            }
+        }
+    }
+    for (what, at) in kept_out {
+        findings.push(Finding {
+            severity: "error",
+            area: "engineering",
+            check: "keepout_violation",
+            message: format!(
+                "{what} sits inside a keep-out area (antenna or mechanical clearance)"
+            ),
+            at: Some(at),
+            fix: "move_component",
+        });
+        eng.take("keepout_violation", 8, 24);
+    }
+
     let mut unrouted = 0usize;
+    let mut open_nets: Vec<String> = Vec::new();
     for net in board.nets() {
         let pads: Vec<usize> = board
             .pads
@@ -381,6 +565,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         let groups = super::router::component_count(board, &net, &pads);
         if groups > 1 {
             unrouted += groups - 1;
+            open_nets.push(short_net(&net).to_string());
         }
     }
     if unrouted > 0 {
@@ -388,7 +573,16 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             severity: "error",
             area: "engineering",
             check: "unrouted",
-            message: format!("{unrouted} connection(s) are not routed yet"),
+            message: format!(
+                "{unrouted} connection(s) are not routed yet ({}{})",
+                open_nets
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                if open_nets.len() > 4 { ", …" } else { "" }
+            ),
             at: None,
             fix: "route_board",
         });
@@ -414,10 +608,10 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
     }
 
     let mut off_angle = 0;
-    for s in &board.segments {
+    for s in board.segments.iter().filter(|s| !s.from_arc) {
         let dx = (s.b.0 - s.a.0).abs();
         let dy = (s.b.1 - s.a.1).abs();
-        if dx > 1e-3 && dy > 1e-3 && (dx - dy).abs() > 0.02 * dx.max(dy) {
+        if dx.hypot(dy) > 0.5 && dx > 1e-3 && dy > 1e-3 && (dx - dy).abs() > 0.02 * dx.max(dy) {
             off_angle += 1;
         }
     }
@@ -432,14 +626,24 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             at: None,
             fix: "route_board",
         });
-        beauty.take("off_angle_tracks", off_angle as i64 * 2, 16);
+        beauty.take("off_angle_tracks", off_angle as i64, 10);
     }
-    let widths: BTreeSet<i64> = board
-        .segments
+    // Count only widths that carry a real share of the copper: a few short
+    // neck-downs into fine-pitch pads are not a style problem.
+    let mut by_width: BTreeMap<i64, f64> = BTreeMap::new();
+    for s in &board.segments {
+        *by_width
+            .entry((s.width * 1000.0).round() as i64)
+            .or_default() += dist(s.a, s.b);
+    }
+    let total: f64 = by_width.values().sum();
+    let widths: Vec<i64> = by_width
         .iter()
-        .map(|s| (s.width * 1000.0).round() as i64)
+        .filter(|(_, l)| **l >= 0.03 * total)
+        .map(|(w, _)| *w)
         .collect();
-    if widths.len() > 4 {
+    let allowed = if board.copper_layers.len() >= 4 { 7 } else { 5 };
+    if widths.len() > allowed {
         findings.push(Finding {
             severity: "info",
             area: "beauty",
@@ -625,7 +829,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         let (severity, per, cap) = match check {
             "designator_on_copper" | "designators_overlap" => ("warning", 3, 15),
             "designator_too_small" | "tilted_text" => ("warning", 2, 10),
-            "designator_on_via" => ("info", 1, 4),
+            "designator_on_via" | "designator_small" => ("info", 1, 4),
             _ => ("info", 2, 6),
         };
         let shown: Vec<&str> = messages.iter().take(6).map(String::as_str).collect();
@@ -676,6 +880,72 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
 mod tests {
     use super::super::model::{fixture, Board};
     use super::*;
+
+    fn four_layer(body: &str) -> Board {
+        let text = format!(
+            r#"(kicad_pcb (version 20250114) (generator "test")
+  (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (25 "Edge.Cuts" user))
+  (net 0 "") (net 1 "GND") (net 2 "USB_DP")
+  (gr_rect (start 100 100) (end 130 120) (stroke (width 0.05) (type default)) (fill none) (layer "Edge.Cuts"))
+  (zone (net 1) (net_name "GND") (layer "In1.Cu") (polygon (pts (xy 100 100) (xy 130 100) (xy 130 120) (xy 100 120))))
+  (segment (start 105 110) (end 110 110) (width 0.2) (layer "F.Cu") (net 2))
+  (via (at 110 110) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+{body})"#
+        );
+        Board::from_text(&text).unwrap()
+    }
+
+    #[test]
+    fn return_via_follows_the_reference_plane() {
+        let shared = four_layer(
+            r#"  (segment (start 110 110) (end 120 110) (width 0.2) (layer "In2.Cu") (net 2))"#,
+        );
+        let a = audit(&shared, &AuditOptions::default());
+        assert!(!a.findings.iter().any(|f| f.check == "return_via"));
+        let split = four_layer(
+            r#"  (segment (start 110 110) (end 120 110) (width 0.2) (layer "B.Cu") (net 2))"#,
+        );
+        let a = audit(&split, &AuditOptions::default());
+        assert!(a.findings.iter().any(|f| f.check == "return_via"));
+    }
+
+    #[test]
+    fn arcs_are_not_off_angle_and_enables_are_not_rails() {
+        let body = r#"  (arc (start 110 110) (mid 112.93 110.76) (end 115 113) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+  (segment (start 105 115) (end 125 115) (width 0.15) (layer "F.Cu") (net 9 "VCC_IO_EN"))
+"#;
+        let b = Board::from_text(&fixture::board(body)).unwrap();
+        let a = audit(&b, &AuditOptions::default());
+        assert!(!a.findings.iter().any(|f| f.check == "off_angle_tracks"));
+        assert!(!a.findings.iter().any(|f| f.check == "thin_power_track"));
+    }
+
+    #[test]
+    fn flags_copper_inside_a_keepout() {
+        let body = r#"  (zone (net 0) (net_name "") (layers "F.Cu") (keepout (tracks not_allowed) (vias not_allowed) (pads allowed) (copperpour allowed) (footprints allowed)) (polygon (pts (xy 110 101) (xy 120 101) (xy 120 110) (xy 110 110))))
+  (segment (start 105 105) (end 125 105) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+"#;
+        let b = Board::from_text(&fixture::board(body)).unwrap();
+        let a = audit(&b, &AuditOptions::default());
+        assert!(a.findings.iter().any(|f| f.check == "keepout_violation"));
+    }
+
+    #[test]
+    fn a_track_ending_on_another_track_is_connected() {
+        let body = format!(
+            "{}{}{}",
+            fixture::smd("R1", 110.0, 110.0, 0.0, ("SIG", "GND")),
+            fixture::smd("R2", 120.0, 116.0, 0.0, ("SIG", "GND")),
+            r#"  (segment (start 109.1 110) (end 125 110) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+  (segment (start 119.1 116) (end 119.1 110.1) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+"#
+        );
+        let b = Board::from_text(&fixture::board(&body)).unwrap();
+        let sig: Vec<usize> = (0..b.pads.len())
+            .filter(|&i| b.pads[i].net.as_deref() == Some("SIG"))
+            .collect();
+        assert_eq!(super::super::router::component_count(&b, "SIG", &sig), 1);
+    }
 
     #[test]
     fn flags_unrouted_thin_power_and_missing_finish() {
@@ -797,6 +1067,60 @@ mod reference_boards {
     use super::super::model::Board;
     use super::*;
 
+    /// Prints the copper islands of one net: VOLTARIS_DEBUG_NET="board::net".
+    #[test]
+    #[ignore = "needs VOLTARIS_DEBUG_NET"]
+    fn debug_net() {
+        let Ok(spec) = std::env::var("VOLTARIS_DEBUG_NET") else {
+            return;
+        };
+        let (path, want) = spec.split_once("::").expect("board::net");
+        let b = Board::from_text(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for net in b.nets().into_iter().filter(|n| short_net(n) == want) {
+            let pads: Vec<usize> = (0..b.pads.len())
+                .filter(|&i| b.pads[i].net.as_deref() == Some(net.as_str()))
+                .collect();
+            for g in super::super::router::islands(&b, &net, &pads) {
+                eprintln!("island:");
+                for i in g {
+                    let p = &b.pads[i];
+                    eprintln!(
+                        "  {}.{} at {:?} size {:?} rot {} f{} b{} th{}",
+                        p.reference,
+                        p.number,
+                        p.at,
+                        p.size,
+                        p.rotation,
+                        p.front,
+                        p.back,
+                        p.through_hole
+                    );
+                }
+            }
+            for s in b
+                .segments
+                .iter()
+                .filter(|s| s.net.as_deref() == Some(net.as_str()))
+            {
+                eprintln!("  seg {:?} {:?} w{} {}", s.a, s.b, s.width, s.layer);
+            }
+            for v in b
+                .vias
+                .iter()
+                .filter(|v| v.net.as_deref() == Some(net.as_str()))
+            {
+                eprintln!("  via {:?} {}", v.at, v.size);
+            }
+            for z in b
+                .zones
+                .iter()
+                .filter(|z| z.net.as_deref() == Some(net.as_str()))
+            {
+                eprintln!("  zone {:?} {} pts", z.layers, z.points.len());
+            }
+        }
+    }
+
     /// Audits every board listed in VOLTARIS_REFERENCE_BOARDS (one path per
     /// line): a check on the auditor itself against boards real teams shipped.
     #[test]
@@ -806,20 +1130,32 @@ mod reference_boards {
             return;
         };
         for path in list.lines().filter(|l| !l.trim().is_empty()) {
-            let text = std::fs::read_to_string(path).unwrap();
-            let b = Board::from_text(&text).unwrap();
+            let Ok(text) = std::fs::read_to_string(path) else {
+                println!("{path}: unreadable");
+                continue;
+            };
+            let b = match Board::from_text(&text) {
+                Ok(b) => b,
+                Err(e) => {
+                    println!("{path}: parse failed: {e}");
+                    continue;
+                }
+            };
             let a = audit(&b, &AuditOptions::default());
             eprintln!(
-                "\n== {path}\n   engineering {} beauty {}",
-                a.engineering, a.beauty
+                "\n== {path}\n   engineering {} beauty {} layers {}",
+                a.engineering,
+                a.beauty,
+                b.copper_layers.len()
             );
             for f in &a.findings {
                 eprintln!(
-                    "   [{}/{}] {}: {}",
+                    "   [{}/{}] {}: {} @{:?}",
                     f.area,
                     f.severity,
                     f.check,
-                    f.message.chars().take(160).collect::<String>()
+                    f.message.chars().take(160).collect::<String>(),
+                    f.at
                 );
             }
         }

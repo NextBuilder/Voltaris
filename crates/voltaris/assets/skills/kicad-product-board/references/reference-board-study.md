@@ -50,22 +50,20 @@ controller).
 | Finding | Boards (of 15) | Do instead |
 |---|---|---|
 | Fast net changes layer with no ground via within 1 mm | 10 (crystal, SPI/QSPI clock, SWCLK, USB D±) | A ground via beside every signal via on a fast net |
-| Power rail on long thin track (0.15–0.3 mm for 10–70 mm) | 10 | Size every rail with `calc_trace_width`; pour high-current rails |
+| Power rail on long thin track (0.15–0.3 mm for 10–70 mm) | 9 | Size every rail with `calc_trace_width`; pour high-current rails |
 | Connector pins without any label | 11 | Label every pin, top or bottom (`polish_board`) |
 | Decoupling capacitor more than 3 mm from its pin | 7 | Within 2–3 mm, on the same layer as the pin |
 | Via inside an SMD pad | 7 (up to 58 vias) | Move the via beside the pad, or order plugged/capped vias |
-| 5–8 different track widths | 6 | One width per net class |
-| Unconnected items left in the file | 8 (1–8 each) | Fill zones and run DRC with unconnected items as errors |
-| Designators on vias, under parts or under 0.8 mm | 6 | 0.8 mm minimum, off vias, beside the part |
+| Designators on vias, under parts or under 0.8 mm | 5 | 0.8 mm minimum, off vias, beside the part |
 | Fast trace within 1 mm of the edge | 2 | Keep clocks and USB 1 mm+ (better 2 mm) from the edge |
-| No version mark | 14 | Print the version beside the product name |
+| No version mark | 15 | Print the version beside the product name |
 
 Scores the shipped boards reach on `audit_layout`:
 
 | | Lowest | Median | Highest |
 |---|---|---|---|
-| Engineering | 30 | 73 | 100 |
-| Beauty | 37 | 85 | 97 |
+| Engineering | 50 | 85 | 100 |
+| Beauty | 43 | 85 | 97 |
 
 A Voltaris board targets 90+ on both, which is above the median of every studied board and
 equal to the best of them (see the scorecard).
@@ -77,3 +75,12 @@ covered by tests: 45° bends were counted as acute corners; pads that share a nu
 pins) and pads inside copper pours were not treated as connected; arc tracks were ignored; pin
 labels on the bottom side or as GPIO numbers were missed; a rail named VDD_NRF counted as an RF
 signal; and footprint text at 180° (which KiCad keeps upright) was flagged as upside down.
+
+A second pass against 35 world-class open boards (the kicad-design-masters skill's world
+corpus) fixed the rest: tracks that end on another track or pass through a pad now connect,
+pours touching a pad's edge connect it, custom-shaped pads use their real copper, a pad's
+written angle is read as absolute, KiCad 5 files (unquoted net names, renamed copper layers,
+centre-and-angle arcs) and KiCad 10 polygon outlines made of arcs are read correctly, and the
+return-via check knows when two layers share a ground plane. With those fixes none of these 15
+boards has an unrouted connection — the earlier "unconnected items" finding was the auditor's
+mistake, not the designers'.

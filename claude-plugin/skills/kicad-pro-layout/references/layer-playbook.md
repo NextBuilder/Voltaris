@@ -32,6 +32,11 @@ Standard stackup, outer to outer:
 - Order the board with the fab's matching impedance stackup (`list_stackups`) and solve the
   widths for that stackup.
 
+## 6 and 8 layers
+
+Stackups, via sizes, BGA fan-out and both-side assembly measured from Cynthion, Glasgow,
+OrangeCrab and Antmicro's SoM baseboards are in the kicad-multilayer skill.
+
 ## When to choose 4 layers
 
 Choose 4 layers when any of these apply: USB High Speed or faster interfaces, Ethernet, a

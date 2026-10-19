@@ -95,6 +95,52 @@ pub struct FieldText {
     pub stroke: f64,
     pub layer: String,
     pub visible: bool,
+    /// Horizontal (-1 left, 0 centre, 1 right) and vertical (-1 top, 0 centre,
+    /// 1 bottom) justification around `at`.
+    pub justify: (i8, i8),
+}
+
+impl FieldText {
+    /// The area the printed text covers, the way KiCad draws footprint text:
+    /// justified around its anchor and kept upright (text turned past 90° is
+    /// drawn the other way round, which also swaps its justification).
+    pub fn bbox(&self, text: &str, back: bool) -> Rect {
+        let w = text.chars().count() as f64 * self.size * 0.85 + self.size * 0.3;
+        let h = self.size * 1.3;
+        let mut a = self.rotation.rem_euclid(360.0);
+        let (mut jh, mut jv) = self.justify;
+        if a > 90.0 + 1e-6 && a <= 270.0 + 1e-6 {
+            a -= 180.0;
+            jh = -jh;
+            jv = -jv;
+        }
+        if back {
+            jh = -jh;
+        }
+        let (x0, x1) = match jh {
+            -1 => (0.0, w),
+            1 => (-w, 0.0),
+            _ => (-w / 2.0, w / 2.0),
+        };
+        let (y0, y1) = match jv {
+            -1 => (0.0, h),
+            1 => (-h, 0.0),
+            _ => (-h / 2.0, h / 2.0),
+        };
+        let r = a.to_radians();
+        let (c, s) = (r.cos(), r.sin());
+        let mut out = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+            let p = (self.at.0 + x * c + y * s, self.at.1 - x * s + y * c);
+            out = (
+                out.0.min(p.0),
+                out.1.min(p.1),
+                out.2.max(p.0),
+                out.3.max(p.1),
+            );
+        }
+        out
+    }
 }
 
 impl Footprint {
@@ -153,6 +199,8 @@ pub struct Segment {
     pub a: (f64, f64),
     pub b: (f64, f64),
     pub width: f64,
+    /// A chord standing in for part of a curved track.
+    pub from_arc: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +240,85 @@ pub struct Board {
     pub zones: Vec<Zone>,
     pub texts: Vec<Text>,
     pub mounting_holes: usize,
+    /// Rule areas (keep-outs): what may not be placed inside each polygon.
+    pub keepouts: Vec<Keepout>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Keepout {
+    /// The footprint that carries this keep-out (an antenna module's, say);
+    /// it moves with that part, so it never blocks the part itself.
+    pub owner: Option<String>,
+    pub layers: Vec<String>,
+    pub points: Vec<(f64, f64)>,
+    pub no_tracks: bool,
+    pub no_vias: bool,
+    pub no_pads: bool,
+    pub no_footprints: bool,
+}
+
+impl Keepout {
+    pub fn contains(&self, p: (f64, f64)) -> bool {
+        point_in_polygon(p, &self.points)
+    }
+    pub fn on(&self, layer: &str) -> bool {
+        self.layers.iter().any(|l| l == layer)
+    }
+}
+
+fn keepouts(tree: &SexpNode, copper: &[String]) -> Vec<Keepout> {
+    let mut zones: Vec<(Option<String>, &SexpNode)> = tree
+        .find_all("zone")
+        .into_iter()
+        .map(|z| (None, z))
+        .collect();
+    for fp in footprints(tree) {
+        let owner = reference_of(fp);
+        zones.extend(fp.find_all("zone").into_iter().map(|z| (owner.clone(), z)));
+    }
+    let mut out = Vec::new();
+    for (owner, zone) in zones {
+        let Some(rules) = zone.find("keepout") else {
+            continue;
+        };
+        let banned = |what: &str| rules.find_str(what) == Some("not_allowed");
+        let layers: Vec<String> = match zone.find("layers").and_then(SexpNode::children) {
+            Some(list) => list
+                .iter()
+                .skip(1)
+                .filter_map(SexpNode::as_str)
+                .map(str::to_string)
+                .collect(),
+            None => zone
+                .find_str("layer")
+                .map(str::to_string)
+                .into_iter()
+                .collect(),
+        };
+        let points: Vec<(f64, f64)> = zone
+            .find("polygon")
+            .and_then(|p| p.find("pts"))
+            .map(|pts| {
+                pts.find_all("xy")
+                    .into_iter()
+                    .filter_map(|xy| Some((xy.get_f64(1)?, xy.get_f64(2)?)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if points.len() < 3 {
+            continue;
+        }
+        out.push(Keepout {
+            owner,
+            layers: expand_layers(&layers, copper),
+            points,
+            no_tracks: banned("tracks"),
+            no_vias: banned("vias"),
+            no_pads: banned("pads"),
+            no_footprints: banned("footprints"),
+        });
+    }
+    out
 }
 
 impl Board {
@@ -201,6 +328,8 @@ impl Board {
     }
 
     pub fn from_tree(tree: &SexpNode) -> Self {
+        let renamed = canonical_layer_names(tree);
+        let tree = renamed.as_ref().unwrap_or(tree);
         let index = PcbConnectivityIndex::build(tree);
         let courtyards: BTreeMap<String, Rect> = footprint_courtyards(tree)
             .items
@@ -267,6 +396,7 @@ impl Board {
                 a: (t.x1, t.y1),
                 b: (t.x2, t.y2),
                 width: t.width,
+                from_arc: false,
             })
             .collect();
         // Curved tracks join the model as two chords (start → mid → end):
@@ -280,6 +410,7 @@ impl Board {
                     a: p,
                     b: q,
                     width: a.width,
+                    from_arc: true,
                 });
             }
         }
@@ -292,12 +423,13 @@ impl Board {
                 size: v.size,
             })
             .collect();
+        let copper = copper_layers(tree);
         let zones = zones(tree)
             .items
             .into_iter()
             .map(|z| Zone {
                 net: z.net,
-                layers: z.layers,
+                layers: expand_layers(&z.layers, &copper),
                 points: z.points,
             })
             .collect();
@@ -338,7 +470,30 @@ impl Board {
             zones,
             texts,
             mounting_holes,
+            keepouts: keepouts(tree, &copper),
         }
+    }
+
+    /// True when a part whose courtyard is `c` on this side would sit in a
+    /// keep-out that bans footprints or pads there.
+    pub fn keepout_blocks(&self, c: Rect, back: bool) -> bool {
+        let side = if back { "B.Cu" } else { "F.Cu" };
+        self.keepouts
+            .iter()
+            .filter(|k| k.owner.is_none() && (k.no_footprints || k.no_pads) && k.on(side))
+            .any(|k| {
+                let corners = [
+                    (c.0, c.1),
+                    (c.2, c.1),
+                    (c.2, c.3),
+                    (c.0, c.3),
+                    ((c.0 + c.2) / 2.0, (c.1 + c.3) / 2.0),
+                ];
+                corners.into_iter().any(|p| k.contains(p))
+                    || k.points
+                        .iter()
+                        .any(|p| p.0 > c.0 && p.0 < c.2 && p.1 > c.1 && p.1 < c.3)
+            })
     }
 
     pub fn footprint(&self, reference: &str) -> Option<&Footprint> {
@@ -361,6 +516,98 @@ impl Board {
         out.dedup();
         out
     }
+}
+
+/// KiCad 5 let designers rename copper layers ("Top", "GND", "Bottom") and
+/// then wrote the new names on every item. Map them back to F.Cu / In<n>.Cu /
+/// B.Cu by layer number; `None` when the board already uses canonical names.
+fn canonical_layer_names(tree: &SexpNode) -> Option<SexpNode> {
+    let layers = tree.find("layers")?.children()?;
+    let mut map: BTreeMap<String, String> = BTreeMap::new();
+    for layer in layers.iter().skip(1) {
+        let (Some(id), Some(name), Some(kind)) = (
+            layer.head().and_then(|h| h.parse::<u32>().ok()),
+            layer.get(1).and_then(SexpNode::as_str),
+            layer.get(2).and_then(SexpNode::as_str),
+        ) else {
+            continue;
+        };
+        if name.ends_with(".Cu") || !matches!(kind, "signal" | "power" | "mixed" | "jumper") {
+            continue;
+        }
+        let canonical = match id {
+            0 => "F.Cu".to_string(),
+            31 => "B.Cu".to_string(),
+            n @ 1..=30 => format!("In{n}.Cu"),
+            _ => continue,
+        };
+        map.insert(name.to_string(), canonical);
+    }
+    if map.is_empty() {
+        return None;
+    }
+    fn walk(node: &SexpNode, map: &BTreeMap<String, String>, in_layer: bool) -> SexpNode {
+        match node {
+            SexpNode::Atom(a) if in_layer => {
+                SexpNode::Atom(map.get(a).cloned().unwrap_or_else(|| a.clone()))
+            }
+            SexpNode::Str(a) if in_layer => {
+                SexpNode::Str(map.get(a).cloned().unwrap_or_else(|| a.clone()))
+            }
+            SexpNode::List(items) => {
+                let here = matches!(node.head(), Some("layer" | "layers"));
+                SexpNode::List(items.iter().map(|c| walk(c, map, here)).collect())
+            }
+            other => other.clone(),
+        }
+    }
+    let mut out = walk(tree, &map, false);
+    if let SexpNode::List(items) = &mut out {
+        for item in items.iter_mut() {
+            if item.head() == Some("layers") {
+                *item = renamed_layer_table(item, &map);
+            }
+        }
+    }
+    Some(out)
+}
+
+/// The top-level layer table with the copper entries renamed too.
+fn renamed_layer_table(table: &SexpNode, map: &BTreeMap<String, String>) -> SexpNode {
+    let SexpNode::List(items) = table else {
+        return table.clone();
+    };
+    SexpNode::List(
+        items
+            .iter()
+            .map(|entry| match entry {
+                SexpNode::List(parts) if parts.len() >= 2 => {
+                    let mut parts = parts.clone();
+                    if let Some(new) = parts[1].as_str().and_then(|n| map.get(n)) {
+                        parts[1] = SexpNode::Str(new.clone());
+                    }
+                    SexpNode::List(parts)
+                }
+                other => other.clone(),
+            })
+            .collect(),
+    )
+}
+
+/// KiCad's layer shorthands: "F&B.Cu" is both outer layers, "*.Cu" every
+/// copper layer.
+fn expand_layers(layers: &[String], copper: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    for l in layers {
+        match l.as_str() {
+            "F&B.Cu" => out.extend(["F.Cu".to_string(), "B.Cu".to_string()]),
+            "*.Cu" => out.extend(copper.iter().cloned()),
+            _ => out.push(l.clone()),
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 fn copper_layers(tree: &SexpNode) -> Vec<String> {
@@ -434,9 +681,47 @@ fn field_text(fp: &SexpNode, name: &str, (fx, fy, frot): (f64, f64, f64)) -> Opt
                 .into_iter()
                 .find(|t| t.get(1).and_then(SexpNode::as_str) == Some(legacy.as_str()))
         })?;
+    // Designers often keep the Reference field on the fab layer and print a
+    // `${REFERENCE}` text on the silkscreen instead; the printed one counts.
+    let on_silk = |n: &SexpNode| n.find_str("layer").is_some_and(|l| l.ends_with(".SilkS"));
+    let node = if on_silk(node) {
+        node
+    } else {
+        fp.find_all("fp_text")
+            .into_iter()
+            .find(|t| t.get(2).and_then(SexpNode::as_str) == Some("${REFERENCE}") && on_silk(t))
+            .unwrap_or(node)
+    };
     let at = node.find("at")?;
     let (lx, ly) = (at.get_f64(1)?, at.get_f64(2)?);
     let (size, stroke) = font_of(node);
+    let justify = node
+        .find("effects")
+        .and_then(|e| e.find("justify"))
+        .map(|j| {
+            let words: Vec<&str> = j
+                .children()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(SexpNode::as_str)
+                .collect();
+            let h = if words.contains(&"left") {
+                -1
+            } else if words.contains(&"right") {
+                1
+            } else {
+                0
+            };
+            let v = if words.contains(&"top") {
+                -1
+            } else if words.contains(&"bottom") {
+                1
+            } else {
+                0
+            };
+            (h, v)
+        })
+        .unwrap_or((0, 0));
     Some(FieldText {
         at: transform_pad(lx, ly, fx, fy, frot),
         rotation: at.get_f64(3).unwrap_or(0.0),
@@ -444,6 +729,7 @@ fn field_text(fp: &SexpNode, name: &str, (fx, fy, frot): (f64, f64, f64)) -> Opt
         stroke,
         layer: node.find_str("layer").unwrap_or("F.SilkS").to_string(),
         visible: !hidden(node),
+        justify,
     })
 }
 
@@ -526,15 +812,26 @@ fn parse_pad(
     };
     let at = pad.find("at")?;
     let local = (at.get_f64(1)?, at.get_f64(2)?);
-    let rotation = at.get_f64(3).unwrap_or(frot);
+    // The angle written on a pad is its absolute orientation (footprint turn
+    // included); KiCad leaves it out only when that orientation is 0°.
+    let rotation = at.get_f64(3).unwrap_or(0.0);
     let size = pad.find("size")?;
-    let size = (size.get_f64(1)?, size.get_f64(2)?);
+    let mut size = (size.get_f64(1)?, size.get_f64(2)?);
+    if pad.get(3).and_then(SexpNode::as_str) == Some("custom") {
+        if let Some((hx, hy)) = primitives_extent(pad) {
+            size = (size.0.max(2.0 * hx), size.1.max(2.0 * hy));
+        }
+    }
     let mut front = false;
     let mut back = false;
     if let Some(layers) = pad.find("layers").and_then(SexpNode::children) {
         for l in layers.iter().skip(1).filter_map(SexpNode::as_str) {
             match l {
                 "*.Cu" => {
+                    front = true;
+                    back = true;
+                }
+                "F&B.Cu" => {
                     front = true;
                     back = true;
                 }
@@ -568,6 +865,43 @@ fn parse_pad(
     })
 }
 
+/// Half extents, around the anchor, of a custom pad's drawn shapes: the
+/// anchor of such a pad is often a tiny dot and the copper is in its
+/// primitives.
+fn primitives_extent(pad: &SexpNode) -> Option<(f64, f64)> {
+    let prims = pad.find("primitives")?;
+    let (mut hx, mut hy) = (0.0f64, 0.0f64);
+    let mut grow = |x: f64, y: f64, r: f64| {
+        hx = hx.max(x.abs() + r);
+        hy = hy.max(y.abs() + r);
+    };
+    for shape in prims.children()?.iter().skip(1) {
+        let half = shape.find_f64("width").unwrap_or(0.0) / 2.0;
+        if let Some(pts) = shape.find("pts") {
+            for xy in pts.find_all("xy") {
+                if let (Some(x), Some(y)) = (xy.get_f64(1), xy.get_f64(2)) {
+                    grow(x, y, half);
+                }
+            }
+        }
+        for tag in ["start", "end", "mid"] {
+            if let Some(p) = shape.find(tag) {
+                if let (Some(x), Some(y)) = (p.get_f64(1), p.get_f64(2)) {
+                    grow(x, y, half);
+                }
+            }
+        }
+        if let (Some(c), Some(e)) = (shape.find("center"), shape.find("end")) {
+            if let (Some(cx), Some(cy), Some(ex), Some(ey)) =
+                (c.get_f64(1), c.get_f64(2), e.get_f64(1), e.get_f64(2))
+            {
+                grow(cx, cy, (ex - cx).hypot(ey - cy) + half);
+            }
+        }
+    }
+    (hx > 0.0 || hy > 0.0).then_some((hx, hy))
+}
+
 pub fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
@@ -586,6 +920,44 @@ pub fn segment_distance(a: (f64, f64), b: (f64, f64), p: (f64, f64)) -> f64 {
     }
     let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0);
     dist((a.0 + t * dx, a.1 + t * dy), p)
+}
+
+/// Shortest distance between two line segments.
+pub fn segments_distance(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> f64 {
+    let cross = |o: (f64, f64), p: (f64, f64), q: (f64, f64)| {
+        (p.0 - o.0) * (q.1 - o.1) - (p.1 - o.1) * (q.0 - o.0)
+    };
+    let (d1, d2) = (cross(a, b, c), cross(a, b, d));
+    let (d3, d4) = (cross(c, d, a), cross(c, d, b));
+    if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+        return 0.0;
+    }
+    segment_distance(a, b, c)
+        .min(segment_distance(a, b, d))
+        .min(segment_distance(c, d, a))
+        .min(segment_distance(c, d, b))
+}
+
+impl Pad {
+    /// Shortest distance from the pad's copper to a line segment.
+    pub fn segment_distance(&self, a: (f64, f64), b: (f64, f64)) -> f64 {
+        match self.shape {
+            PadShape::Circle => {
+                let r = self.size.0.min(self.size.1) / 2.0;
+                (segment_distance(a, b, self.at) - r).max(0.0)
+            }
+            PadShape::Rect => {
+                let r = self.bbox();
+                if rect_distance(r, a) == 0.0 || rect_distance(r, b) == 0.0 {
+                    return 0.0;
+                }
+                let corners = [(r.0, r.1), (r.2, r.1), (r.2, r.3), (r.0, r.3)];
+                (0..4)
+                    .map(|i| segments_distance(a, b, corners[i], corners[(i + 1) % 4]))
+                    .fold(f64::INFINITY, f64::min)
+            }
+        }
+    }
 }
 
 pub fn rects_overlap(a: Rect, b: Rect, gap: f64) -> bool {
@@ -628,21 +1000,39 @@ const FAST_MARKERS: &[&str] = &[
     "MCLK", "BCLK", "ETH", "RF", "ANT", "LVDS", "MIPI", "HDMI", "SWCLK",
 ];
 
+const POWER_WORDS: &[&str] = &[
+    "VBUS", "VCC", "VDD", "VIN", "VOUT", "VSYS", "VBAT", "VDDIO", "VUSB",
+];
+/// Slow or static lines that share a name with a fast interface: HDMI CEC
+/// and hot-plug, DDC and I2C, antenna bias, enables.
+const SLOW_WORDS: &[&str] = &[
+    "CEC", "HPD", "DDC", "BIAS", "I2C", "SCL", "SDA", "EN", "DET",
+];
+
 /// Fast or sensitive signal by name. Short markers (RF, DP, DM) must be a
 /// whole word of the name so that power rails such as VDD_NRF or VDDPA do not
 /// count; longer markers may appear inside a word (SWCLK, MCLK, USB1_DP).
 pub fn is_fast(net: &str) -> bool {
     let n = short_net(net).to_ascii_uppercase();
-    if n.ends_with("D+") || n.ends_with("D-") {
+    let words: Vec<&str> = n
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '+' && c != '-')
+        .filter(|w| !w.is_empty())
+        .collect();
+    if words
+        .iter()
+        .any(|w| w.starts_with("USB") && (w.ends_with("D+") || w.ends_with("D-")))
+    {
         return true;
     }
     if super::super::design_model::is_power_net(net) || is_ground(net) {
         return false;
     }
-    let words: Vec<&str> = n
-        .split(|c: char| !c.is_ascii_alphanumeric() && c != '+' && c != '-')
-        .filter(|w| !w.is_empty())
-        .collect();
+    if words
+        .iter()
+        .any(|w| POWER_WORDS.contains(w) || SLOW_WORDS.contains(w))
+    {
+        return false;
+    }
     FAST_MARKERS.iter().any(|m| {
         if m.len() <= 2 {
             words.iter().any(|w| w == m)
@@ -719,6 +1109,82 @@ pub(crate) mod fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn justified_text_grows_away_from_its_anchor() {
+        let t = FieldText {
+            at: (10.0, 10.0),
+            rotation: 0.0,
+            size: 1.0,
+            stroke: 0.15,
+            layer: "F.SilkS".into(),
+            visible: true,
+            justify: (-1, 0),
+        };
+        let r = t.bbox("R1", false);
+        assert!((r.0 - 10.0).abs() < 1e-9 && r.2 > 11.0);
+        let upside_down = FieldText {
+            rotation: 180.0,
+            ..t
+        };
+        let r = upside_down.bbox("R1", false);
+        assert!((r.2 - 10.0).abs() < 1e-9 && r.0 < 9.0);
+    }
+
+    #[test]
+    fn names_fast_nets_by_whole_words() {
+        assert!(is_fast("/USB1_D+"));
+        assert!(is_fast("USB_DP"));
+        assert!(!is_fast("LOAD+"));
+        assert!(!is_fast("USB1_VBUS"));
+        assert!(!is_fast("HDMI1_CEC"));
+        assert!(!is_fast("ANT_BIAS"));
+    }
+
+    #[test]
+    fn reads_kicad5_boards_and_pad_shapes() {
+        let legacy = r#"(kicad_pcb (version 20171130) (host pcbnew 5.1.8)
+  (layers (0 F.Cu signal) (31 B.Cu signal) (44 Edge.Cuts user))
+  (net 0 "") (net 1 +3V3)
+  (gr_line (start 103 100) (end 127 100) (layer Edge.Cuts) (width 0.05))
+  (gr_arc (start 103 103) (end 103 100) (angle -90) (layer Edge.Cuts) (width 0.05))
+  (gr_line (start 100 103) (end 100 120) (layer Edge.Cuts) (width 0.05))
+  (segment (start 110 110) (end 115 110) (width 0.25) (layer F.Cu) (net 1))
+)"#;
+        let b = Board::from_text(legacy).unwrap();
+        let o = b.outline.expect("outline with a legacy arc");
+        assert!((o.0 - 100.0).abs() < 1e-6 && (o.1 - 100.0).abs() < 1e-6);
+        assert_eq!(b.segments[0].net.as_deref(), Some("+3V3"));
+        let renamed = legacy
+            .replace(
+                "(0 F.Cu signal) (31 B.Cu signal)",
+                "(0 Top signal) (1 GND power) (31 Bottom signal)",
+            )
+            .replace("(layer F.Cu)", "(layer Top)");
+        let b = Board::from_text(&renamed).unwrap();
+        assert_eq!(b.segments[0].layer, "F.Cu");
+        assert_eq!(b.copper_layers, vec!["F.Cu", "In1.Cu", "B.Cu"]);
+
+        let modern = r#"(kicad_pcb (version 20260206) (generator "test")
+  (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (25 "Edge.Cuts" user))
+  (gr_poly (pts (arc (start 100 110) (mid 110 100) (end 120 110)) (arc (start 120 110) (mid 110 120) (end 100 110))) (layer "Edge.Cuts"))
+  (zone (net "GND") (layers "F&B.Cu") (polygon (pts (xy 100 100) (xy 120 100) (xy 120 120))))
+  (footprint "X" (layer "F.Cu") (at 110 110 90)
+    (property "Reference" "U1" (at 0 0 0) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 2) (size 0.3 1.3) (layers "F.Cu") (net "GND"))
+    (pad "2" smd custom (at 0 -2 90) (size 0.2 0.2) (layers "F.Cu") (net "GND")
+      (primitives (gr_poly (pts (xy -1 -0.5) (xy 1 -0.5) (xy 1 0.5) (xy -1 0.5)) (width 0) (fill yes)))))
+)"#;
+        let b = Board::from_text(modern).unwrap();
+        assert_eq!(b.outline, Some((100.0, 100.0, 120.0, 120.0)));
+        assert_eq!(
+            b.zones[0].layers,
+            vec!["B.Cu".to_string(), "F.Cu".to_string()]
+        );
+        let pad = |n: &str| b.pads.iter().find(|p| p.number == n).unwrap();
+        assert_eq!(pad("1").rotation, 0.0);
+        assert_eq!(pad("2").size, (2.0, 1.0));
+    }
 
     #[test]
     fn reads_pads_nets_and_outline() {

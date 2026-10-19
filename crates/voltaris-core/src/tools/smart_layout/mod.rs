@@ -31,7 +31,8 @@ pub fn tools() -> Vec<ToolDef> {
             "Route every unrouted connection on the board in one call: a grid A* router that \
              orders nets by priority (pours, power, fast signals, signals, ground), uses every \
              copper layer you allow with vias, keeps clearance from foreign copper and the edge, \
-             prefers 45°/90° paths with few bends and a preferred layer, straightens each path, \
+             stays out of keep-out rule areas, prefers 45°/90° paths with few bends and a \
+             preferred layer, straightens each path, \
              and retries the nets that failed first on the next pass. Differential pairs (D+/D-, \
              USB_DP/DM, _P/_N, or 'pairs') are routed first as coupled pairs at pair_gap and \
              length-tuned with 45° bumps until the skew is within pair_skew. Fine-pitch parts \

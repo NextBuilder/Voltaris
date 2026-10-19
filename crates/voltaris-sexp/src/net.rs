@@ -47,8 +47,9 @@ pub fn net_name(node: &SexpNode) -> Option<&str> {
         // (net "GND") — KiCad 10 names the net in place.
         SexpNode::Str(name) => Some(name.as_str()),
         // (net 1 "GND") — KiCad ≤ 9 declaration; the name follows the id.
+        // (net 1 +3V3) — KiCad ≤ 5 wrote simple names unquoted.
         SexpNode::Atom(_) => match children.get(2)? {
-            SexpNode::Str(name) => Some(name.as_str()),
+            SexpNode::Str(name) | SexpNode::Atom(name) => Some(name.as_str()),
             _ => None,
         },
         SexpNode::List(_) => None,

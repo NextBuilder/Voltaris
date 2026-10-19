@@ -165,26 +165,42 @@ enum Shape {
     Rect(f64, f64, f64, f64),
     Circle((f64, f64), f64),
     Capsule((f64, f64), (f64, f64), f64),
+    /// A keep-out area: nothing of any net may enter it.
+    Polygon(Vec<(f64, f64)>),
 }
 
 impl Shape {
     fn distance(&self, p: (f64, f64)) -> f64 {
-        match *self {
-            Shape::Rect(x0, y0, x1, y1) => super::model::rect_distance((x0, y0, x1, y1), p),
-            Shape::Circle(c, r) => (dist(c, p) - r).max(0.0),
-            Shape::Capsule(a, b, r) => (segment_distance(a, b, p) - r).max(0.0),
+        match self {
+            &Shape::Rect(x0, y0, x1, y1) => super::model::rect_distance((x0, y0, x1, y1), p),
+            &Shape::Circle(c, r) => (dist(c, p) - r).max(0.0),
+            &Shape::Capsule(a, b, r) => (segment_distance(a, b, p) - r).max(0.0),
+            Shape::Polygon(pts) => {
+                if super::model::point_in_polygon(p, pts) {
+                    0.0
+                } else {
+                    (0..pts.len())
+                        .map(|i| segment_distance(pts[i], pts[(i + 1) % pts.len()], p))
+                        .fold(f64::INFINITY, f64::min)
+                }
+            }
         }
     }
     fn bbox(&self) -> (f64, f64, f64, f64) {
-        match *self {
-            Shape::Rect(x0, y0, x1, y1) => (x0, y0, x1, y1),
-            Shape::Circle(c, r) => (c.0 - r, c.1 - r, c.0 + r, c.1 + r),
-            Shape::Capsule(a, b, r) => (
+        match self {
+            &Shape::Rect(x0, y0, x1, y1) => (x0, y0, x1, y1),
+            &Shape::Circle(c, r) => (c.0 - r, c.1 - r, c.0 + r, c.1 + r),
+            &Shape::Capsule(a, b, r) => (
                 a.0.min(b.0) - r,
                 a.1.min(b.1) - r,
                 a.0.max(b.0) + r,
                 a.1.max(b.1) + r,
             ),
+            Shape::Polygon(pts) => pts
+                .iter()
+                .fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |b, p| {
+                    (b.0.min(p.0), b.1.min(p.1), b.2.max(p.0), b.3.max(p.1))
+                }),
         }
     }
 }
@@ -640,6 +656,20 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
             layers: all_layers,
             shape: Shape::Circle(v.at, v.size / 2.0),
         });
+    }
+    for k in board.keepouts.iter().filter(|k| k.no_tracks || k.no_vias) {
+        let mask = layers
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| k.on(l))
+            .fold(0u32, |m, (i, _)| m | 1 << i);
+        if mask != 0 {
+            base.push(Obstacle {
+                net: None,
+                layers: mask,
+                shape: Shape::Polygon(k.points.clone()),
+            });
+        }
     }
     if !opts.between_pads {
         for (r, mask) in between_pad_areas(board, &layers) {
@@ -1227,6 +1257,11 @@ pub(crate) fn component_count(board: &Board, net: &str, pads: &[usize]) -> usize
     connectivity(board, net, pads).len()
 }
 
+#[cfg(test)]
+pub(crate) fn islands(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
+    connectivity(board, net, pads)
+}
+
 fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
     let segs: Vec<&super::model::Segment> = board
         .segments
@@ -1268,26 +1303,21 @@ fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
     for (si, s) in segs.iter().enumerate() {
         for (pi, &pad) in pads.iter().enumerate() {
             let p = &board.pads[pad];
-            if p.on_layer(&s.layer)
-                && (p.distance_to(s.a) <= tol + s.width / 2.0
-                    || p.distance_to(s.b) <= tol + s.width / 2.0)
-            {
+            if p.on_layer(&s.layer) && p.segment_distance(s.a, s.b) <= tol + s.width / 2.0 {
                 union(&mut parent, pi, pads.len() + si);
             }
         }
         for (sj, t) in segs.iter().enumerate().skip(si + 1) {
+            // Copper that overlaps is joined, wherever along the tracks.
             if s.layer == t.layer {
-                let touch = segment_distance(s.a, s.b, t.a) <= tol
-                    || segment_distance(s.a, s.b, t.b) <= tol
-                    || segment_distance(t.a, t.b, s.a) <= tol
-                    || segment_distance(t.a, t.b, s.b) <= tol;
-                if touch {
+                let reach = ((s.width + t.width) / 2.0 - 0.001).max(tol);
+                if super::model::segments_distance(s.a, s.b, t.a, t.b) <= reach {
                     union(&mut parent, pads.len() + si, pads.len() + sj);
                 }
             }
         }
         for (vi, v) in vias.iter().enumerate() {
-            if dist(v.at, s.a) <= v.size / 2.0 || dist(v.at, s.b) <= v.size / 2.0 {
+            if segment_distance(s.a, s.b, v.at) <= (v.size + s.width) / 2.0 - 0.001 {
                 union(&mut parent, pads.len() + si, pads.len() + segs.len() + vi);
             }
         }
@@ -1320,18 +1350,44 @@ fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
         let on = |layer: &str| z.layers.iter().any(|l| l == layer);
         for (pi, &pad) in pads.iter().enumerate() {
             let p = &board.pads[pad];
-            if (p.through_hole || z.layers.iter().any(|l| p.on_layer(l))) && inside(p.at) {
+            let r = p.bbox();
+            let touches = inside(p.at)
+                || [(r.0, r.1), (r.2, r.1), (r.2, r.3), (r.0, r.3)]
+                    .into_iter()
+                    .any(inside);
+            if (p.through_hole || z.layers.iter().any(|l| p.on_layer(l))) && touches {
                 union(&mut parent, pi, base + zi);
             }
         }
+        let round = |c: (f64, f64), r: f64| {
+            inside(c)
+                || [(r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)]
+                    .into_iter()
+                    .any(|(dx, dy)| inside((c.0 + dx, c.1 + dy)))
+        };
         for (si, sg) in segs.iter().enumerate() {
-            if on(&sg.layer) && (inside(sg.a) || inside(sg.b)) {
+            if on(&sg.layer) && (round(sg.a, sg.width / 2.0) || round(sg.b, sg.width / 2.0)) {
                 union(&mut parent, pads.len() + si, base + zi);
             }
         }
         for (vi, v) in vias.iter().enumerate() {
-            if inside(v.at) {
+            if round(v.at, v.size / 2.0) {
                 union(&mut parent, pads.len() + segs.len() + vi, base + zi);
+            }
+        }
+    }
+    for (zi, z) in zones.iter().enumerate() {
+        for (zj, y) in zones.iter().enumerate().skip(zi + 1) {
+            let shared = z.layers.iter().any(|l| y.layers.contains(l));
+            let overlap = z
+                .points
+                .iter()
+                .any(|p| super::model::point_in_polygon(*p, &y.points))
+                || y.points
+                    .iter()
+                    .any(|p| super::model::point_in_polygon(*p, &z.points));
+            if shared && overlap {
+                union(&mut parent, base + zi, base + zj);
             }
         }
     }
@@ -2242,6 +2298,36 @@ mod tests {
         assert!(!sig.segments.is_empty());
         assert!(sig.segments.iter().all(octilinear));
         assert!(sig.segments.len() <= 4, "{:?}", sig.segments);
+    }
+
+    #[test]
+    fn routes_around_a_keepout() {
+        let b = board(&format!(
+            "{}{}{}",
+            fixture::header("J1", 104.0, 106.0, &["SIG", "GND"]),
+            fixture::smd("R1", 120.0, 106.0, 0.0, ("SIG", "+5V")),
+            r#"  (zone (net 0) (net_name "") (layers "F&B.Cu") (keepout (tracks not_allowed) (vias not_allowed) (pads allowed) (copperpour not_allowed) (footprints allowed)) (polygon (pts (xy 110 101) (xy 114 101) (xy 114 112) (xy 110 112))))
+"#
+        ));
+        assert_eq!(b.keepouts.len(), 1);
+        let r = route(
+            &b,
+            &RouteOptions {
+                only_nets: Some(vec!["SIG".into()]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let sig = r.nets.iter().find(|n| n.net == "SIG").unwrap();
+        assert_eq!(sig.status, "routed");
+        let k = &b.keepouts[0];
+        for s in &sig.segments {
+            for t in 0..=20 {
+                let f = t as f64 / 20.0;
+                let p = (s.a.0 + f * (s.b.0 - s.a.0), s.a.1 + f * (s.b.1 - s.a.1));
+                assert!(!k.contains(p), "{s:?} enters the keep-out");
+            }
+        }
     }
 
     #[test]

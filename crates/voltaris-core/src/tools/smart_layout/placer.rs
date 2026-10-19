@@ -114,6 +114,9 @@ impl State<'_> {
         {
             return false;
         }
+        if self.board.keepout_blocks(c, fp.back) {
+            return false;
+        }
         !self.occupied.iter().any(|(r, o, back)| {
             r != &fp.reference && *back == fp.back && rects_overlap(c, *o, self.opts.gap)
         })

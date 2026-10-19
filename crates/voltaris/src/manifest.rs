@@ -220,6 +220,27 @@ pub const SKILLS: &[SkillManifest] = &[
             include_str!("../assets/skills/kicad-pro-silkscreen/references/brand-styles.md"),
         )],
     },
+    SkillManifest {
+        name: "kicad-multilayer",
+        content: include_str!("../assets/skills/kicad-multilayer/SKILL.md"),
+        references: &[(
+            "stackup-catalog.md",
+            include_str!("../assets/skills/kicad-multilayer/references/stackup-catalog.md"),
+        )],
+    },
+    SkillManifest {
+        name: "kicad-power-electronics",
+        content: include_str!("../assets/skills/kicad-power-electronics/SKILL.md"),
+        references: &[],
+    },
+    SkillManifest {
+        name: "kicad-design-masters",
+        content: include_str!("../assets/skills/kicad-design-masters/SKILL.md"),
+        references: &[(
+            "world-corpus.md",
+            include_str!("../assets/skills/kicad-design-masters/references/world-corpus.md"),
+        )],
+    },
 ];
 
 // ─── Agents ──────────────────────────────────────────────────────────────────

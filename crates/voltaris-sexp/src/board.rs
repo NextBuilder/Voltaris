@@ -623,12 +623,30 @@ fn graphic_bbox(node: &SexpNode, head: &str) -> Option<(f64, f64, f64, f64)> {
             let (x2, y2) = point(node, "end")?;
             Some((x1.min(x2), y1.min(y2), x1.max(x2), y1.max(y2)))
         }
-        "gr_arc" => {
-            let start = point(node, "start")?;
-            let mid = point(node, "mid")?;
-            let end = point(node, "end")?;
-            Some(crate::geometry::arc_bbox(start, mid, end))
-        }
+        "gr_arc" => match point(node, "mid") {
+            Some(mid) => {
+                let start = point(node, "start")?;
+                let end = point(node, "end")?;
+                Some(crate::geometry::arc_bbox(start, mid, end))
+            }
+            // KiCad ≤ 5: (start) is the centre, (end) the arc's first point,
+            // and (angle) the sweep in degrees.
+            None => {
+                let centre = point(node, "start")?;
+                let first = point(node, "end")?;
+                let angle = node.find_f64("angle").filter(|a| a.is_finite())?;
+                let turn = |deg: f64| {
+                    let (s, c) = deg.to_radians().sin_cos();
+                    let (dx, dy) = (first.0 - centre.0, first.1 - centre.1);
+                    (centre.0 + dx * c - dy * s, centre.1 + dx * s + dy * c)
+                };
+                Some(crate::geometry::arc_bbox(
+                    first,
+                    turn(angle / 2.0),
+                    turn(angle),
+                ))
+            }
+        },
         "gr_circle" => {
             let (cx, cy) = point(node, "center")?;
             let (ex, ey) = point(node, "end")?;
@@ -649,15 +667,30 @@ fn graphic_bbox(node: &SexpNode, head: &str) -> Option<(f64, f64, f64, f64)> {
 fn pts_bbox(node: &SexpNode) -> Option<(f64, f64, f64, f64)> {
     let pts = node.find("pts")?;
     let mut acc: Option<(f64, f64, f64, f64)> = None;
-    for xy in pts.find_all("xy") {
-        let (x, y) = (xy.get_f64(1)?, xy.get_f64(2)?);
-        if !x.is_finite() || !y.is_finite() {
-            return None;
-        }
+    let mut grow = |b: (f64, f64, f64, f64)| {
         acc = Some(match acc {
-            None => (x, y, x, y),
-            Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+            None => b,
+            Some((x0, y0, x1, y1)) => (x0.min(b.0), y0.min(b.1), x1.max(b.2), y1.max(b.3)),
         });
+    };
+    for item in pts.children()?.iter().skip(1) {
+        match item.head() {
+            Some("xy") => {
+                let (x, y) = (item.get_f64(1)?, item.get_f64(2)?);
+                if !x.is_finite() || !y.is_finite() {
+                    return None;
+                }
+                grow((x, y, x, y));
+            }
+            // KiCad 10 polygons mix straight vertices with (arc …) runs.
+            Some("arc") => {
+                let start = point(item, "start")?;
+                let mid = point(item, "mid")?;
+                let end = point(item, "end")?;
+                grow(crate::geometry::arc_bbox(start, mid, end));
+            }
+            _ => {}
+        }
     }
     acc
 }

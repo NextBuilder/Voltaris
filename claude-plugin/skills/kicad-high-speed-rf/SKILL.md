@@ -56,6 +56,9 @@ tuner (meanders near the mismatched end), then re-run.
   drawing shows. Keep metal enclosures and batteries away from it.
 - Chip antennas: follow the vendor layout exactly, including ground clearance and the
   matching network.
+- Draw the keep-out as a rule area in KiCad (Place → Add Rule Area: no tracks, vias or pours)
+  or use a module footprint that carries one: `route_board` and `smart_place` stay out of it,
+  and `audit_layout` reports any copper or part inside.
 - Check with `render_board_3d` that the keep-out really is empty on every layer.
 
 ## Grounding and EMC
@@ -66,7 +69,9 @@ skill; this section lists what matters most for fast signals.
 
 - One continuous ground plane; never route a fast signal across a split or slot.
 - Every layer change of a fast signal needs a ground via within about 1 mm of the signal via so
-  the return current can follow.
+  the return current can follow — unless both layers sit beside the same ground plane, where
+  the return never leaves that plane (`audit_layout` knows the difference; see kicad-multilayer
+  for stackups).
 - Keep fast traces at least 3× their width from other signals, and several millimetres in
   from the board edge.
 - Route clocks and fast edges on the layer next to the ground plane, never on a layer whose

@@ -77,6 +77,9 @@ current pulse (see the kicad-simulation skill).
 - Trace widths from `calc_trace_width` for each rail's current; vias from `calc_via`.
 - Thermal pads: solder to copper with a via array; give LDOs and chargers copper area.
 - Return currents: continuous ground plane; no slots under power loops.
+- Above a few amps or tens of volts (motor drives, BMS, solar chargers), follow the
+  kicad-power-electronics skill: multi-layer pours with via fields, Kelvin shunts, gate loops
+  and clearance by voltage.
 
 ## Done when
 

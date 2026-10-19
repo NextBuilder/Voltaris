@@ -195,6 +195,9 @@ impl Model<'_> {
         }
         let both = self.parts[k].both_sides;
         let side = self.back[k];
+        if self.board.keepout_blocks(c, side) {
+            return None;
+        }
         for (j, o) in self.boxes.iter().enumerate() {
             if j == k {
                 continue;

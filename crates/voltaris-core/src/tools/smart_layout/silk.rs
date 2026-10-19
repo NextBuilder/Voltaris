@@ -47,6 +47,12 @@ pub fn stroke_for(size: f64) -> f64 {
     ((size / 6.0).max(0.15) * 1000.0).round() / 1000.0
 }
 
+fn rect_gap(a: Rect, b: Rect) -> f64 {
+    let dx = (a.0 - b.2).max(b.0 - a.2).max(0.0);
+    let dy = (a.1 - b.3).max(b.1 - a.3).max(0.0);
+    dx.hypot(dy)
+}
+
 fn shrink(r: Rect, by: f64) -> Rect {
     (r.0 + by, r.1 + by, r.2 - by, r.3 - by)
 }
@@ -385,10 +391,11 @@ pub fn reference_findings(board: &Board) -> Vec<(String, &'static str, String)> 
         .filter_map(|f| {
             let t = f.ref_text.as_ref()?;
             (t.visible
+                && t.layer.ends_with(".SilkS")
                 && !f.is_mechanical()
                 && !f.reference.is_empty()
                 && !f.reference.contains('*'))
-            .then(|| (f, text_box(&f.reference, t.at, t.size, t.rotation)))
+            .then(|| (f, shrink(t.bbox(&f.reference, f.back), t.size * 0.15)))
         })
         .collect();
     let space = SilkSpace::new(
@@ -401,10 +408,19 @@ pub fn reference_findings(board: &Board) -> Vec<(String, &'static str, String)> 
     );
     for (f, r) in &shown {
         let t = f.ref_text.as_ref().expect("shown has text");
-        if t.size < 0.8 - 1e-6 || t.stroke < 0.15 - 1e-6 {
+        if t.size < 0.6 - 1e-6 || t.stroke < 0.1 - 1e-6 {
             out.push((
                 f.reference.clone(),
                 "designator_too_small",
+                format!(
+                    "{} is {:.2} mm high with a {:.2} mm stroke; most fabs cannot print it",
+                    f.reference, t.size, t.stroke
+                ),
+            ));
+        } else if t.size < 0.8 - 1e-6 || t.stroke < 0.15 - 1e-6 {
+            out.push((
+                f.reference.clone(),
+                "designator_small",
                 format!(
                     "{} is {:.2} mm high with a {:.2} mm stroke (JLCPCB minimum 0.8 / 0.15)",
                     f.reference, t.size, t.stroke
@@ -439,7 +455,7 @@ pub fn reference_findings(board: &Board) -> Vec<(String, &'static str, String)> 
                 ));
             }
         }
-        let d = super::model::rect_distance(f.courtyard, t.at);
+        let d = rect_gap(f.courtyard, *r);
         if d > 3.0 {
             out.push((
                 f.reference.clone(),

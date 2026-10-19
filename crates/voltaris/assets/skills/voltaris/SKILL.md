@@ -85,6 +85,9 @@ does not establish that a missing server-side check ran.
 | "Make it look like an Adafruit / Seeed / Arduino board" / "add Qwiic" / "pin labels" | 1 | kicad-board-craft skill |
 | "Clean up the silkscreen" / "designators" / "polarity marks" / "product look" | 1 | kicad-pro-silkscreen skill |
 | "Make it a real product" / "dev board" / "breakout" / "ship it" / "release" | 1 | kicad-product-board skill (with kicad-pro-workflow) |
+| "4/6/8-layer board" / "stackup" / "BGA" / "FPGA" / "DDR" / "microvias" | 1 | kicad-multilayer skill |
+| "Motor controller" / "BMS" / "MPPT" / "10 A+" / "high voltage" / "shunt" | 1 | kicad-power-electronics skill (with kicad-power-design) |
+| "Best practice" / "rules of thumb" / "why does it radiate" / "learn from the experts" | — | kicad-design-masters skill |
 | "ESP32 board" | — | kicad-esp32 skill |
 | "RP2040 / RP2350 / STM32 / nRF52 board" | — | kicad-mcu-design skill |
 
