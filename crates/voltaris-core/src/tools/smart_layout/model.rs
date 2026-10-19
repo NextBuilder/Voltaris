@@ -4,8 +4,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use voltaris_sexp::board::{
-    board_outline_bbox, board_outline_shape, footprint_courtyards, footprints, tracks, vias, zones,
-    OutlineShape, PcbConnectivityIndex,
+    board_outline_bbox, board_outline_shape, footprint_courtyards, footprints, track_arcs, tracks,
+    vias, zones, OutlineShape, PcbConnectivityIndex,
 };
 use voltaris_sexp::geometry::transform_pad;
 use voltaris_sexp::parser::SexpNode;
@@ -176,6 +176,8 @@ pub struct Text {
     pub text: String,
     pub size: f64,
     pub rotation: f64,
+    /// Inverted text: a solid silkscreen box with the letters cut out.
+    pub knockout: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -256,7 +258,7 @@ impl Board {
                 silk,
             });
         }
-        let segments = tracks(tree)
+        let segments: Vec<Segment> = tracks(tree)
             .items
             .into_iter()
             .map(|t| Segment {
@@ -267,6 +269,20 @@ impl Board {
                 width: t.width,
             })
             .collect();
+        // Curved tracks join the model as two chords (start → mid → end):
+        // close enough for connectivity, clearance and corner checks.
+        let mut segments: Vec<Segment> = segments;
+        for a in track_arcs(tree).items {
+            for (p, q) in [(a.start, a.mid), (a.mid, a.end)] {
+                segments.push(Segment {
+                    net: a.net.clone(),
+                    layer: a.layer.clone(),
+                    a: p,
+                    b: q,
+                    width: a.width,
+                });
+            }
+        }
         let vias = vias(tree)
             .items
             .into_iter()
@@ -294,7 +310,14 @@ impl Board {
                 let text = n.get(1)?.as_str()?.to_string();
                 let at = n.find("at")?;
                 let (size, _) = font_of(n);
+                let knockout = n.find("layer").is_some_and(|l| {
+                    l.children()
+                        .unwrap_or_default()
+                        .iter()
+                        .any(|c| c.as_str() == Some("knockout"))
+                });
                 Some(Text {
+                    knockout,
                     layer: n.find_str("layer").unwrap_or("").to_string(),
                     at: (at.get_f64(1)?, at.get_f64(2)?),
                     text,
@@ -605,9 +628,28 @@ const FAST_MARKERS: &[&str] = &[
     "MCLK", "BCLK", "ETH", "RF", "ANT", "LVDS", "MIPI", "HDMI", "SWCLK",
 ];
 
+/// Fast or sensitive signal by name. Short markers (RF, DP, DM) must be a
+/// whole word of the name so that power rails such as VDD_NRF or VDDPA do not
+/// count; longer markers may appear inside a word (SWCLK, MCLK, USB1_DP).
 pub fn is_fast(net: &str) -> bool {
     let n = short_net(net).to_ascii_uppercase();
-    FAST_MARKERS.iter().any(|m| n.contains(m))
+    if n.ends_with("D+") || n.ends_with("D-") {
+        return true;
+    }
+    if super::super::design_model::is_power_net(net) || is_ground(net) {
+        return false;
+    }
+    let words: Vec<&str> = n
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '+' && c != '-')
+        .filter(|w| !w.is_empty())
+        .collect();
+    FAST_MARKERS.iter().any(|m| {
+        if m.len() <= 2 {
+            words.iter().any(|w| w == m)
+        } else {
+            n.contains(m)
+        }
+    })
 }
 
 pub fn round3(v: f64) -> f64 {

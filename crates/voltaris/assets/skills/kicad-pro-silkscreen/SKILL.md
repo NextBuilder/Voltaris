@@ -38,8 +38,8 @@ load_toolset('verification')     # run_drc
    leave them alone.
 2. Review the dry run: hidden designators, notes, then apply with its plan_revision.
 3. `audit_layout` — its beauty findings now include the silkscreen checks:
-   designators on copper, overlapping, upside down, too small, far from their part, and mixed
-   sizes. Fix each with the tool it names until the beauty grade is A.
+   designators on copper or vias, overlapping, tilted off the 90° grid, too small, far from
+   their part, and mixed sizes. Fix each with the tool it names until the beauty grade is A.
 4. `run_drc`: no silk-over-copper, silk-overlap or silk-clipped warnings.
 5. `render_board_3d(views=['top', 'bottom'], quality='high')` and read it like a customer would.
 
@@ -75,6 +75,9 @@ Never mix sizes inside a level. A board with three designator sizes looks hand-m
 - One convention for the board: above wide parts, left of tall parts.
 - On dense boards hide designators rather than squeeze them; the assembly drawing (F.Fab) and
   the BOM still carry them. Never shrink below 0.8 mm to make them fit.
+- Finished products often hide every designator and print function captions instead (every
+  PCBCupid product board does — kicad-product-board, section 6); use `references` of hide for
+  that style, tidy for development and repair-friendly boards.
 
 ## Polarity and pin 1 — must survive assembly
 
@@ -100,8 +103,12 @@ the top render; add a mark with `add_board_text` where a footprint has none.
 - Group headers by function with a short caption — Arduino boards print POWER, ANALOG IN and
   DIGITAL (PWM~), with "~" marking PWM pins; do the same for your own groups.
 - Interfaces named where they leave the board: USB, I2C, UART, the Grove or Qwiic port.
-- Inverted (knockout) labels — white box, text cut out — are KiCad's text "Knockout" property;
-  use them for one or two key labels, not everywhere.
+- Inverted (knockout) labels — white box, text cut out — are KiCad's text "Knockout" property.
+  `polish_board` prints the product name this way by default (set knockout_title off for plain
+  text); use knockout for section titles too ("LORA", "RS485"), not for every label.
+- Function captions name what a block does: "FIXED 5V BUCK 2A", "RGB INDICATOR", "USB PORT",
+  "+ SOLAR −", "INPUT 12V-24V", and the setting beside each jumper ("0.5 A" / "1.0 A",
+  "LR = HIGH [R-CH]"). Add them with `add_board_text` at the function-level size.
 - See [brand styles](references/brand-styles.md) for what each maker brand does.
 
 ## Product block and bottom side

@@ -384,8 +384,11 @@ pub fn reference_findings(board: &Board) -> Vec<(String, &'static str, String)> 
         .iter()
         .filter_map(|f| {
             let t = f.ref_text.as_ref()?;
-            (t.visible && !f.is_mechanical())
-                .then(|| (f, text_box(&f.reference, t.at, t.size, t.rotation)))
+            (t.visible
+                && !f.is_mechanical()
+                && !f.reference.is_empty()
+                && !f.reference.contains('*'))
+            .then(|| (f, text_box(&f.reference, t.at, t.size, t.rotation)))
         })
         .collect();
     let space = SilkSpace::new(
@@ -408,29 +411,31 @@ pub fn reference_findings(board: &Board) -> Vec<(String, &'static str, String)> 
                 ),
             ));
         }
-        let angle = t.rotation.rem_euclid(360.0);
-        let readable = if f.back {
-            angle < 1.0 || (angle - 90.0).abs() < 1.0 || (angle - 270.0).abs() < 1.0
-        } else {
-            angle < 1.0 || (angle - 90.0).abs() < 1.0
-        };
-        if !readable {
+        // KiCad keeps footprint text upright on screen and in the Gerbers, so
+        // 180° and 270° read fine; only angles off the 90° grid look careless.
+        let angle = t.rotation.rem_euclid(90.0);
+        if angle > 1.0 && angle < 89.0 {
             out.push((
                 f.reference.clone(),
-                "upside_down_text",
+                "tilted_text",
                 format!(
-                    "{} reads at {angle:.0}°; text reads left to right or bottom to top only",
-                    f.reference
+                    "{} is printed at {:.0}°; keep text on the 0°/90° grid",
+                    f.reference, t.rotation
                 ),
             ));
         }
         if let Some(why) = space.conflict(*r, f.back, &f.reference) {
-            if why.starts_with("on pad") || why.starts_with("on a via") || why.starts_with("under")
-            {
+            if why.starts_with("on pad") || why.starts_with("under") {
                 out.push((
                     f.reference.clone(),
                     "designator_on_copper",
                     format!("{} is {why}", f.reference),
+                ));
+            } else if why.starts_with("on a via") {
+                out.push((
+                    f.reference.clone(),
+                    "designator_on_via",
+                    format!("{} sits on a via (the fab clips it)", f.reference),
                 ));
             }
         }
@@ -542,7 +547,7 @@ mod tests {
         let b = Board::from_text(&fixture::board(&body)).unwrap();
         let checks: Vec<&str> = reference_findings(&b).iter().map(|f| f.1).collect();
         assert!(checks.contains(&"designator_on_copper"), "{checks:?}");
-        assert!(checks.contains(&"upside_down_text"), "{checks:?}");
+        assert!(!checks.contains(&"tilted_text"), "{checks:?}");
     }
 }
 

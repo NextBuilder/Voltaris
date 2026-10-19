@@ -63,8 +63,8 @@ pub fn tools() -> Vec<ToolDef> {
                     "signal_width": { "type": "number", "default": 0.25 },
                     "power_width": { "type": "number", "default": 0.5 },
                     "net_widths": { "type": "object", "additionalProperties": { "type": "number" }, "description": "Track width per net name" },
-                    "via_size": { "type": "number", "default": 0.8 },
-                    "via_drill": { "type": "number", "default": 0.4 },
+                    "via_size": { "type": "number", "default": 0.6, "description": "Via diameter; 0.6 mm with a 0.3 mm drill is the standard on maker product boards" },
+                    "via_drill": { "type": "number", "default": 0.3 },
                     "edge_clearance": { "type": "number", "default": 0.5 },
                     "prefer_layer": { "type": "string", "default": "F.Cu", "description": "Layer to favour; 'none' for no preference" },
                     "passes": { "type": "integer", "default": 3, "minimum": 1, "maximum": 8 }
@@ -113,7 +113,8 @@ pub fn tools() -> Vec<ToolDef> {
              every reference designator tidied to one legible size (1.0 mm, 0.8 mm minimum), \
              upright, beside its part and off pads, vias, bodies and other silkscreen (hidden when \
              there is no clean spot; references 'keep' or 'hide' to change that), a \
-             product name and version block, an optional bottom-side brand line, the ground pour \
+             product name and version block (inverted knockout text by default), an optional \
+             bottom-side brand line, the ground pour \
              mirrored onto the other outer layer of a 2-layer board, and a regular grid of ground \
              stitching vias clear of parts, pads, tracks and text. Never places silkscreen on \
              pads. Defaults to a dry run; apply with dry_run false and the plan_revision.",
@@ -124,6 +125,7 @@ pub fn tools() -> Vec<ToolDef> {
                     "dry_run": { "type": "boolean", "default": true },
                     "expected_plan_revision": { "type": "string" },
                     "title": { "type": "string", "description": "Product name (default: the project name)" },
+                    "knockout_title": { "type": "boolean", "default": true, "description": "Print the product name as inverted (knockout) text: a solid silkscreen box with the letters cut out" },
                     "version": { "type": "string", "description": "e.g. v1.0" },
                     "back_text": { "type": "string", "description": "Brand or URL line for the bottom side" },
                     "labels": { "type": "boolean", "default": true },
@@ -598,6 +600,7 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
         via_drill: f64_arg(args, "via_drill", 0.3),
         mirror_pours: args["mirror_pours"].as_bool().unwrap_or(true),
         title: opt_str(args, "title").map(str::to_string),
+        knockout_title: args["knockout_title"].as_bool().unwrap_or(true),
         version: opt_str(args, "version").map(str::to_string),
         back_text: opt_str(args, "back_text").map(str::to_string),
         references: match opt_str(args, "references").unwrap_or("tidy") {
@@ -619,7 +622,7 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
         "plan_revision": rev,
         "texts": plan.texts.iter().map(|t| json!({
             "layer": t.layer, "text": t.text, "x": round3(t.at.0), "y": round3(t.at.1),
-            "size": t.size, "rotation": t.rotation, "purpose": t.purpose
+            "size": t.size, "rotation": t.rotation, "knockout": t.knockout, "purpose": t.purpose
         })).collect::<Vec<_>>(),
         "zones": plan.zones.iter().map(|z| json!({"net": z.net, "layer": z.layer, "points": z.points.len()})).collect::<Vec<_>>(),
         "stitching_vias": plan.vias.len(),
@@ -666,9 +669,10 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
         let n = c.run_commit("Voltaris polish_board", |c| {
             let mut items = Vec::new();
             for t in &texts {
-                let bt = builders::board_text(
+                let mut bt = builders::board_text(
                     &t.layer, &t.text, t.at.0, t.at.1, t.size, t.rotation, t.mirror,
                 );
+                bt.knockout = t.knockout;
                 items.push(builders::pack_any(&bt, "kiapi.board.types.BoardText"));
             }
             let mut codes: BTreeMap<String, i32> = BTreeMap::new();

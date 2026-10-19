@@ -60,6 +60,50 @@ impl Ledger {
     }
 }
 
+/// Track ends meeting at one point: (net, layer, rounded point).
+type EndKey = (String, String, (i64, i64));
+/// A track end and the far end of the same track.
+type Spoke = ((f64, f64), (f64, f64));
+
+/// Folds more than three findings of one check into a single line with a
+/// count and examples, so one systematic issue does not bury the others.
+fn group_findings(findings: Vec<Finding>) -> Vec<Finding> {
+    let mut order: Vec<(&'static str, &'static str)> = Vec::new();
+    let mut by: BTreeMap<(&'static str, &'static str), Vec<Finding>> = BTreeMap::new();
+    for f in findings {
+        let k = (f.area, f.check);
+        if !by.contains_key(&k) {
+            order.push(k);
+        }
+        by.entry(k).or_default().push(f);
+    }
+    let mut out = Vec::new();
+    for k in order {
+        let list = by.remove(&k).unwrap_or_default();
+        if list.len() <= 3 {
+            out.extend(list);
+            continue;
+        }
+        let first = &list[0];
+        let examples: Vec<&str> = list.iter().take(3).map(|f| f.message.as_str()).collect();
+        out.push(Finding {
+            severity: if list.iter().any(|f| f.severity == "error") {
+                "error"
+            } else if list.iter().any(|f| f.severity == "warning") {
+                "warning"
+            } else {
+                "info"
+            },
+            area: first.area,
+            check: first.check,
+            message: format!("{} cases, e.g. {}", list.len(), examples.join("; ")),
+            at: first.at,
+            fix: first.fix,
+        });
+    }
+    out
+}
+
 fn edge_distance(outline: Rect, p: (f64, f64)) -> f64 {
     (p.0 - outline.0)
         .min(outline.2 - p.0)
@@ -153,10 +197,13 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         }
     }
 
-    let ics: Vec<&super::model::Footprint> = board
+    // A capacitor between a rail and ground is fine when it sits beside any
+    // part on that rail (an IC pin, a regulator, the input connector); it is
+    // only "far" when nothing it could serve is near.
+    let served: Vec<&super::model::Footprint> = board
         .footprints
         .iter()
-        .filter(|f| f.pads.len() >= 6 && !f.is_connector())
+        .filter(|f| f.pads.len() >= 3 || f.is_connector())
         .collect();
     for f in &board.footprints {
         if f.prefix() != "C" || f.pads.len() != 2 {
@@ -173,8 +220,9 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             continue;
         };
         let net = power.net.as_deref().unwrap_or_default();
-        let nearest = ics
+        let nearest = served
             .iter()
+            .filter(|o| o.reference != f.reference)
             .flat_map(|ic| ic.pads.iter().map(|&i| &board.pads[i]))
             .filter(|q| q.net.as_deref() == Some(net))
             .map(|q| (dist(q.at, power.at), q.reference.clone()))
@@ -201,70 +249,99 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         }
     }
 
-    let mut thin: BTreeMap<String, f64> = BTreeMap::new();
+    // Power copper narrower than min_power_width over more than a few
+    // millimetres. Short neck-downs into small pads are normal, and a ground
+    // net that has a pour carries its current in the pour.
+    let mut thin: BTreeMap<String, (f64, f64)> = BTreeMap::new();
     for s in &board.segments {
         let Some(net) = s.net.as_deref() else {
             continue;
         };
-        if (is_power_net(net) || is_ground(net)) && s.width + 1e-9 < opts.min_power_width {
-            let e = thin.entry(net.to_string()).or_insert(s.width);
-            *e = e.min(s.width);
+        let poured_ground = is_ground(net) && !board.poured_layers(net).is_empty();
+        if (is_power_net(net) || is_ground(net))
+            && !poured_ground
+            && s.width + 1e-9 < opts.min_power_width
+        {
+            let e = thin.entry(net.to_string()).or_insert((s.width, 0.0));
+            e.0 = e.0.min(s.width);
+            e.1 += dist(s.a, s.b);
         }
     }
-    for (net, w) in &thin {
+    for (net, (w, length)) in thin.iter().filter(|(_, (_, l))| *l > 3.0) {
         findings.push(Finding {
-            severity: "warning",
+            severity: if *w < 0.25 { "warning" } else { "info" },
             area: "engineering",
             check: "thin_power_track",
             message: format!(
-                "{} has a {:.2} mm track; power copper should be at least {} mm (size it with calc_trace_width)",
+                "{} runs {:.0} mm of track at {:.2} mm; check its current with calc_trace_width (power copper is usually {} mm or wider)",
                 short_net(net),
+                length,
                 w,
                 opts.min_power_width
             ),
             at: None,
             fix: "calc_trace_width",
         });
-        eng.take("thin_power_track", 2, 12);
+        eng.take("thin_power_track", if *w < 0.25 { 2 } else { 1 }, 8);
     }
 
+    // A corner is a point where exactly two tracks of one net meet on one
+    // layer, outside any pad or via of that net (where several tracks
+    // legitimately converge). It is acute when the angle between them is
+    // under 90°.
+    let key = |p: (f64, f64)| ((p.0 * 100.0).round() as i64, (p.1 * 100.0).round() as i64);
+    let mut ends: BTreeMap<EndKey, Vec<Spoke>> = BTreeMap::new();
+    for s in &board.segments {
+        if dist(s.a, s.b) < 1e-6 {
+            continue;
+        }
+        let net = s.net.clone().unwrap_or_default();
+        for (p, o) in [(s.a, s.b), (s.b, s.a)] {
+            ends.entry((net.clone(), s.layer.clone(), key(p)))
+                .or_default()
+                .push((p, o));
+        }
+    }
     let mut acute = 0;
-    for (i, a) in board.segments.iter().enumerate() {
-        for b in board.segments.iter().skip(i + 1) {
-            if a.net != b.net || a.layer != b.layer {
-                continue;
-            }
-            for (pa, oa) in [(a.a, a.b), (a.b, a.a)] {
-                for (pb, ob) in [(b.a, b.b), (b.b, b.a)] {
-                    if dist(pa, pb) > 0.01 {
-                        continue;
-                    }
-                    let v1 = (oa.0 - pa.0, oa.1 - pa.1);
-                    let v2 = (ob.0 - pb.0, ob.1 - pb.1);
-                    let n1 = (v1.0 * v1.0 + v1.1 * v1.1).sqrt();
-                    let n2 = (v2.0 * v2.0 + v2.1 * v2.1).sqrt();
-                    if n1 < 1e-9 || n2 < 1e-9 {
-                        continue;
-                    }
-                    let cos = (v1.0 * v2.0 + v1.1 * v2.1) / (n1 * n2);
-                    if cos > 0.05 {
-                        acute += 1;
-                        findings.push(Finding {
-                            severity: "warning",
-                            area: "engineering",
-                            check: "acute_angle",
-                            message: format!(
-                                "{} turns through a sharp corner ({:.0}°), an acid trap and an impedance step",
-                                a.net.as_deref().map(short_net).unwrap_or("track"),
-                                cos.clamp(-1.0, 1.0).acos().to_degrees()
-                            ),
-                            at: Some(pa),
-                            fix: "modify_trace",
-                        });
-                        eng.take("acute_angle", 2, 10);
-                    }
-                }
-            }
+    for ((net, _, _), list) in &ends {
+        let [(p, o1), (_, o2)] = list.as_slice() else {
+            continue;
+        };
+        let in_copper = board
+            .pads
+            .iter()
+            .any(|q| q.net.as_deref() == Some(net.as_str()) && q.distance_to(*p) < 1e-6)
+            || board
+                .vias
+                .iter()
+                .any(|v| v.net.as_deref() == Some(net.as_str()) && dist(v.at, *p) <= v.size / 2.0);
+        if in_copper {
+            continue;
+        }
+        let v1 = (o1.0 - p.0, o1.1 - p.1);
+        let v2 = (o2.0 - p.0, o2.1 - p.1);
+        let n1 = (v1.0 * v1.0 + v1.1 * v1.1).sqrt();
+        let n2 = (v2.0 * v2.0 + v2.1 * v2.1).sqrt();
+        let cos = (v1.0 * v2.0 + v1.1 * v2.1) / (n1 * n2);
+        if cos > 0.05 {
+            acute += 1;
+            findings.push(Finding {
+                severity: "warning",
+                area: "engineering",
+                check: "acute_angle",
+                message: format!(
+                    "{} turns through a {:.0}° corner, an acid trap and an impedance step",
+                    if net.is_empty() {
+                        "a track"
+                    } else {
+                        short_net(net)
+                    },
+                    cos.clamp(-1.0, 1.0).acos().to_degrees()
+                ),
+                at: Some(*p),
+                fix: "modify_trace",
+            });
+            eng.take("acute_angle", 2, 10);
         }
     }
 
@@ -298,7 +375,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             .filter(|(_, p)| p.net.as_deref() == Some(net.as_str()))
             .map(|(i, _)| i)
             .collect();
-        if pads.len() < 2 || !board.poured_layers(&net).is_empty() {
+        if pads.len() < 2 {
             continue;
         }
         let groups = super::router::component_count(board, &net, &pads);
@@ -387,13 +464,30 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         if named.is_empty() {
             continue;
         }
-        let labelled = named.iter().all(|p| {
-            let label = super::polish::pin_label(p.net.as_deref().unwrap_or_default());
-            board
-                .texts
-                .iter()
-                .any(|t| dist(t.at, p.at) < 4.0 && (t.text == label || t.text.contains(&label)))
-        });
+        // A pin counts as labelled when any silkscreen text (top or bottom)
+        // sits beside it, or a pin table near the connector names it — pro
+        // boards label with GPIO numbers and bottom-side tables too.
+        let silk: Vec<&super::model::Text> = board
+            .texts
+            .iter()
+            .filter(|t| t.layer.ends_with(".SilkS"))
+            .collect();
+        let near_table = |label: &str| {
+            silk.iter().any(|t| {
+                super::model::rect_distance(f.courtyard, t.at) < 6.0
+                    && t.text
+                        .split(|c: char| c.is_whitespace() || c == '\\')
+                        .any(|w| w.eq_ignore_ascii_case(label))
+            })
+        };
+        let hits = named
+            .iter()
+            .filter(|p| {
+                let label = super::polish::pin_label(p.net.as_deref().unwrap_or_default());
+                silk.iter().any(|t| dist(t.at, p.at) < 3.0) || near_table(&label)
+            })
+            .count();
+        let labelled = hits * 2 >= named.len();
         if !labelled {
             unlabelled.push(f.reference.clone());
         }
@@ -412,23 +506,50 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         });
         beauty.take("unlabelled_connectors", unlabelled.len() as i64 * 6, 18);
     }
-    let has_title = board.texts.iter().any(|t| {
-        t.layer == "F.SilkS"
-            && t.text.len() >= 4
-            && (t.text.contains(" v")
-                || t.text.contains(" V")
-                || t.text.to_ascii_lowercase().contains("rev"))
+    let has_logo = board.footprints.iter().any(|f| {
+        let l = f.library.to_ascii_lowercase();
+        l.contains("logo")
+            || l.contains("oshw")
+            || f.reference.to_ascii_uppercase().starts_with("LOGO")
     });
-    if !has_title {
+    let has_name = has_logo
+        || board.texts.iter().any(|t| {
+            t.layer.ends_with(".SilkS")
+                && t.text.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 4
+                && (t.size >= 1.0 - 1e-6 || t.knockout)
+        });
+    let has_version = board.texts.iter().any(|t| {
+        let l = t.text.to_ascii_lowercase();
+        t.layer.ends_with(".SilkS")
+            && (l.contains("rev")
+                || l.split(|c: char| !c.is_ascii_alphanumeric() && c != '.')
+                    .any(|w| {
+                        w.len() >= 2
+                            && w.starts_with('v')
+                            && w[1..].chars().next().is_some_and(|c| c.is_ascii_digit())
+                    }))
+    });
+    if !has_name {
         findings.push(Finding {
             severity: "info",
             area: "beauty",
-            check: "no_name_or_version",
-            message: "No product name and version on the top silkscreen".into(),
+            check: "no_product_name",
+            message: "No product name, logo or brand on the silkscreen".into(),
             at: None,
             fix: "polish_board",
         });
-        beauty.take("no_name_or_version", 8, 8);
+        beauty.take("no_product_name", 6, 6);
+    }
+    if !has_version {
+        findings.push(Finding {
+            severity: "info",
+            area: "beauty",
+            check: "no_version",
+            message: "No version or revision mark (v1.0, REV A) to tell board spins apart".into(),
+            at: None,
+            fix: "polish_board",
+        });
+        beauty.take("no_version", 3, 3);
     }
     if let Some(o) = outline {
         if board.outline_rectangular {
@@ -463,7 +584,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
                 .iter()
                 .filter(|v| v.net.as_deref() == Some(gnd.as_str()))
                 .count();
-            if (stitches as f64) < area / 150.0 {
+            if area > 1000.0 && (stitches as f64) < area / 150.0 {
                 findings.push(Finding {
                     severity: "info",
                     area: "beauty",
@@ -503,7 +624,8 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
     for (check, messages) in by_check {
         let (severity, per, cap) = match check {
             "designator_on_copper" | "designators_overlap" => ("warning", 3, 15),
-            "designator_too_small" | "upside_down_text" => ("warning", 2, 10),
+            "designator_too_small" | "tilted_text" => ("warning", 2, 10),
+            "designator_on_via" => ("info", 1, 4),
             _ => ("info", 2, 6),
         };
         let shown: Vec<&str> = messages.iter().take(6).map(String::as_str).collect();
@@ -528,6 +650,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
     let _ = rect_distance;
     let _ = segment_distance;
 
+    let findings = group_findings(findings);
     let metrics = json!({
         "footprints": board.footprints.len(),
         "pads": board.pads.len(),
@@ -569,7 +692,8 @@ mod tests {
         assert!(checks.contains("unrouted"), "{checks:?}");
         assert!(checks.contains("thin_power_track"));
         assert!(checks.contains("unlabelled_connectors"));
-        assert!(checks.contains("no_name_or_version"));
+        assert!(checks.contains("no_product_name"));
+        assert!(checks.contains("no_version"));
         assert!(checks.contains("no_ground_plane"));
         assert!(a.engineering < 90 && a.beauty < 90);
     }
@@ -583,6 +707,45 @@ mod tests {
         let a = audit(&b, &AuditOptions::default());
         assert!(a.findings.iter().any(|f| f.check == "acute_angle"));
         assert!(a.findings.iter().any(|f| f.check == "off_angle_tracks"));
+    }
+
+    #[test]
+    fn accepts_45_degree_bends_and_junctions_in_pads() {
+        let body = format!(
+            "{}{}",
+            fixture::smd("R1", 104.0, 110.0, 0.0, ("SIG", "GND")),
+            r#"  (segment (start 103.1 110) (end 110 110) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+  (segment (start 110 110) (end 113 113) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+  (segment (start 113 113) (end 120 113) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+  (segment (start 103.1 110) (end 104.2 108.9) (width 0.25) (layer "F.Cu") (net 3 "SIG"))
+"#
+        );
+        let b = Board::from_text(&fixture::board(&body)).unwrap();
+        let a = audit(&b, &AuditOptions::default());
+        assert!(
+            !a.findings.iter().any(|f| f.check == "acute_angle"),
+            "{:?}",
+            a.findings
+        );
+    }
+
+    #[test]
+    fn joins_pads_that_share_a_number_and_pads_inside_a_pour() {
+        let body = r#"  (footprint "Castellated:Pin" (layer "F.Cu") (at 110 110)
+    (property "Reference" "J1" (at 0 -2 0) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 3 "SIG"))
+    (pad "1" thru_hole circle (at 1.5 0) (size 1 1) (drill 0.6) (layers "*.Cu") (net 3 "SIG"))
+    (pad "2" smd rect (at 0 3) (size 1 1) (layers "F.Cu") (net 1 "GND"))
+    (pad "3" smd rect (at 0 6) (size 1 1) (layers "F.Cu") (net 1 "GND")))
+  (zone (net 1) (net_name "GND") (layers "F.Cu") (polygon (pts (xy 105 112) (xy 115 112) (xy 115 118) (xy 105 118))))
+"#;
+        let b = Board::from_text(&fixture::board(body)).unwrap();
+        let a = audit(&b, &AuditOptions::default());
+        assert!(
+            !a.findings.iter().any(|f| f.check == "unrouted"),
+            "{:?}",
+            a.findings
+        );
     }
 }
 
@@ -626,5 +789,39 @@ mod corpus {
             p.vias.len(),
             p.zones.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod reference_boards {
+    use super::super::model::Board;
+    use super::*;
+
+    /// Audits every board listed in VOLTARIS_REFERENCE_BOARDS (one path per
+    /// line): a check on the auditor itself against boards real teams shipped.
+    #[test]
+    #[ignore = "needs VOLTARIS_REFERENCE_BOARDS"]
+    fn audits_reference_boards() {
+        let Ok(list) = std::env::var("VOLTARIS_REFERENCE_BOARDS") else {
+            return;
+        };
+        for path in list.lines().filter(|l| !l.trim().is_empty()) {
+            let text = std::fs::read_to_string(path).unwrap();
+            let b = Board::from_text(&text).unwrap();
+            let a = audit(&b, &AuditOptions::default());
+            eprintln!(
+                "\n== {path}\n   engineering {} beauty {}",
+                a.engineering, a.beauty
+            );
+            for f in &a.findings {
+                eprintln!(
+                    "   [{}/{}] {}: {}",
+                    f.area,
+                    f.severity,
+                    f.check,
+                    f.message.chars().take(160).collect::<String>()
+                );
+            }
+        }
     }
 }

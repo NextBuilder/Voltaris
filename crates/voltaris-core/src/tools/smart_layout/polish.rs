@@ -22,6 +22,7 @@ pub struct PolishOptions {
     pub version: Option<String>,
     pub back_text: Option<String>,
     pub title_size: f64,
+    pub knockout_title: bool,
     pub references: RefMode,
     pub ref_size: f64,
 }
@@ -53,6 +54,7 @@ impl Default for PolishOptions {
             version: None,
             back_text: None,
             title_size: 1.2,
+            knockout_title: true,
             references: RefMode::Tidy,
             ref_size: 1.0,
         }
@@ -67,6 +69,7 @@ pub struct TextItem {
     pub size: f64,
     pub rotation: f64,
     pub mirror: bool,
+    pub knockout: bool,
     pub purpose: String,
 }
 
@@ -234,6 +237,7 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                             size: opts.label_size,
                             rotation,
                             mirror: false,
+                            knockout: false,
                             purpose: format!("{} pin {} label", f.reference, p.number),
                         });
                         space.taken.push((r, false));
@@ -245,6 +249,7 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                                 size: opts.label_size,
                                 rotation,
                                 mirror: true,
+                                knockout: false,
                                 purpose: format!("{} pin {} label (bottom)", f.reference, p.number),
                             });
                             space.taken.push((r, true));
@@ -292,6 +297,7 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                         size: opts.title_size,
                         rotation: 0.0,
                         mirror: false,
+                        knockout: opts.knockout_title,
                         purpose: "product name and version".into(),
                     });
                 }
@@ -314,6 +320,7 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                         size: 1.0,
                         rotation: 0.0,
                         mirror: true,
+                        knockout: false,
                         purpose: "bottom-side brand line".into(),
                     });
                 }

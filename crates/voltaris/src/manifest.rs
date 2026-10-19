@@ -189,6 +189,30 @@ pub const SKILLS: &[SkillManifest] = &[
         ],
     },
     SkillManifest {
+        name: "kicad-product-board",
+        content: include_str!("../assets/skills/kicad-product-board/SKILL.md"),
+        references: &[
+            (
+                "reference-board-study.md",
+                include_str!(
+                    "../assets/skills/kicad-product-board/references/reference-board-study.md"
+                ),
+            ),
+            (
+                "circuit-blocks.md",
+                include_str!("../assets/skills/kicad-product-board/references/circuit-blocks.md"),
+            ),
+            (
+                "release-package.md",
+                include_str!("../assets/skills/kicad-product-board/references/release-package.md"),
+            ),
+            (
+                "scorecard.md",
+                include_str!("../assets/skills/kicad-product-board/references/scorecard.md"),
+            ),
+        ],
+    },
+    SkillManifest {
         name: "kicad-pro-silkscreen",
         content: include_str!("../assets/skills/kicad-pro-silkscreen/SKILL.md"),
         references: &[(

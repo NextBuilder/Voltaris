@@ -1,7 +1,7 @@
 {
   "name": "voltaris",
   "displayName": "Voltaris",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Design professional PCBs in KiCad 10 with Claude: schematic, layout, ERC/DRC, your own design-rule checks, datasheets, simulation, manufacturing files and firmware bring-up.",
   "author": {
     "name": "Next Builder",

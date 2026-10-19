@@ -320,9 +320,11 @@ Present findings grouped by severity with actionable fix suggestions:
 
 ### Full Review (comprehensive)
 
-1. Load all review toolsets
+1. Load all review toolsets, plus `load_toolset('smart_layout')` for `audit_layout`
 2. Run direct short/connectivity checks, `run_erc`, and `get_drc_violations`
-3. `run_design_review()` — aggregate audit suite
+3. `run_design_review()` — aggregate audit suite; `audit_layout` — layout engineering and
+   beauty grades (return vias, decoupling distance, power widths, silkscreen); score the
+   result with the kicad-product-board scorecard
 4. Check `status`, `coverage`, and `diagnostics`; never approve an incomplete review
 5. Reconcile aggregate or heuristic findings with stronger direct evidence
 6. Classify all gathered findings by severity

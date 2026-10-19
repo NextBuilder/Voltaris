@@ -13,7 +13,15 @@ ALL modifications go through MCP tools — never edit .kicad_pcb files directly.
 
 This skill covers the tool mechanics. For the layout method (floor plan, placement order,
 return paths, routing order, autorouter cleanup) load the kicad-pro-layout skill; for form
-factors, connector standards, silkscreen and the finished look load kicad-board-craft.
+factors, connector standards, silkscreen and the finished look load kicad-board-craft and
+kicad-pro-silkscreen; for product decisions and the rules shipped boards use, load
+kicad-product-board.
+
+The one-call engines do most of a layout: `smart_place` (placement and optimisation),
+`route_board` (autorouter with coupled pairs and fine-pitch fanout), `polish_board`
+(labels, designators, pours, stitching) and `audit_layout` (engineering and beauty grades) —
+all in `load_toolset('smart_layout')`. The tools below are for the parts you place or route
+by hand, and for fixing what the engines report.
 
 ---
 
@@ -253,7 +261,7 @@ geometry field is unavailable evidence, not a zero-size pad.
 |---------------------------|---------------------------------------------|
 | `route_pad_to_pad`        | Direct connection, auto L-bend routing      |
 | `route_trace`             | Manual segment-by-segment routing           |
-| `route_differential_pair` | Matched-length USB/LVDS/Ethernet pairs      |
+| `route_differential_pair` | One pair by hand (`route_board` routes detected pairs coupled and length-matched) |
 | `add_via`                 | Layer transition                            |
 | `create_netclass`         | Define width/clearance rules for net groups |
 

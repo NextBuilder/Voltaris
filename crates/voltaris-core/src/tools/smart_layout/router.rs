@@ -58,8 +58,8 @@ impl Default for RouteOptions {
             signal_width: 0.25,
             power_width: 0.5,
             net_widths: BTreeMap::new(),
-            via_size: 0.8,
-            via_drill: 0.4,
+            via_size: 0.6,
+            via_drill: 0.3,
             via_cost: 3.0,
             edge_clearance: 0.5,
             prefer_layer: Some("F.Cu".into()),
@@ -1238,7 +1238,12 @@ fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
         .iter()
         .filter(|v| v.net.as_deref() == Some(net))
         .collect();
-    let n = pads.len() + segs.len() + vias.len();
+    let zones: Vec<&super::model::Zone> = board
+        .zones
+        .iter()
+        .filter(|z| z.net.as_deref() == Some(net) && z.points.len() >= 3)
+        .collect();
+    let n = pads.len() + segs.len() + vias.len() + zones.len();
     let mut parent: Vec<usize> = (0..n).collect();
     fn find(p: &mut [usize], i: usize) -> usize {
         let mut r = i;
@@ -1291,6 +1296,42 @@ fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
         for (pi, &pad) in pads.iter().enumerate() {
             if board.pads[pad].distance_to(v.at) <= v.size / 2.0 {
                 union(&mut parent, pi, pads.len() + segs.len() + vi);
+            }
+        }
+    }
+    // KiCad joins pads of one footprint that share a number (castellated
+    // pins, split thermal pads), and pads that overlap touch.
+    for i in 0..pads.len() {
+        for j in i + 1..pads.len() {
+            let (a, b) = (&board.pads[pads[i]], &board.pads[pads[j]]);
+            let same_pin =
+                a.reference == b.reference && !a.number.is_empty() && a.number == b.number;
+            let shared_layer =
+                (a.front && b.front) || (a.back && b.back) || a.through_hole || b.through_hole;
+            if same_pin || (shared_layer && super::model::rects_overlap(a.bbox(), b.bbox(), 0.0)) {
+                union(&mut parent, i, j);
+            }
+        }
+    }
+    // Copper pours connect what lies inside them on their layers.
+    let base = pads.len() + segs.len() + vias.len();
+    for (zi, z) in zones.iter().enumerate() {
+        let inside = |p: (f64, f64)| super::model::point_in_polygon(p, &z.points);
+        let on = |layer: &str| z.layers.iter().any(|l| l == layer);
+        for (pi, &pad) in pads.iter().enumerate() {
+            let p = &board.pads[pad];
+            if (p.through_hole || z.layers.iter().any(|l| p.on_layer(l))) && inside(p.at) {
+                union(&mut parent, pi, base + zi);
+            }
+        }
+        for (si, sg) in segs.iter().enumerate() {
+            if on(&sg.layer) && (inside(sg.a) || inside(sg.b)) {
+                union(&mut parent, pads.len() + si, base + zi);
+            }
+        }
+        for (vi, v) in vias.iter().enumerate() {
+            if inside(v.at) {
+                union(&mut parent, pads.len() + segs.len() + vi, base + zi);
             }
         }
     }

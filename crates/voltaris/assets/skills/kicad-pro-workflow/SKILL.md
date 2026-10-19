@@ -20,8 +20,10 @@ kicad-power-design (power tree, batteries), kicad-esp32 (ESP32 boards), kicad-mc
 (RP2040/RP2350, STM32, nRF52 boards), kicad-high-speed-rf (impedance, USB, RF, length matching),
 kicad-part-sourcing (stock, alternates, importing parts), kicad-simulation (checking
 circuits numerically), kicad-pro-layout (floor plan, placement and routing method),
-kicad-board-craft (form factor, connectors and the finished look) and kicad-pro-silkscreen
-(designators, labels, polarity marks and the product block).
+kicad-board-craft (form factor, connectors and the finished look), kicad-pro-silkscreen
+(designators, labels, polarity marks and the product block) and kicad-product-board (product
+decisions, proven circuit blocks, rules measured from shipped boards, the release package and
+the scorecard).
 
 Two habits run through every gate:
 - **Snapshot before every large change** (applying templates, re-placing, autorouting,
@@ -47,6 +49,8 @@ Pin down, with suggested options for each:
 - Board size or enclosure limit, connector positions, layer count (2 or 4)
 - Fab and assembly house (JLCPCB by default), quantity, cost target
 - Environment: indoor/outdoor, temperature, enclosure
+- Product decisions (kicad-product-board skill, section 1): who assembles it, the form factor
+  it must match, silkscreen style (product or debug), the options a user may change by jumper
 
 Write the brief back to the user before Gate 1.
 
@@ -125,7 +129,9 @@ load_toolset('engineering')      # calc_impedance list_stackups calc_trace_width
    `calc_impedance` — USB 2.0 is a 90 Ω differential pair, RF feeds are 50 Ω (CPWG on 2/4-layer
    boards). Order the board with the same stackup.
 2. Net classes: power rails sized by `calc_trace_width` for their current; signal default;
-   USB pair; RF. Create with `create_netclass` and `assign_net_to_class`.
+   USB pair; RF. Create with `create_netclass` and `assign_net_to_class`. Start from the
+   values measured on shipped boards (kicad-product-board, section 3): 0.2 mm clearance,
+   0.25 mm signal, 0.5 mm power, 0.6/0.3 mm vias.
 3. Outline, mounting holes (M3 by default) and keep-outs (antenna, mounting-hole screw heads).
    Agree the style with the user — form factor, connector standard, mask colour — using the
    kicad-board-craft skill.
@@ -208,10 +214,13 @@ load_toolset('firmware')         # generate_firmware_kit
 2. Optional enclosure: `generate_enclosure`, pass exact connector heights from datasheets.
 3. Firmware: `generate_firmware_kit` with an output directory.
 4. Write the [bring-up plan](references/bringup-plan.md) for the first boards.
+5. The release package — README with specs and a pin table matching the silkscreen, schematic
+   PDF, production files, renders, enclosure, firmware (kicad-product-board skill).
 
 ## Final report
 
 One table: each gate, its checks, the evidence (counts, verdicts), and status
-PASS / FAIL / INCOMPLETE. The board is "ready to order" only when every gate is PASS. Always
+PASS / FAIL / INCOMPLETE, followed by the kicad-product-board scorecard with the measured value
+beside each target. The board is "ready to order" only when every gate is PASS. Always
 recommend ordering a small first batch (5 boards) and following the bring-up plan before
 volume.
