@@ -1,20 +1,59 @@
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, delimiter } from "node:path";
+import { join, delimiter, dirname } from "node:path";
 import { createInterface } from "node:readline";
 
 const PLUGIN_DIR = "com_github_nextbuilder_voltaris";
-const exe = process.platform === "win32" ? "voltaris.exe" : "voltaris";
+const win = process.platform === "win32";
+const exe = win ? "voltaris.exe" : "voltaris";
+const home = homedir();
+
+function kicadConfigDir() {
+  if (win) return join(process.env.APPDATA || join(home, "AppData", "Roaming"), "kicad", "10.0");
+  if (process.platform === "darwin") return join(home, "Library", "Preferences", "kicad", "10.0");
+  return join(process.env.XDG_CONFIG_HOME || join(home, ".config"), "kicad", "10.0");
+}
+
+function kicadCommon() {
+  try {
+    return JSON.parse(readFileSync(join(kicadConfigDir(), "kicad_common.json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function windowsDocuments() {
+  try {
+    const out = execFileSync("reg", ["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders", "/v", "Personal"], { encoding: "utf8", windowsHide: true });
+    const m = out.match(/Personal\s+REG_\w+\s+(.+)/);
+    return m ? m[1].trim().replace(/%([^%]+)%/g, (_, v) => process.env[v] ?? `%${v}%`) : null;
+  } catch {
+    return null;
+  }
+}
+
+function documentsDirs() {
+  const docs = [join(home, "Documents")];
+  if (win) {
+    const known = windowsDocuments();
+    if (known) docs.unshift(known);
+    for (const v of ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]) if (process.env[v]) docs.push(join(process.env[v], "Documents"));
+    try {
+      for (const d of readdirSync(home)) if (d.startsWith("OneDrive")) docs.push(join(home, d, "Documents"));
+    } catch {}
+  }
+  return [...new Set(docs)];
+}
 
 function candidates() {
-  const home = homedir();
   const list = [];
+  const vars = kicadCommon().environment?.vars || {};
   if (process.env.VOLTARIS_BIN) list.push(process.env.VOLTARIS_BIN);
-  if (process.env.KICAD10_3RD_PARTY) list.push(join(process.env.KICAD10_3RD_PARTY, "plugins", PLUGIN_DIR, "bin", exe));
-  const docs = [join(home, "Documents")];
-  if (process.env.OneDrive) docs.push(join(process.env.OneDrive, "Documents"));
-  for (const d of docs) list.push(join(d, "KiCad", "10.0", "3rdparty", "plugins", PLUGIN_DIR, "bin", exe));
+  for (const third of [process.env.KICAD10_3RD_PARTY, vars.KICAD10_3RD_PARTY]) if (third) list.push(join(third, "plugins", PLUGIN_DIR, "bin", exe));
+  const docs = documentsDirs().map((d) => join(d, "KiCad"));
+  if (vars.KICAD_DOCUMENTS_HOME) docs.unshift(vars.KICAD_DOCUMENTS_HOME);
+  for (const d of docs) list.push(join(d, "10.0", "3rdparty", "plugins", PLUGIN_DIR, "bin", exe));
   list.push(join(home, ".local", "share", "kicad", "10.0", "3rdparty", "plugins", PLUGIN_DIR, "bin", exe));
   for (const dir of (process.env.PATH || "").split(delimiter)) if (dir) list.push(join(dir, exe));
   return list;
@@ -23,7 +62,13 @@ function candidates() {
 const binary = candidates().find((p) => existsSync(p));
 
 if (binary) {
-  const child = spawn(binary, process.argv.slice(2), { stdio: "inherit" });
+  const env = { ...process.env };
+  if (!env.KICAD_CLI) {
+    const py = kicadCommon().api?.interpreter_path;
+    const cli = py && join(dirname(py), win ? "kicad-cli.exe" : "kicad-cli");
+    if (cli && existsSync(cli)) env.KICAD_CLI = cli;
+  }
+  const child = spawn(binary, process.argv.slice(2), { stdio: "inherit", env });
   for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => child.kill(sig));
   child.on("exit", (code, signal) => (signal ? process.kill(process.pid, signal) : process.exit(code ?? 0)));
 } else {
