@@ -63,6 +63,7 @@ const binary = candidates().find((p) => existsSync(p));
 
 if (binary) {
   const env = { ...process.env };
+  env.VOLTARIS_EAGER_TOOLSETS ??= "1";
   if (!env.KICAD_CLI) {
     const py = kicadCommon().api?.interpreter_path;
     const cli = py && join(dirname(py), win ? "kicad-cli.exe" : "kicad-cli");

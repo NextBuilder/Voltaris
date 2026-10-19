@@ -176,6 +176,14 @@ impl Config {
         {
             self.kicad_cli = cli;
         }
+        match get("VOLTARIS_EAGER_TOOLSETS")
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("1" | "true" | "yes" | "on") => self.eager_toolsets = true,
+            Some("0" | "false" | "no" | "off") => self.eager_toolsets = false,
+            _ => {}
+        }
     }
 
     /// Load config from the default search path, reporting which file was
@@ -675,5 +683,16 @@ mod tests {
             (k == "KICAD_CLI").then(|| r"C:\KiCad\10.0\bin\kicad-cli.exe".into())
         });
         assert!(c.kicad_cli.ends_with("kicad-cli.exe") && c.kicad_cli.starts_with("C:"));
+    }
+
+    #[test]
+    fn eager_toolsets_env_override() {
+        let mut c = Config::default();
+        c.apply_env_overrides(|k| (k == "VOLTARIS_EAGER_TOOLSETS").then(|| "maybe".into()));
+        assert!(!c.eager_toolsets);
+        c.apply_env_overrides(|k| (k == "VOLTARIS_EAGER_TOOLSETS").then(|| " TRUE ".into()));
+        assert!(c.eager_toolsets);
+        c.apply_env_overrides(|k| (k == "VOLTARIS_EAGER_TOOLSETS").then(|| "0".into()));
+        assert!(!c.eager_toolsets);
     }
 }

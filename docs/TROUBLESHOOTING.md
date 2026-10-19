@@ -469,7 +469,7 @@ callable tools, the fix is to make the *first* listing complete:
 { "eager_toolsets": true }
 ```
 
-in `voltaris.toml` in the working directory, or a `settings.json` beside the binary. Every toolset is then loaded at
+in `voltaris.toml` in the working directory, or a `settings.json` beside the binary. Setting the environment variable `VOLTARIS_EAGER_TOOLSETS=1` does the same; the Claude plugin sets it for you. Every toolset is then loaded at
 startup, so `tools/list` carries all 260 tools from the first call.
 
 It is off by default because it costs what the router exists to save: roughly
