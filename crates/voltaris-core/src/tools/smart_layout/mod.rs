@@ -11,6 +11,7 @@ pub(crate) mod placer;
 pub(crate) mod polish;
 pub(crate) mod refine;
 pub(crate) mod router;
+pub(crate) mod silk;
 
 use crate::mcp::error::ToolErrorKind;
 use crate::mcp::protocol::CallToolResult;
@@ -35,7 +36,8 @@ pub fn tools() -> Vec<ToolDef> {
              USB_DP/DM, _P/_N, or 'pairs') are routed first as coupled pairs at pair_gap and \
              length-tuned with 45° bumps until the skew is within pair_skew. Fine-pitch parts \
              (pins closer than 0.8 mm) get an automatic pitch-aligned grid and a neck-down width at \
-             their pads, so no manual grid is needed. Power nets get power_width, signals \
+             their pads, so no manual grid is needed. Tracks land on pad centres and never pass \
+             between the pads of small passives. Power nets get power_width, signals \
              signal_width, any net its net_widths entry. Nets fully covered by pours on every \
              routing layer, and nets already connected, are skipped. Defaults to a dry run that \
              reports completion, vias, length, pairs (coupling, skew) and a plan_revision; apply \
@@ -56,6 +58,8 @@ pub fn tools() -> Vec<ToolDef> {
                     "pair_gap": { "type": "number", "description": "Edge-to-edge gap inside a pair (default and minimum: clearance)" },
                     "pair_skew": { "type": "number", "default": 0.1, "description": "Largest allowed length difference inside a pair in mm" },
                     "fine_pitch": { "type": "boolean", "default": true, "description": "Neck tracks down at fine-pitch pads and pick a fine grid automatically" },
+                    "layer_directions": { "type": "boolean", "default": false, "description": "Alternate preferred directions per layer (F.Cu horizontal, B.Cu vertical); best on 4+ layers or a 2-layer board without a ground pour" },
+                    "between_pads": { "type": "boolean", "default": false, "description": "Allow tracks between the two pads of small passives (off by default: solder-bridge risk)" },
                     "signal_width": { "type": "number", "default": 0.25 },
                     "power_width": { "type": "number", "default": 0.5 },
                     "net_widths": { "type": "object", "additionalProperties": { "type": "number" }, "description": "Track width per net name" },
@@ -105,7 +109,10 @@ pub fn tools() -> Vec<ToolDef> {
         tool!(
             "polish_board",
             "Give the board a finished, maker-brand look in one call: silkscreen labels beside \
-             every named connector pin (top, and mirrored on the bottom for through-hole pins), a \
+             every named connector pin (top, and mirrored on the bottom for through-hole pins), \
+             every reference designator tidied to one legible size (1.0 mm, 0.8 mm minimum), \
+             upright, beside its part and off pads, vias, bodies and other silkscreen (hidden when \
+             there is no clean spot; references 'keep' or 'hide' to change that), a \
              product name and version block, an optional bottom-side brand line, the ground pour \
              mirrored onto the other outer layer of a 2-layer board, and a regular grid of ground \
              stitching vias clear of parts, pads, tracks and text. Never places silkscreen on \
@@ -126,7 +133,9 @@ pub fn tools() -> Vec<ToolDef> {
                     "stitch_pitch": { "type": "number", "default": 5.0 },
                     "via_size": { "type": "number", "default": 0.6 },
                     "via_drill": { "type": "number", "default": 0.3 },
-                    "mirror_pours": { "type": "boolean", "default": true }
+                    "mirror_pours": { "type": "boolean", "default": true },
+                    "references": { "type": "string", "enum": ["tidy", "keep", "hide"], "default": "tidy", "description": "Reference designators: tidy (one size, beside each part, off copper), keep, or hide all" },
+                    "ref_size": { "type": "number", "default": 1.0, "description": "Designator height in mm (0.8 minimum)" }
                 },
                 "required": ["board"]
             }),
@@ -304,6 +313,8 @@ async fn handle_route(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
     opts.grid = args["grid"].as_f64().filter(|g| g.is_finite() && *g > 0.0);
     opts.auto_pairs = args["auto_pairs"].as_bool().unwrap_or(true);
     opts.fine_pitch = args["fine_pitch"].as_bool().unwrap_or(true);
+    opts.layer_directions = args["layer_directions"].as_bool().unwrap_or(false);
+    opts.between_pads = args["between_pads"].as_bool().unwrap_or(false);
     opts.pair_width = args["pair_width"]
         .as_f64()
         .filter(|w| w.is_finite() && *w > 0.0);
@@ -589,6 +600,13 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
         title: opt_str(args, "title").map(str::to_string),
         version: opt_str(args, "version").map(str::to_string),
         back_text: opt_str(args, "back_text").map(str::to_string),
+        references: match opt_str(args, "references").unwrap_or("tidy") {
+            "tidy" => polish::RefMode::Tidy,
+            "keep" => polish::RefMode::Keep,
+            "hide" => polish::RefMode::Hide,
+            _ => return Ok(invalid_arg("references", "use tidy, keep or hide")),
+        },
+        ref_size: f64_arg(args, "ref_size", 1.0).max(0.8),
         ..Default::default()
     };
     let plan = match polish::plan(&board, &project, &opts) {
@@ -605,6 +623,13 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
         })).collect::<Vec<_>>(),
         "zones": plan.zones.iter().map(|z| json!({"net": z.net, "layer": z.layer, "points": z.points.len()})).collect::<Vec<_>>(),
         "stitching_vias": plan.vias.len(),
+        "references": {
+            "shown": plan.references.iter().filter(|r| r.visible).count(),
+            "hidden": plan.references.iter().filter(|r| !r.visible).map(|r| r.reference.clone()).collect::<Vec<_>>(),
+            "placements": plan.references.iter().filter(|r| r.visible).map(|r| json!({
+                "reference": r.reference, "x": r.at.0, "y": r.at.1, "size": r.size, "rotation": r.rotation, "spot": r.spot
+            })).collect::<Vec<_>>(),
+        },
         "notes": plan.notes,
     });
     if args["dry_run"].as_bool().unwrap_or(true) {
@@ -621,6 +646,21 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
     let texts = plan.texts.clone();
     let vias = plan.vias.clone();
     let zones = plan.zones.clone();
+    let refs: Vec<voltaris_ipc::client::ReferenceTextEdit> = plan
+        .references
+        .iter()
+        .map(|r| voltaris_ipc::client::ReferenceTextEdit {
+            reference: r.reference.clone(),
+            x: r.at.0,
+            y: r.at.1,
+            size: r.size,
+            stroke: r.stroke,
+            rotation: r.rotation,
+            layer: r.layer.clone(),
+            mirrored: r.mirrored,
+            visible: r.visible,
+        })
+        .collect();
     let (via_drill, via_size) = (opts.via_drill, opts.via_size);
     let applied = apply_live(ctx, &path, "polish_board", move |c, doc| {
         let n = c.run_commit("Voltaris polish_board", |c| {
@@ -664,7 +704,12 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
             if n > 0 {
                 c.create_items_in(doc.clone(), items)?;
             }
-            Ok(n)
+            let moved = if refs.is_empty() {
+                0
+            } else {
+                c.set_reference_texts_in(doc.clone(), &refs)?.len()
+            };
+            Ok(n + moved)
         })?;
         if !zones.is_empty() || !vias.is_empty() {
             c.refill_zones()?;

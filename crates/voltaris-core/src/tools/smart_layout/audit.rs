@@ -495,6 +495,36 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         });
         beauty.take("odd_rotation", odd_rotation as i64, 8);
     }
+    let silk = super::silk::reference_findings(board);
+    let mut by_check: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
+    for (_, check, message) in &silk {
+        by_check.entry(check).or_default().push(message.clone());
+    }
+    for (check, messages) in by_check {
+        let (severity, per, cap) = match check {
+            "designator_on_copper" | "designators_overlap" => ("warning", 3, 15),
+            "designator_too_small" | "upside_down_text" => ("warning", 2, 10),
+            _ => ("info", 2, 6),
+        };
+        let shown: Vec<&str> = messages.iter().take(6).map(String::as_str).collect();
+        findings.push(Finding {
+            severity,
+            area: "beauty",
+            check,
+            message: format!(
+                "{}{}",
+                shown.join("; "),
+                if messages.len() > 6 {
+                    format!(" and {} more", messages.len() - 6)
+                } else {
+                    String::new()
+                }
+            ),
+            at: None,
+            fix: "polish_board",
+        });
+        beauty.take(check, messages.len() as i64 * per, cap);
+    }
     let _ = rect_distance;
     let _ = segment_distance;
 

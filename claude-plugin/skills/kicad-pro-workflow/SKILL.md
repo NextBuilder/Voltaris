@@ -18,8 +18,9 @@ Specialist skills carry the depth for each area — load them when their topic c
 kicad-power-design (power tree, batteries), kicad-esp32 (ESP32 boards), kicad-mcu-design
 (RP2040/RP2350, STM32, nRF52 boards), kicad-high-speed-rf (impedance, USB, RF, length matching),
 kicad-part-sourcing (stock, alternates, importing parts), kicad-simulation (checking
-circuits numerically), kicad-pro-layout (floor plan, placement and routing method) and
-kicad-board-craft (form factor, connectors, silkscreen and the finished look).
+circuits numerically), kicad-pro-layout (floor plan, placement and routing method),
+kicad-board-craft (form factor, connectors and the finished look) and kicad-pro-silkscreen
+(designators, labels, polarity marks and the product block).
 
 Two habits run through every gate:
 - **Snapshot before every large change** (applying templates, re-placing, autorouting,
@@ -167,7 +168,8 @@ load_toolset('smart_layout')     # route_board polish_board audit_layout
 3. Remaining signals with `route_board` (dry run, then apply with its plan_revision), or
    Freerouting for very dense boards (kicad-pro-layout skill, section 5). Review the result —
    never accept it unseen.
-   Then `polish_board` for pin labels, the name block, the mirrored pour and stitching vias.
+   Then `polish_board` for pin labels, tidy reference designators, the name block, the
+   mirrored pour and stitching vias (kicad-pro-silkscreen skill for the silkscreen rules).
 4. `refill_zones`, then `run_drc`: 0 errors and 0 unconnected items.
 5. `analyze_net_lengths` on every differential pair and matched group: verdict pass.
    ```

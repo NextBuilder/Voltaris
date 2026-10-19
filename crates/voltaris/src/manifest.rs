@@ -188,6 +188,14 @@ pub const SKILLS: &[SkillManifest] = &[
             ),
         ],
     },
+    SkillManifest {
+        name: "kicad-pro-silkscreen",
+        content: include_str!("../assets/skills/kicad-pro-silkscreen/SKILL.md"),
+        references: &[(
+            "brand-styles.md",
+            include_str!("../assets/skills/kicad-pro-silkscreen/references/brand-styles.md"),
+        )],
+    },
 ];
 
 // ─── Agents ──────────────────────────────────────────────────────────────────

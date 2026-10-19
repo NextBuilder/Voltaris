@@ -93,7 +93,9 @@ colours and KiCad footprints are in [connector standards](references/connector-s
 
 ## 5. Silkscreen hierarchy
 
-Silkscreen is the user interface. Write it in three levels and keep it consistent:
+Silkscreen is the user interface. The kicad-pro-silkscreen skill has the full rules and the
+brand styles; `polish_board` tidies every reference designator (one size, upright, beside its
+part, off copper, rows consistent). Write it in three levels and keep it consistent:
 
 | Level | Content | Size (text height / line) |
 |---|---|---|

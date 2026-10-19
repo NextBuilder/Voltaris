@@ -8,7 +8,7 @@ LCSC parts, snapshots and diffs designs, writes Gerber, BOM and placement files 
 and other fabs, generates an enclosure, and creates firmware pin maps and bring-up code for
 ESP32, RP2040/RP2350, STM32 and nRF52. It works with your normal Claude plan — no API key.
 
-It adds 15 skills (a gated professional design workflow plus specialists for power,
+It adds 16 skills (a gated professional design workflow plus specialists for power,
 ESP32 and other microcontrollers, high-speed/RF, part sourcing, simulation, schematic, PCB,
 libraries, review and manufacturing), 3 agents, and the Voltaris MCP server
 with 257 tools loaded on demand.

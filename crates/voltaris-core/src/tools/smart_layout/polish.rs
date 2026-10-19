@@ -22,6 +22,18 @@ pub struct PolishOptions {
     pub version: Option<String>,
     pub back_text: Option<String>,
     pub title_size: f64,
+    pub references: RefMode,
+    pub ref_size: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefMode {
+    /// One size, upright, beside each part and off copper; hidden when no room.
+    Tidy,
+    /// Leave designators as they are.
+    Keep,
+    /// Hide every designator (clean display boards; the BOM keeps them).
+    Hide,
 }
 
 impl Default for PolishOptions {
@@ -41,6 +53,8 @@ impl Default for PolishOptions {
             version: None,
             back_text: None,
             title_size: 1.2,
+            references: RefMode::Tidy,
+            ref_size: 1.0,
         }
     }
 }
@@ -68,6 +82,7 @@ pub struct PolishPlan {
     pub texts: Vec<TextItem>,
     pub vias: Vec<(String, (f64, f64))>,
     pub zones: Vec<ZoneItem>,
+    pub references: Vec<super::silk::RefPlacement>,
     pub notes: Vec<String>,
 }
 
@@ -133,7 +148,12 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
         taken: board
             .texts
             .iter()
-            .map(|t| (text_box(&t.text, t.at, 1.0, 0.0), t.layer.starts_with("B.")))
+            .map(|t| {
+                (
+                    text_box(&t.text, t.at, t.size, t.rotation),
+                    t.layer.starts_with("B."),
+                )
+            })
             .collect(),
         inside: (
             outline.0 + 0.3,
@@ -301,6 +321,46 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                     .notes
                     .push("no free strip on the bottom for the brand line".into()),
             }
+        }
+    }
+
+    match opts.references {
+        RefMode::Keep => {}
+        RefMode::Tidy => {
+            let silk_opts = super::silk::SilkOptions {
+                size: opts.ref_size.max(0.8),
+                ..Default::default()
+            };
+            let (refs, notes) =
+                super::silk::tidy_references(board, space.taken.clone(), &silk_opts);
+            for r in refs.iter().filter(|r| r.visible) {
+                space.taken.push((
+                    text_box(&r.reference, r.at, r.size, r.rotation),
+                    r.layer.starts_with("B."),
+                ));
+            }
+            out.references = refs;
+            out.notes.extend(notes);
+        }
+        RefMode::Hide => {
+            out.references = board
+                .footprints
+                .iter()
+                .filter_map(|f| {
+                    let t = f.ref_text.as_ref()?;
+                    t.visible.then(|| super::silk::RefPlacement {
+                        reference: f.reference.clone(),
+                        at: t.at,
+                        size: t.size,
+                        stroke: t.stroke,
+                        rotation: t.rotation,
+                        layer: t.layer.clone(),
+                        mirrored: f.back,
+                        visible: false,
+                        spot: "hidden",
+                    })
+                })
+                .collect();
         }
     }
 

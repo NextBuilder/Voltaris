@@ -42,6 +42,11 @@ pub struct RouteOptions {
     pub pair_skew: f64,
     /// Neck tracks down near fine-pitch pads and pick a fine grid automatically.
     pub fine_pitch: bool,
+    /// Altium-style layer directions: outer layers alternate horizontal and
+    /// vertical, so a 2-layer board routes like a woven grid.
+    pub layer_directions: bool,
+    /// Allow tracks to pass between the two pads of a small passive.
+    pub between_pads: bool,
 }
 
 impl Default for RouteOptions {
@@ -67,6 +72,8 @@ impl Default for RouteOptions {
             pair_gap: None,
             pair_skew: 0.1,
             fine_pitch: true,
+            layer_directions: false,
+            between_pads: false,
         }
     }
 }
@@ -437,6 +444,80 @@ fn grid_origin(board: &Board, fine: &[FinePitch], outline: Rect, pitch: f64) -> 
 
 type Rect = (f64, f64, f64, f64);
 
+/// The gap between the two pads of each small two-terminal SMD part (R, C, L,
+/// D, F, FB, LED): pro boards never run a track there, where it invites solder
+/// bridges and traps flux.
+fn between_pad_areas(board: &Board, layers: &[String]) -> Vec<(Rect, u32)> {
+    let mut out = Vec::new();
+    for f in &board.footprints {
+        if f.pads.len() != 2
+            || !matches!(
+                f.prefix().as_str(),
+                "R" | "C" | "L" | "D" | "F" | "FB" | "LED"
+            )
+        {
+            continue;
+        }
+        let (a, b) = (&board.pads[f.pads[0]], &board.pads[f.pads[1]]);
+        if a.through_hole || b.through_hole || a.front != b.front {
+            continue;
+        }
+        let (ba, bb) = (a.bbox(), b.bbox());
+        let r = if (a.at.0 - b.at.0).abs() >= (a.at.1 - b.at.1).abs() {
+            let (x0, x1) = (ba.2.min(bb.2), ba.0.max(bb.0));
+            (x0 + 0.05, ba.1.max(bb.1), x1 - 0.05, ba.3.min(bb.3))
+        } else {
+            let (y0, y1) = (ba.3.min(bb.3), ba.1.max(bb.1));
+            (ba.0.max(bb.0), y0 + 0.05, ba.2.min(bb.2), y1 - 0.05)
+        };
+        if r.2 - r.0 <= 0.05 || r.3 - r.1 <= 0.05 {
+            continue;
+        }
+        let side = if a.front { "F.Cu" } else { "B.Cu" };
+        if let Some(i) = layers.iter().position(|l| l == side) {
+            out.push((r, 1u32 << i));
+        }
+    }
+    out
+}
+
+/// An octilinear track from `a` to `b`: straight, then 45°, when they are not
+/// already on one line.
+fn octilinear(a: (f64, f64), b: (f64, f64)) -> Vec<((f64, f64), (f64, f64))> {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let (ax, ay) = (dx.abs(), dy.abs());
+    if ax < 1e-9 || ay < 1e-9 || (ax - ay).abs() < 1e-9 {
+        return vec![(a, b)];
+    }
+    let m = ax.min(ay);
+    let corner = (b.0 - dx.signum() * m, b.1 - dy.signum() * m);
+    vec![(a, corner), (corner, b)]
+}
+
+/// Joins consecutive segments that continue in the same direction.
+fn merge_collinear(segs: Vec<RoutedSegment>) -> Vec<RoutedSegment> {
+    let mut out: Vec<RoutedSegment> = Vec::new();
+    for s in segs {
+        if let Some(last) = out.last_mut() {
+            let d1 = (last.b.0 - last.a.0, last.b.1 - last.a.1);
+            let d2 = (s.b.0 - s.a.0, s.b.1 - s.a.1);
+            let cross = d1.0 * d2.1 - d1.1 * d2.0;
+            let same_way = d1.0 * d2.0 + d1.1 * d2.1 > 0.0;
+            if last.layer == s.layer
+                && (last.width - s.width).abs() < 1e-9
+                && dist(last.b, s.a) < 1e-6
+                && cross.abs() < 1e-9
+                && same_way
+            {
+                last.b = s.b;
+                continue;
+            }
+        }
+        out.push(s);
+    }
+    out
+}
+
 pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> {
     let outline = board
         .outline
@@ -559,6 +640,15 @@ pub fn route(board: &Board, opts: &RouteOptions) -> anyhow::Result<RouteResult> 
             layers: all_layers,
             shape: Shape::Circle(v.at, v.size / 2.0),
         });
+    }
+    if !opts.between_pads {
+        for (r, mask) in between_pad_areas(board, &layers) {
+            base.push(Obstacle {
+                net: None,
+                layers: mask,
+                shape: Shape::Rect(r.0, r.1, r.2, r.3),
+            });
+        }
     }
 
     let mut pair_list: Vec<(String, String)> = opts
@@ -1354,6 +1444,7 @@ fn route_net(
     // does, the inside cell nearest the pad centre (or, for a pad smaller than
     // the grid, the nearest cell plus a stub track back to the pad centre).
     let mut stubs: HashMap<usize, (f64, f64)> = HashMap::new();
+    let mut pad_of: HashMap<usize, usize> = HashMap::new();
     let mut terminal_cells = |pads: &[usize], blocked: &[bool]| -> Vec<usize> {
         let mut cells = Vec::new();
         for &pi in pads {
@@ -1372,6 +1463,9 @@ fn route_net(
                     }
                 }
                 let free: Vec<usize> = inside.iter().copied().filter(|&c| !blocked[c]).collect();
+                for &c in &inside {
+                    pad_of.insert(c, pi);
+                }
                 if !free.is_empty() {
                     cells.extend(free);
                 } else if let Some(&c) = inside.iter().min_by(|&&a, &&b| {
@@ -1454,20 +1548,50 @@ fn route_net(
             zone: &neck_zone,
         };
         let (segs, vias) = emit(grid, layers, &path, &widths, &blocked);
-        for end in [path.first(), path.last()].into_iter().flatten() {
-            if let Some(&pad_at) = stubs.get(end) {
-                let (l, x, y) = grid.coord(*end);
-                let c = grid.center(x, y);
-                if dist(c, pad_at) > 1e-6 {
-                    result.segments.push(RoutedSegment {
-                        layer: layers[l].clone(),
-                        a: pad_at,
-                        b: c,
-                        width: neck_width.unwrap_or(plan.width),
-                    });
-                }
+        // Tracks start and end at the pad centre, the way KiCad's interactive
+        // router lands them, joined to the grid octilinearly inside the pad.
+        let mut joined: Vec<RoutedSegment> = Vec::new();
+        let mut tail: Vec<RoutedSegment> = Vec::new();
+        for (k, end) in [path.first(), path.last()].into_iter().enumerate() {
+            let Some(end) = end else { continue };
+            let (l, x, y) = grid.coord(*end);
+            let c = grid.center(x, y);
+            let w = match neck_width {
+                Some(nw) if neck_zone[y * grid.nx + x] => nw,
+                _ => plan.width,
+            };
+            let centre = if let Some(&pad_at) = stubs.get(end) {
+                Some((pad_at, vec![(pad_at, c)]))
+            } else {
+                pad_of.get(end).and_then(|&pi| {
+                    let p = &board.pads[pi];
+                    let fits = p.size.0.min(p.size.1) + 1e-6 >= w;
+                    (fits && dist(c, p.at) > 1e-6).then(|| (p.at, octilinear(p.at, c)))
+                })
+            };
+            let Some((_, pieces)) = centre else { continue };
+            let pieces: Vec<RoutedSegment> = pieces
+                .into_iter()
+                .map(|(a, b)| RoutedSegment {
+                    layer: layers[l].clone(),
+                    a,
+                    b,
+                    width: w,
+                })
+                .collect();
+            if k == 0 {
+                joined.extend(pieces);
+            } else {
+                tail.extend(pieces.into_iter().rev().map(|s| RoutedSegment {
+                    a: s.b,
+                    b: s.a,
+                    ..s
+                }));
             }
         }
+        joined.extend(segs);
+        joined.extend(tail);
+        let segs = merge_collinear(joined);
         result.segments.extend(segs);
         result.vias.extend(vias);
         tree.extend(path.iter().copied());
@@ -1585,6 +1709,16 @@ fn astar(
             } else {
                 p
             } * layer_cost[l];
+            if opts.layer_directions && grid.nl > 1 {
+                let horizontal_layer = l % 2 == 0;
+                step *= if diagonal {
+                    1.15
+                } else if (*dy == 0) == horizontal_layer {
+                    1.0
+                } else {
+                    1.6
+                };
+            }
             if bonus.is_some_and(|b| b[next]) {
                 step *= COUPLED;
             }
@@ -2070,6 +2204,55 @@ mod tests {
     }
 
     #[test]
+    fn lands_tracks_on_pad_centres_and_never_between_passive_pads() {
+        let b = board(&format!(
+            "{}{}{}",
+            fixture::header("J1", 104.0, 108.0, &["SIG", "GND"]),
+            fixture::smd("R1", 125.0, 110.0, 0.0, ("SIG", "+5V")),
+            fixture::smd("R2", 114.0, 109.0, 0.0, ("GND", "Net-(D1-A)"))
+        ));
+        let r = route(
+            &b,
+            &RouteOptions {
+                only_nets: Some(vec!["SIG".into()]),
+                layers: vec!["F.Cu".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let sig = r.nets.iter().find(|n| n.net == "SIG").unwrap();
+        assert_eq!(sig.status, "routed");
+        let ends: Vec<(f64, f64)> = sig.segments.iter().flat_map(|s| [s.a, s.b]).collect();
+        for p in b.pads.iter().filter(|p| p.net.as_deref() == Some("SIG")) {
+            assert!(
+                ends.iter().any(|e| dist(*e, p.at) < 1e-6),
+                "no track lands on the centre of {}.{}",
+                p.reference,
+                p.number
+            );
+        }
+        let gap = between_pad_areas(&b, &["F.Cu".to_string()]);
+        assert!(!gap.is_empty());
+        for s in &sig.segments {
+            for (g, _) in &gap {
+                for k in 0..=50 {
+                    let t = k as f64 / 50.0;
+                    let q = (s.a.0 + t * (s.b.0 - s.a.0), s.a.1 + t * (s.b.1 - s.a.1));
+                    assert!(
+                        super::super::model::rect_distance(*g, q) > s.width / 2.0,
+                        "track passes between R2's pads"
+                    );
+                }
+            }
+        }
+        assert!(sig.segments.iter().all(|s| {
+            let dx = (s.b.0 - s.a.0).abs();
+            let dy = (s.b.1 - s.a.1).abs();
+            dx < 1e-6 || dy < 1e-6 || (dx - dy).abs() < 1e-6
+        }));
+    }
+
+    #[test]
     fn keeps_clearance_from_foreign_pads() {
         let b = board(&format!(
             "{}{}{}",
@@ -2303,12 +2486,15 @@ mod corpus {
     #[test]
     #[ignore = "large board; run with --ignored for a benchmark"]
     fn reroutes_the_pic_programmer_demo_board() {
-        let opts = RouteOptions {
-            grid: Some(0.25),
-            ..Default::default()
-        };
-        let (done, total, vias, len, ms) = reroute("pic_programmer.kicad_pcb", &opts);
-        eprintln!("pic_programmer: {done}/{total} connections, {vias} vias, {len:.0} mm, {ms} ms");
-        assert!(done as f64 >= total as f64 * 0.8, "{done}/{total}");
+        for (directions, between) in [(false, false), (true, false), (false, true)] {
+            let opts = RouteOptions {
+                layer_directions: directions,
+                between_pads: between,
+                ..Default::default()
+            };
+            let (done, total, vias, len, ms) = reroute("pic_programmer.kicad_pcb", &opts);
+            eprintln!("pic_programmer (layer directions {directions}, between pads {between}): {done}/{total} connections, {vias} vias, {len:.0} mm, {ms} ms");
+            assert!(done as f64 >= total as f64 * 0.8, "{done}/{total}");
+        }
     }
 }

@@ -80,6 +80,21 @@ pub struct Footprint {
     pub locked: bool,
     pub courtyard: Rect,
     pub pads: Vec<usize>,
+    /// The reference designator as printed: board position, absolute angle,
+    /// glyph height, stroke, layer and whether it is shown.
+    pub ref_text: Option<FieldText>,
+    /// Bounding boxes of the footprint's own silkscreen graphics, in board coordinates.
+    pub silk: Vec<Rect>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldText {
+    pub at: (f64, f64),
+    pub rotation: f64,
+    pub size: f64,
+    pub stroke: f64,
+    pub layer: String,
+    pub visible: bool,
 }
 
 impl Footprint {
@@ -159,6 +174,8 @@ pub struct Text {
     pub layer: String,
     pub at: (f64, f64),
     pub text: String,
+    pub size: f64,
+    pub rotation: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +241,8 @@ impl Board {
                     )
                 })
             });
+            let ref_text = field_text(node, "Reference", (fx, fy, frot));
+            let silk = silk_boxes(node, (fx, fy, frot));
             fps.push(Footprint {
                 reference,
                 library,
@@ -233,6 +252,8 @@ impl Board {
                 locked: is_locked(node),
                 courtyard,
                 pads: own,
+                ref_text,
+                silk,
             });
         }
         let segments = tracks(tree)
@@ -272,10 +293,13 @@ impl Board {
             .filter_map(|n| {
                 let text = n.get(1)?.as_str()?.to_string();
                 let at = n.find("at")?;
+                let (size, _) = font_of(n);
                 Some(Text {
                     layer: n.find_str("layer").unwrap_or("").to_string(),
                     at: (at.get_f64(1)?, at.get_f64(2)?),
                     text,
+                    size,
+                    rotation: at.get_f64(3).unwrap_or(0.0),
                 })
             })
             .collect();
@@ -350,6 +374,108 @@ fn property(fp: &SexpNode, name: &str) -> Option<String> {
                 .find(|t| t.get(1).and_then(SexpNode::as_str) == Some(legacy.as_str()))
                 .and_then(|t| t.get(2).and_then(SexpNode::as_str).map(str::to_string))
         })
+}
+
+/// Glyph height and stroke of a text node's `(effects (font (size h w) (thickness t)))`.
+fn font_of(node: &SexpNode) -> (f64, f64) {
+    let font = node.find("effects").and_then(|e| e.find("font"));
+    let size = font
+        .and_then(|f| f.find("size"))
+        .and_then(|s| s.get_f64(1))
+        .unwrap_or(1.0);
+    let stroke = font
+        .and_then(|f| f.find("thickness"))
+        .and_then(|t| t.get_f64(1))
+        .unwrap_or(size * 0.15);
+    (size, stroke)
+}
+
+fn hidden(node: &SexpNode) -> bool {
+    let flag = |n: &SexpNode| {
+        n.children().unwrap_or_default().iter().any(|c| {
+            c.as_str() == Some("hide")
+                || (c.head() == Some("hide") && c.get(1).and_then(SexpNode::as_str) != Some("no"))
+        })
+    };
+    flag(node) || node.find("effects").is_some_and(flag)
+}
+
+fn field_text(fp: &SexpNode, name: &str, (fx, fy, frot): (f64, f64, f64)) -> Option<FieldText> {
+    let node = fp
+        .find_all("property")
+        .into_iter()
+        .find(|p| p.get(1).and_then(SexpNode::as_str) == Some(name))
+        .or_else(|| {
+            let legacy = name.to_ascii_lowercase();
+            fp.find_all("fp_text")
+                .into_iter()
+                .find(|t| t.get(1).and_then(SexpNode::as_str) == Some(legacy.as_str()))
+        })?;
+    let at = node.find("at")?;
+    let (lx, ly) = (at.get_f64(1)?, at.get_f64(2)?);
+    let (size, stroke) = font_of(node);
+    Some(FieldText {
+        at: transform_pad(lx, ly, fx, fy, frot),
+        rotation: at.get_f64(3).unwrap_or(0.0),
+        size,
+        stroke,
+        layer: node.find_str("layer").unwrap_or("F.SilkS").to_string(),
+        visible: !hidden(node),
+    })
+}
+
+fn silk_boxes(fp: &SexpNode, (fx, fy, frot): (f64, f64, f64)) -> Vec<Rect> {
+    let mut out = Vec::new();
+    for g in fp.children().unwrap_or_default() {
+        let Some(head) = g.head() else { continue };
+        if !matches!(
+            head,
+            "fp_line" | "fp_rect" | "fp_circle" | "fp_arc" | "fp_poly"
+        ) {
+            continue;
+        }
+        if !g.find_str("layer").is_some_and(|l| l.ends_with(".SilkS")) {
+            continue;
+        }
+        let mut pts: Vec<(f64, f64)> = ["start", "end", "mid", "center"]
+            .iter()
+            .filter_map(|k| g.find(k))
+            .filter_map(|n| Some((n.get_f64(1)?, n.get_f64(2)?)))
+            .collect();
+        if let Some(poly) = g.find("pts") {
+            pts.extend(
+                poly.find_all("xy")
+                    .into_iter()
+                    .filter_map(|n| Some((n.get_f64(1)?, n.get_f64(2)?))),
+            );
+        }
+        if head == "fp_circle" && pts.len() == 2 {
+            let r = dist(pts[0], pts[1]);
+            let c = pts[0];
+            pts = vec![(c.0 - r, c.1 - r), (c.0 + r, c.1 + r)];
+        }
+        if pts.is_empty() {
+            continue;
+        }
+        let width = g
+            .find("stroke")
+            .and_then(|s| s.find("width"))
+            .and_then(|w| w.get_f64(1))
+            .or_else(|| g.find("width").and_then(|w| w.get_f64(1)))
+            .unwrap_or(0.12)
+            / 2.0;
+        let board: Vec<(f64, f64)> = pts
+            .iter()
+            .map(|&(x, y)| transform_pad(x, y, fx, fy, frot))
+            .collect();
+        let b = board
+            .iter()
+            .fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |a, p| {
+                (a.0.min(p.0), a.1.min(p.1), a.2.max(p.0), a.3.max(p.1))
+            });
+        out.push((b.0 - width, b.1 - width, b.2 + width, b.3 + width));
+    }
+    out
 }
 
 fn reference_of(fp: &SexpNode) -> Option<String> {

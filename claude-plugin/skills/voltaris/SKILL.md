@@ -83,6 +83,7 @@ does not establish that a missing server-side check ran.
 | "Autoroute the board" / "place it for me" | 1 | `load_toolset("smart_layout")` then `smart_place` / `route_board` (dry run, then apply with plan_revision) |
 | "Make it look finished" / "score my layout" | 1 | `load_toolset("smart_layout")` then `polish_board` / `audit_layout` |
 | "Make it look like an Adafruit / Seeed / Arduino board" / "add Qwiic" / "pin labels" | 1 | kicad-board-craft skill |
+| "Clean up the silkscreen" / "designators" / "polarity marks" / "product look" | 1 | kicad-pro-silkscreen skill |
 | "ESP32 board" | — | kicad-esp32 skill |
 | "RP2040 / RP2350 / STM32 / nRF52 board" | — | kicad-mcu-design skill |
 

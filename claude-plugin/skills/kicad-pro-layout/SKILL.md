@@ -122,6 +122,20 @@ Style rules that are also good engineering:
 - Thermal reliefs on plane connections of hand-soldered and through-hole pads; solid
   connections for high-current pads.
 
+What `route_board` already does for you: 45° bends only, paths straightened to few corners,
+tracks landing on pad centres, nothing between the pads of small passives (`between_pads`
+off), fine-pitch neck-downs, coupled and length-matched pairs, the top layer preferred so the
+bottom stays a solid ground plane on 2-layer boards. On 4-layer boards, or a 2-layer board
+without a ground pour, turn on `layer_directions` (top horizontal, bottom vertical) for the
+woven look of a hand-routed board.
+
+What still needs your eye after it runs:
+- Parallel signals that should run as a bus (equal spacing, turning together): reroute them as
+  a group with `route_trace` if the router split them.
+- Ground continuity: look at the bottom pour in `render_board_3d`; a track that cuts it into
+  islands gets moved to the top or replaced by a short jumper with stitching vias beside it.
+- Teardrops: KiCad 10 adds them to pads and vias from the Edit menu — do it last.
+
 ## 5. Autorouter, then clean up
 
 An autorouter is fast and useful for the boring 60 %, never for the critical 40 %.

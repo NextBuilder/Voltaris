@@ -1003,6 +1003,20 @@ impl std::fmt::Display for IpcFailure {
     }
 }
 
+/// A new look for one footprint's reference designator.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReferenceTextEdit {
+    pub reference: String,
+    pub x: f64,
+    pub y: f64,
+    pub size: f64,
+    pub stroke: f64,
+    pub rotation: f64,
+    pub layer: String,
+    pub mirrored: bool,
+    pub visible: bool,
+}
+
 pub struct KiCadIpcClient {
     socket_path: String,
     kicad_token: String,
@@ -3938,6 +3952,68 @@ impl KiCadIpcClient {
             }
         }
         anyhow::bail!("Footprint '{reference}' not found")
+    }
+
+    /// Moves, resizes, turns and shows or hides the reference designators of
+    /// several footprints in one update. Positions are board coordinates.
+    /// Returns the references that were found and changed.
+    pub fn set_reference_texts_in(
+        &self,
+        document: kiapi::common::types::DocumentSpecifier,
+        edits: &[ReferenceTextEdit],
+    ) -> Result<Vec<String>> {
+        let items = self.get_items_in(
+            document.clone(),
+            kiapi::common::types::KiCadObjectType::KotPcbFootprint,
+        )?;
+        let mut packed = Vec::new();
+        let mut changed = Vec::new();
+        for item in items {
+            let Ok(mut footprint) =
+                kiapi::board::types::FootprintInstance::decode(item.value.as_slice())
+            else {
+                continue;
+            };
+            let reference = footprint
+                .reference_field
+                .as_ref()
+                .and_then(|field| field.text.as_ref())
+                .and_then(|board_text| board_text.text.as_ref())
+                .map(|text| text.text.clone())
+                .unwrap_or_default();
+            let Some(edit) = edits.iter().find(|e| e.reference == reference) else {
+                continue;
+            };
+            let Some(field) = footprint.reference_field.as_mut() else {
+                continue;
+            };
+            field.visible = edit.visible;
+            if let Some(board_text) = field.text.as_mut() {
+                board_text.layer = crate::builders::layer_from_name(&edit.layer) as i32;
+                if let Some(text) = board_text.text.as_mut() {
+                    text.position = Some(crate::builders::vec2(edit.x, edit.y));
+                    let attributes = text.attributes.get_or_insert_with(Default::default);
+                    attributes.size = Some(crate::builders::vec2(edit.size, edit.size));
+                    attributes.stroke_width = Some(crate::builders::distance(edit.stroke));
+                    attributes.angle = Some(kiapi::common::types::Angle {
+                        value_degrees: edit.rotation,
+                    });
+                    attributes.mirrored = edit.mirrored;
+                    attributes.visible = edit.visible;
+                    attributes.horizontal_alignment =
+                        kiapi::common::types::HorizontalAlignment::HaCenter as i32;
+                    attributes.vertical_alignment =
+                        kiapi::common::types::VerticalAlignment::VaCenter as i32;
+                }
+            }
+            packed.push(crate::builders::pack_any(
+                &footprint,
+                "kiapi.board.types.FootprintInstance",
+            ));
+            changed.push(reference);
+        }
+        self.update_items_in(document, packed)?;
+        Ok(changed)
     }
 
     /// Delete a footprint by reference.
