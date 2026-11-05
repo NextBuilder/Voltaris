@@ -36,6 +36,25 @@ Always call `get_active_toolsets()` first to see what is already loaded.
 
 ---
 
+## Presentation: draw it like a product the first time
+
+A schematic is read by the reviewer, the assembler and the user who debugs the board. Redrawing
+one later costs more than drawing it right once (Scribe's first schematic had 290 labels and 4
+wires, and was rebuilt).
+
+- Split the page into numbered, titled blocks in signal-flow order, left to right:
+  "1 │ POWER INPUT — USB-C PD 20 V", "2 │ 5 V BUCK", "3 │ MCU", "4 │ MOTOR A" (`add_schematic_text`).
+- Under each title, one note line with the key values: output voltage, current limit, address,
+  the datasheet page behind them.
+- Inside a block, connect parts with short wires; draw the IC with its passives as on the
+  datasheet's typical-application figure.
+- Power symbols at every power pin (GND, +3V3, +5V, VBAT); never a net label for a rail.
+- Net labels only for signals that leave a block, named by function (MOTOR_A_IN1, I2C_SDA).
+- Identical channels are copies: draw one, then duplicate it, so Motor A and Motor B match.
+- Option links (0 Ω, solder jumpers) are DNP by default with a note saying when to fit them.
+- `audit_power_rails` reports a label-only drawing or missing power symbols — fix those before
+  wiring the next block.
+
 ## Component Placement
 
 Read [`references/common-lib-ids.md`](references/common-lib-ids.md) when choosing

@@ -26,7 +26,18 @@ load_toolset('verification')     # run_drc
 
 ## The fast path
 
-1. `polish_board(board, title, version, back_text, references, ref_size)` — dry run first.
+0. Before placement, decide each connector's caption (MOTOR A, PD IN, 5V OUT, LIGHT) and run
+   `smart_place` with its default `label_lane`, which keeps a 2.6 mm strip free beside every
+   connector for its labels. Skipping this is why labels had to be redone on Scribe: once
+   parts sit tight against the connectors there is no room left for them.
+1. `polish_board(board, title, version, back_text, references, ref_size, captions)` — dry run
+   first. The default `style` of product draws the product look natively (real KiCad text and
+   rounded frames, editable and checked by `audit_layout` — never SVG artwork for labels):
+   a rounded strip of pin names divided into one cell per pin, lined up with the pins of every
+   single-row connector and test-point row (shared prefixes dropped: MA_1A → 1A); a rounded
+   caption badge from `captions`, e.g. `{"J2": "MOTOR A", "J1": "PD IN", "SW1": "USER"}`; when
+   the top has no room the strip goes on the bottom behind the connector and the top keeps
+   the badge (the Scribe and Mini UPS layout). USB connectors get a badge, never per-pin labels.
    With the default `references` of tidy it puts every reference designator at one size
    (1.0 mm, 0.8 mm where space is tight), upright, beside its own part, off pads, vias, other
    parts' bodies and other silkscreen; rows and columns of identical parts get their
@@ -41,6 +52,25 @@ load_toolset('verification')     # run_drc
    their part, and mixed sizes. Fix each with the tool it names until the beauty grade is A.
 4. `run_drc`: no silk-over-copper, silk-overlap or silk-clipped warnings.
 5. `render_board_3d(views=['top', 'bottom'], quality='high')` and read it like a customer would.
+
+## The Next Builder house style
+
+What Festix, Mini UPS V2 and Scribe settled on after several rounds — do this the first time:
+
+| Element | Style |
+|---|---|
+| Connector caption | Bold upper-case word in a rounded frame beside the connector: MOTOR A, SERVO, LIGHT, PD IN, DC IN, OUT A, 5V OUT, MENU, LED, USER |
+| Pin legend | One rounded strip per connector, a cell per pin divided by bars, aligned with the pins: `GND │ DIN │ 5V`, `2B │ 1B │ 2A │ 1A`; on the bottom when the top is full |
+| Test points | A row of pads with a matching strip of net names (VM │ 5V │ 3V3 │ IO8 │ GND) and a TEST POINTS caption |
+| Product badge | The name in a knockout block with the version as its own cell: SCRIBE **V1**, MINI UPS **V2**; vertical along a free edge if that is where the room is |
+| Bottom block | Logo emblem + NEXT BUILDER wordmark │ product badge, and one line under it: what it is · REV · date |
+| Designators | Hidden on the finished product (`references` of hide), kept tidy on bring-up boards |
+| Polarity | "+" and "−" at every power input; pin-1 marks outside bodies |
+
+The logo and wordmark are artwork: import them once with `import_svg_logo` from the brand's
+SVG. Everything else is text and frames from `polish_board` and `add_board_text`, so it stays
+editable and `audit_layout` can check it. Never print another company's brand on your
+product except to name a module's maker in documentation.
 
 ## Printing limits (JLCPCB)
 
@@ -129,7 +159,7 @@ the top render; add a mark with `add_board_text` where a footprint has none.
 ## Review checklist
 
 - [ ] One designator size, upright, beside each part, none on copper, rows consistent
-- [ ] Every connector pin labelled on both sides; power inputs marked "+"/"−"
+- [ ] Every connector has its caption badge and a pin strip (top or bottom); power inputs "+"/"−"
 - [ ] Polarity and pin-1 marks visible after assembly on every polar part
 - [ ] Name, version and logo on top; brand/URL/date on the bottom
 - [ ] `audit_layout` beauty grade A; `run_drc` clean of silkscreen warnings

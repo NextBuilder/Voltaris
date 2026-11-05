@@ -549,6 +549,59 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         eng.take("keepout_violation", 8, 24);
     }
 
+    // Courtyards that overlap mean parts that collide on the assembly line,
+    // whatever DRC exclusions say.
+    let parts: Vec<&super::model::Footprint> = board
+        .footprints
+        .iter()
+        .filter(|f| !f.is_mechanical() && !f.courtyard_polys.is_empty())
+        .collect();
+    let mut collisions = Vec::new();
+    for i in 0..parts.len() {
+        for j in i + 1..parts.len() {
+            let (a, b) = (parts[i], parts[j]);
+            if !super::model::rects_overlap(a.courtyard, b.courtyard, 0.0) {
+                continue;
+            }
+            let hit = if a.back == b.back {
+                a.courtyard_polys.iter().any(|pa| {
+                    b.courtyard_polys
+                        .iter()
+                        .any(|pb| super::model::polygons_overlap(pa, pb))
+                })
+            } else {
+                // Opposite sides only meet where through-hole leads come out.
+                let leads_into = |t: &super::model::Footprint, o: &super::model::Footprint| {
+                    t.pads.iter().map(|&k| &board.pads[k]).any(|p| {
+                        p.through_hole
+                            && o.courtyard_polys.iter().any(|poly| {
+                                let r = p.bbox();
+                                let box_ = vec![(r.0, r.1), (r.2, r.1), (r.2, r.3), (r.0, r.3)];
+                                super::model::polygons_overlap(&box_, poly)
+                            })
+                    })
+                };
+                leads_into(a, b) || leads_into(b, a)
+            };
+            if hit {
+                collisions.push((a.reference.clone(), b.reference.clone(), a.at));
+            }
+        }
+    }
+    for (a, b, at) in collisions {
+        findings.push(Finding {
+            severity: "error",
+            area: "engineering",
+            check: "courtyard_overlap",
+            message: format!(
+                "{a} and {b} courtyards overlap; the assembly machine cannot place both"
+            ),
+            at: Some(at),
+            fix: "smart_place",
+        });
+        eng.take("courtyard_overlap", 5, 20);
+    }
+
     let mut unrouted = 0usize;
     let mut open_nets: Vec<String> = Vec::new();
     for net in board.nets() {
@@ -688,7 +741,12 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             .iter()
             .filter(|p| {
                 let label = super::polish::pin_label(p.net.as_deref().unwrap_or_default());
-                silk.iter().any(|t| dist(t.at, p.at) < 3.0) || near_table(&label)
+                silk.iter().any(|t| dist(t.at, p.at) < 3.0)
+                    || near_table(&label)
+                    || board
+                        .art
+                        .iter()
+                        .any(|(_, r)| super::model::rect_distance(*r, p.at) < 3.0)
             })
             .count();
         let labelled = hits * 2 >= named.len();
@@ -716,7 +774,13 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
             || l.contains("oshw")
             || f.reference.to_ascii_uppercase().starts_with("LOGO")
     });
+    // Wide silkscreen artwork is an imported logo, wordmark or name badge.
+    let has_art = board
+        .art
+        .iter()
+        .any(|(_, r)| r.2 - r.0 >= 8.0 || r.3 - r.1 >= 8.0);
     let has_name = has_logo
+        || has_art
         || board.texts.iter().any(|t| {
             t.layer.ends_with(".SilkS")
                 && t.text.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 4
@@ -744,7 +808,7 @@ pub fn audit(board: &Board, opts: &AuditOptions) -> Audit {
         });
         beauty.take("no_product_name", 6, 6);
     }
-    if !has_version {
+    if !has_version && !has_art {
         findings.push(Finding {
             severity: "info",
             area: "beauty",

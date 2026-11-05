@@ -74,6 +74,11 @@ crosstalk and ground bounce all come from loops that are large or interrupted. S
 
 ## 2. Placement order
 
+The product grammar our best boards share (Mini UPS V2, Festix): size the board from the parts
+(courtyards fill 45–60 % of it), connectors in straight rows on the edges with a label lane
+inside each row, every IC with its own passives as a tight block, identical channels as exact
+copies of one block, test points in one aligned row, and no courtyard overlaps — ever.
+
 1. Connectors and mechanical parts (fixed by the floor plan).
 2. The main IC/module, oriented so its pins face the parts they talk to.
 3. **Critical loops first**, each as tight as the datasheet layout example:

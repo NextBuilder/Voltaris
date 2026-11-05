@@ -31,6 +31,9 @@ pub struct PlaceOptions {
     pub mode: PlaceMode,
     pub max_shift: f64,
     pub iterations: usize,
+    /// Free strip kept on the board side of every connector for its pin
+    /// strip and caption (mm); 0 turns it off.
+    pub label_lane: f64,
 }
 
 impl Default for PlaceOptions {
@@ -45,6 +48,7 @@ impl Default for PlaceOptions {
             mode: PlaceMode::Improve,
             max_shift: 5.0,
             iterations: 0,
+            label_lane: 2.6,
         }
     }
 }
@@ -265,6 +269,26 @@ fn mst(pts: &[(f64, f64)]) -> f64 {
 }
 
 pub fn plan(board: &Board, opts: &PlaceOptions) -> anyhow::Result<PlacePlan> {
+    let p = plan_with_lanes(board, opts)?;
+    if p.unplaced.is_empty() || opts.label_lane <= 0.0 {
+        return Ok(p);
+    }
+    // A board too full for label lanes still gets every part placed.
+    let mut tight = plan_with_lanes(
+        board,
+        &PlaceOptions {
+            label_lane: 0.0,
+            ..opts.clone()
+        },
+    )?;
+    tight.kept.push((
+        "label lanes".into(),
+        "dropped: the board is too full for them",
+    ));
+    Ok(tight)
+}
+
+fn plan_with_lanes(board: &Board, opts: &PlaceOptions) -> anyhow::Result<PlacePlan> {
     let mut pinned: BTreeSet<String> = BTreeSet::new();
     let mut last = None;
     for _ in 0..6 {
@@ -504,6 +528,23 @@ fn plan_once(
                 .unplaced
                 .push((f.reference.clone(), "no room on any board edge".into())),
         }
+    }
+
+    // Keep a lane beside each connector free for its silkscreen, so the
+    // product labels fit without moving parts again afterwards.
+    if opts.label_lane > 0.0 {
+        let lanes: Vec<(String, Rect, bool)> = board
+            .footprints
+            .iter()
+            .filter(|f| f.is_connector())
+            .filter_map(|f| {
+                let (at, rot) = st.placed.get(&f.reference).copied()?;
+                let c = f.courtyard_at(at, rot);
+                let lane = super::model::label_lane(outline, c, opts.label_lane)?;
+                Some((format!("~lane {}", f.reference), lane, f.back))
+            })
+            .collect();
+        st.occupied.extend(lanes);
     }
 
     let mut mains: Vec<&Footprint> = board
@@ -772,6 +813,7 @@ fn plan_once(
             grid: opts.grid,
             gap: opts.gap,
             rotate: opts.rotate,
+            label_lane: opts.label_lane,
             ..Default::default()
         };
         let mut seeds = vec![constructive.clone()];
@@ -787,7 +829,30 @@ fn plan_once(
                     on_board += 1;
                 }
             }
-            if on_board * 2 >= existing.len() {
+            // The human arrangement only seeds the search when it leaves the
+            // connectors' label lanes free.
+            let lanes_free = opts.label_lane <= 0.0 || {
+                let boxes: Vec<(&Footprint, Rect)> = existing
+                    .iter()
+                    .map(|(r, (a, rot))| {
+                        let f = st.fp(r);
+                        (f, f.courtyard_at(*a, *rot))
+                    })
+                    .collect();
+                boxes
+                    .iter()
+                    .filter(|(f, _)| f.is_connector())
+                    .all(|(c, cb)| {
+                        super::model::label_lane(outline, *cb, opts.label_lane).is_none_or(|lane| {
+                            !boxes.iter().any(|(f, b)| {
+                                !f.is_connector()
+                                    && f.back == c.back
+                                    && rects_overlap(*b, lane, 0.0)
+                            })
+                        })
+                    })
+            };
+            if on_board * 2 >= existing.len() && lanes_free {
                 seeds.push(existing);
             }
         }
@@ -1129,8 +1194,10 @@ mod corpus {
             .join("../voltaris-sexp/tests/fixtures")
             .join(name);
         let b = Board::from_text(&std::fs::read_to_string(path).unwrap()).unwrap();
+        // Pure optimiser benchmark: no label lanes.
         let opts = PlaceOptions {
             mode,
+            label_lane: 0.0,
             ..Default::default()
         };
         let t = std::time::Instant::now();
@@ -1182,6 +1249,54 @@ mod corpus {
             p.refine
         );
         p
+    }
+
+    #[test]
+    fn keeps_label_lanes_beside_connectors_free() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../voltaris-sexp/tests/fixtures/pic_programmer.kicad_pcb");
+        let b = Board::from_text(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let p = plan(
+            &b,
+            &PlaceOptions {
+                mode: PlaceMode::Replace,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        if p.kept.iter().any(|(r, _)| r == "label lanes") {
+            return;
+        }
+        let pose = |f: &Footprint| {
+            p.moves
+                .iter()
+                .find(|m| m.reference == f.reference)
+                .map(|m| ((m.to.0, m.to.1), m.to.2))
+                .unwrap_or((f.at, f.rotation))
+        };
+        let o = b.outline.unwrap();
+        for c in b.footprints.iter().filter(|f| f.is_connector()) {
+            let (a, r) = pose(c);
+            let Some(lane) = super::super::model::label_lane(o, c.courtyard_at(a, r), 2.6) else {
+                continue;
+            };
+            for f in b
+                .footprints
+                .iter()
+                .filter(|f| !f.is_connector() && f.back == c.back)
+            {
+                if !p.moves.iter().any(|m| m.reference == f.reference) {
+                    continue;
+                }
+                let (a, r) = pose(f);
+                assert!(
+                    !rects_overlap(f.courtyard_at(a, r), lane, 0.0),
+                    "{} sits in the label lane of {}",
+                    f.reference,
+                    c.reference
+                );
+            }
+        }
     }
 
     #[test]

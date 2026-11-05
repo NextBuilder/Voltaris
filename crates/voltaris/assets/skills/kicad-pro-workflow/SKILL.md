@@ -40,6 +40,10 @@ Two habits run through every gate:
   load_toolset(['design_history', 'design_checks'])
   ```
 
+Every gate below carries the lessons of our own boards: read
+[first time right](references/first-time-right.md) once per project and apply each rule at
+its gate, so nothing is placed, labelled or reviewed twice.
+
 Ask the user only where the answer changes the design, and always offer suggested options.
 Show a short plan and get approval after Gate 1; after that, work through the gates and
 report at each one.
@@ -54,6 +58,12 @@ Pin down, with suggested options for each:
 - Environment: indoor/outdoor, temperature, enclosure
 - Product decisions (kicad-product-board skill, section 1): who assembles it, the form factor
   it must match, silkscreen style (product or debug), the options a user may change by jumper
+- Board size from the parts, not a guess: estimate the courtyard area, aim for 45–60 % fill,
+  and fix the outline before placement (Scribe was re-laid three times at 100 × 66, 64 × 45
+  and 60 × 44 mm)
+- A caption for every connector, button and LED (MOTOR A, PD IN, USER) and the product badge
+  text (name and version) — these drive `smart_place` label lanes and `polish_board` captions
+- The power budget per source (battery, USB-C PD, DC jack) against the sum of the outputs
 
 Write the brief back to the user before Gate 1.
 
@@ -110,6 +120,9 @@ load_toolset('firmware')         # generate_firmware_kit
    nets with `net_mappings`.
 2. Add what no template covers, following the stored datasheet rules.
 3. Every IC: decoupling as its datasheet states, unused pins handled as its datasheet states.
+   Draw it presentable now, not later: numbered titled blocks with a one-line note of key
+   values, power symbols at power pins, short wires inside a block, labels only between
+   blocks. Option links (0 Ω) are DNP unless chosen.
 4. Checks — all must be clean or explicitly justified:
    - `run_erc`: 0 errors
    - `find_shorted_nets`: none
@@ -119,6 +132,7 @@ load_toolset('firmware')         # generate_firmware_kit
    - `generate_firmware_kit` (ESP32, RP2040/RP2350, STM32, nRF52): its warnings list is empty, or
      each warning is accepted by the user
    - `generate_block_diagram`: matches the Gate 1 architecture; no rail without a source
+   - `audit_power_rails`: no fitted 0 Ω links joining two sources, no presentation findings
 
 ## Gate 3 — Board setup
 
@@ -149,7 +163,8 @@ load_toolset('visual_review')    # render_board_3d
 load_toolset('smart_layout')     # smart_place audit_layout
 ```
 
-Start with `smart_place` (dry run, review the moves, apply), then adjust by hand. On a board the
+Start with `smart_place` (dry run, review the moves, apply), then adjust by hand. Its default
+`label_lane` keeps a 2.6 mm strip free beside every connector for the pin strip and caption. On a board the
 user already placed, keep the default `mode='improve'` (parts move at most `max_shift` mm and
 connectors stay); use `mode='replace'` only when the user asks for a fresh placement.
 Follow the kicad-pro-layout skill's floor plan and placement order. In short: fixed mechanical parts (connectors at their edges, buttons, mounting
@@ -157,8 +172,10 @@ holes) → RF module with its antenna over the edge/keep-out → MCU → power s
 loop tight → decoupling beside the pins it serves (`place_decoupling_caps` with the capacitor
 references you chose) → everything else grouped by function, sensors away from heat.
 
-**Gate 4 exit:** `score_placement` has no hard failures, and a `render_board_3d` iso + top
-review against its checklist finds nothing open.
+**Gate 4 exit:** `score_placement` has no hard failures, `audit_layout` shows no courtyard
+overlaps (it ignores DRC exclusions — never exclude an overlap, move the part), every
+switching IC has its loop capacitors at its pins, and a `render_board_3d` iso + top review
+against its checklist finds nothing open.
 
 ## Gate 5 — Routing
 
@@ -178,8 +195,9 @@ load_toolset('smart_layout')     # route_board polish_board audit_layout
 3. Remaining signals with `route_board` (dry run, then apply with its plan_revision), or
    Freerouting for very dense boards (kicad-pro-layout skill, section 5). Review the result —
    never accept it unseen.
-   Then `polish_board` for pin labels, tidy reference designators, the name block, the
-   mirrored pour and stitching vias (kicad-pro-silkscreen skill for the silkscreen rules).
+   Then `polish_board` with the Gate 0 `captions` for the product silkscreen (pin strips,
+   caption badges, the name block), designators, the mirrored pour and stitching vias
+   (kicad-pro-silkscreen skill, house style).
 4. `refill_zones`, then `run_drc`: 0 errors and 0 unconnected items.
 5. `analyze_net_lengths` on every differential pair and matched group: verdict pass.
    ```

@@ -79,6 +79,8 @@ pub struct Footprint {
     pub back: bool,
     pub locked: bool,
     pub courtyard: Rect,
+    /// The courtyard outlines in board coordinates (closed loops).
+    pub courtyard_polys: Vec<Vec<(f64, f64)>>,
     pub pads: Vec<usize>,
     /// The reference designator as printed: board position, absolute angle,
     /// glyph height, stroke, layer and whether it is shown.
@@ -239,6 +241,9 @@ pub struct Board {
     pub vias: Vec<Via>,
     pub zones: Vec<Zone>,
     pub texts: Vec<Text>,
+    /// Silkscreen artwork drawn as filled polygons (imported logos, framed
+    /// labels made from SVG): layer and extent.
+    pub art: Vec<(String, Rect)>,
     pub mounting_holes: usize,
     /// Rule areas (keep-outs): what may not be placed inside each polygon.
     pub keepouts: Vec<Keepout>,
@@ -382,6 +387,7 @@ impl Board {
                 back,
                 locked: is_locked(node),
                 courtyard,
+                courtyard_polys: courtyard_polys(node, (fx, fy, frot)),
                 pads: own,
                 ref_text,
                 silk,
@@ -458,6 +464,30 @@ impl Board {
                 })
             })
             .collect();
+        let art = tree
+            .children()
+            .unwrap_or_default()
+            .iter()
+            .filter(|n| n.head() == Some("gr_poly"))
+            .filter_map(|n| {
+                let layer = n.find_str("layer")?;
+                if !layer.ends_with(".SilkS") {
+                    return None;
+                }
+                let pts: Vec<(f64, f64)> = n
+                    .find("pts")?
+                    .find_all("xy")
+                    .into_iter()
+                    .filter_map(|p| Some((p.get_f64(1)?, p.get_f64(2)?)))
+                    .collect();
+                let r = pts
+                    .iter()
+                    .fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |r, p| {
+                        (r.0.min(p.0), r.1.min(p.1), r.2.max(p.0), r.3.max(p.1))
+                    });
+                (pts.len() >= 3).then(|| (layer.to_string(), r))
+            })
+            .collect();
         let shape = board_outline_shape(tree);
         Board {
             outline: board_outline_bbox(tree),
@@ -469,6 +499,7 @@ impl Board {
             vias,
             zones,
             texts,
+            art,
             mounting_holes,
             keepouts: keepouts(tree, &copper),
         }
@@ -733,6 +764,124 @@ fn field_text(fp: &SexpNode, name: &str, (fx, fy, frot): (f64, f64, f64)) -> Opt
     })
 }
 
+/// Courtyard outlines as closed loops in board coordinates: rectangles,
+/// polygons and circles directly, line and arc outlines chained end to end.
+fn courtyard_polys(fp: &SexpNode, (fx, fy, frot): (f64, f64, f64)) -> Vec<Vec<(f64, f64)>> {
+    let xy = |n: &SexpNode| Some((n.get_f64(1)?, n.get_f64(2)?));
+    let to_board = |p: (f64, f64)| transform_pad(p.0, p.1, fx, fy, frot);
+    let mut loops = Vec::new();
+    let mut edges: Vec<((f64, f64), (f64, f64))> = Vec::new();
+    for g in fp.children().unwrap_or_default() {
+        let Some(head) = g.head() else { continue };
+        if !g.find_str("layer").is_some_and(|l| l.ends_with(".CrtYd")) {
+            continue;
+        }
+        let at = |k: &str| g.find(k).and_then(xy);
+        match head {
+            "fp_rect" => {
+                if let (Some(a), Some(b)) = (at("start"), at("end")) {
+                    loops.push(
+                        [(a.0, a.1), (b.0, a.1), (b.0, b.1), (a.0, b.1)]
+                            .into_iter()
+                            .map(to_board)
+                            .collect(),
+                    );
+                }
+            }
+            "fp_poly" => {
+                let pts: Vec<(f64, f64)> = g
+                    .find("pts")
+                    .map(|p| {
+                        p.children()
+                            .unwrap_or_default()
+                            .iter()
+                            .flat_map(|c| match c.head() {
+                                Some("xy") => xy(c).into_iter().collect::<Vec<_>>(),
+                                Some("arc") => ["start", "mid", "end"]
+                                    .iter()
+                                    .filter_map(|k| c.find(k).and_then(xy))
+                                    .collect(),
+                                _ => Vec::new(),
+                            })
+                            .map(to_board)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if pts.len() >= 3 {
+                    loops.push(pts);
+                }
+            }
+            "fp_circle" => {
+                if let (Some(c), Some(e)) = (at("center"), at("end")) {
+                    let r = dist(c, e);
+                    loops.push(
+                        (0..24)
+                            .map(|i| {
+                                let a = i as f64 * std::f64::consts::TAU / 24.0;
+                                to_board((c.0 + r * a.cos(), c.1 + r * a.sin()))
+                            })
+                            .collect(),
+                    );
+                }
+            }
+            "fp_line" => {
+                if let (Some(a), Some(b)) = (at("start"), at("end")) {
+                    edges.push((to_board(a), to_board(b)));
+                }
+            }
+            "fp_arc" => {
+                if let (Some(a), Some(m), Some(b)) = (at("start"), at("mid"), at("end")) {
+                    edges.push((to_board(a), to_board(m)));
+                    edges.push((to_board(m), to_board(b)));
+                }
+            }
+            _ => {}
+        }
+    }
+    while let Some((start, mut end)) = edges.pop() {
+        let mut ring = vec![start, end];
+        while dist(end, start) > 0.01 {
+            let Some(i) = edges
+                .iter()
+                .position(|(a, b)| dist(*a, end) < 0.01 || dist(*b, end) < 0.01)
+            else {
+                break;
+            };
+            let (a, b) = edges.swap_remove(i);
+            end = if dist(a, end) < 0.01 { b } else { a };
+            ring.push(end);
+        }
+        ring.pop();
+        if ring.len() >= 3 {
+            loops.push(ring);
+        }
+    }
+    loops
+}
+
+/// True when two closed outlines share area, not merely an edge: some corner,
+/// edge midpoint or centre of one lies more than 0.03 mm inside the other
+/// (KiCad's own courtyard test also ignores touching outlines).
+pub fn polygons_overlap(a: &[(f64, f64)], b: &[(f64, f64)]) -> bool {
+    let probes = |poly: &[(f64, f64)]| -> Vec<(f64, f64)> {
+        let n = poly.len();
+        let mut out: Vec<(f64, f64)> = poly.to_vec();
+        out.extend((0..n).map(|i| {
+            let (p, q) = (poly[i], poly[(i + 1) % n]);
+            ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0)
+        }));
+        out.push((
+            poly.iter().map(|p| p.0).sum::<f64>() / n as f64,
+            poly.iter().map(|p| p.1).sum::<f64>() / n as f64,
+        ));
+        out
+    };
+    let deep = |pt: (f64, f64), poly: &[(f64, f64)]| {
+        point_in_polygon(pt, poly) && polygon_segment_distance(poly, pt, pt) > 0.03
+    };
+    probes(a).into_iter().any(|p| deep(p, b)) || probes(b).into_iter().any(|p| deep(p, a))
+}
+
 fn silk_boxes(fp: &SexpNode, (fx, fy, frot): (f64, f64, f64)) -> Vec<Rect> {
     let mut out = Vec::new();
     for g in fp.children().unwrap_or_default() {
@@ -906,6 +1055,30 @@ pub fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
 
+/// The strip beside a connector on the side facing the board, kept free for
+/// its pin labels and caption: below a connector on the top edge, right of
+/// one on the left edge, and so on.
+pub fn label_lane(outline: Rect, c: Rect, depth: f64) -> Option<Rect> {
+    let gaps = [
+        (c.0 - outline.0, 0),
+        (outline.2 - c.2, 1),
+        (c.1 - outline.1, 2),
+        (outline.3 - c.3, 3),
+    ];
+    let (gap, edge) = gaps
+        .into_iter()
+        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))?;
+    if gap > 3.0 {
+        return None;
+    }
+    Some(match edge {
+        0 => (c.2, c.1, c.2 + depth, c.3),
+        1 => (c.0 - depth, c.1, c.0, c.3),
+        2 => (c.0, c.3, c.2, c.3 + depth),
+        _ => (c.0, c.1 - depth, c.2, c.1),
+    })
+}
+
 pub fn rect_distance(r: Rect, p: (f64, f64)) -> f64 {
     let dx = (r.0 - p.0).max(0.0).max(p.0 - r.2);
     let dy = (r.1 - p.1).max(0.0).max(p.1 - r.3);
@@ -920,6 +1093,13 @@ pub fn segment_distance(a: (f64, f64), b: (f64, f64), p: (f64, f64)) -> f64 {
     }
     let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0);
     dist((a.0 + t * dx, a.1 + t * dy), p)
+}
+
+/// Shortest distance from a segment to a polygon's outline.
+pub fn polygon_segment_distance(poly: &[(f64, f64)], a: (f64, f64), b: (f64, f64)) -> f64 {
+    (0..poly.len())
+        .map(|i| segments_distance(a, b, poly[i], poly[(i + 1) % poly.len()]))
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// Shortest distance between two line segments.

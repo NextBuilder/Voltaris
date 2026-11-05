@@ -35,6 +35,8 @@ pub struct RefineOptions {
     /// Scales the calibrated starting temperature: 1 for a fresh placement,
     /// lower to anneal gently around a good existing one.
     pub heat: f64,
+    /// Lane kept free beside each connector for its labels (mm).
+    pub label_lane: f64,
 }
 
 impl Default for RefineOptions {
@@ -48,6 +50,7 @@ impl Default for RefineOptions {
             rotate: true,
             seed: 0x9E37_79B9_7F4A_7C15,
             heat: 1.0,
+            label_lane: 0.0,
         }
     }
 }
@@ -106,6 +109,8 @@ struct Model<'a> {
     part_nets: Vec<Vec<usize>>,
     net_cost: Vec<f64>,
     static_obstacles: Vec<(Rect, bool, bool)>,
+    /// Which parts are connectors (they carry a label lane that moves with them).
+    connector: Vec<bool>,
     opts: &'a RefineOptions,
 }
 
@@ -210,6 +215,21 @@ impl Model<'_> {
         for (o, ob_back, ob_both) in &self.static_obstacles {
             if (both || *ob_both || *ob_back == side) && rects_overlap(c, *o, self.opts.gap) {
                 return None;
+            }
+        }
+        if self.opts.label_lane > 0.0 {
+            let outline = self.board.outline.unwrap_or_default();
+            let lane = |r: Rect| super::model::label_lane(outline, r, self.opts.label_lane);
+            for (j, o) in self.boxes.iter().enumerate() {
+                if j == k || self.back[j] != side {
+                    continue;
+                }
+                if self.connector[j] && lane(*o).is_some_and(|l| rects_overlap(c, l, 0.0)) {
+                    return None;
+                }
+                if self.connector[k] && lane(c).is_some_and(|l| rects_overlap(l, *o, 0.0)) {
+                    return None;
+                }
             }
         }
         Some(c)
@@ -408,6 +428,25 @@ pub fn refine(
             )
         })
         .filter(|(c, _, _)| rects_overlap(*c, outline, 0.0))
+        .collect::<Vec<_>>();
+    let mut static_obstacles = static_obstacles;
+    if opts.label_lane > 0.0 {
+        static_obstacles.extend(
+            board
+                .footprints
+                .iter()
+                .filter(|f| f.is_connector() && !parts.iter().any(|p| p.reference == f.reference))
+                .filter_map(|f| {
+                    let (a, r) = pose(&f.reference, f);
+                    let lane =
+                        super::model::label_lane(outline, f.courtyard_at(a, r), opts.label_lane)?;
+                    Some((lane, f.back, false))
+                }),
+        );
+    }
+    let connector: Vec<bool> = fp
+        .iter()
+        .map(|&i| board.footprints[i].is_connector())
         .collect();
     let mut nets = Vec::new();
     let mut part_nets = vec![Vec::new(); parts.len()];
@@ -449,6 +488,7 @@ pub fn refine(
         part_nets,
         net_cost: Vec::new(),
         static_obstacles,
+        connector,
         opts,
     };
     m.net_cost = (0..m.nets.len()).map(|n| m.mst_of(n)).collect();

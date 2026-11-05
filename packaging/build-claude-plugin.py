@@ -40,7 +40,7 @@ def version():
 
 
 def tool_count():
-    return re.search(r"\*\*(\d+) tools across", (ROOT / "README.md").read_text()).group(1)
+    return re.search(r"\*\*(\d+) registered tools\*\*", (ROOT / "docs" / "TOOLS.md").read_text()).group(1)
 
 
 def build(out):

@@ -25,6 +25,18 @@ pub struct PolishOptions {
     pub knockout_title: bool,
     pub references: RefMode,
     pub ref_size: f64,
+    pub style: LabelStyle,
+    /// Function captions for connectors and other parts, e.g. J2 → "MOTOR A".
+    pub captions: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelStyle {
+    /// Product look: a framed strip of pin names lined up with the pins, a
+    /// rounded caption badge per connector, framed test-point rows.
+    Product,
+    /// A plain text label beside each pin.
+    Plain,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +69,8 @@ impl Default for PolishOptions {
             knockout_title: true,
             references: RefMode::Tidy,
             ref_size: 1.0,
+            style: LabelStyle::Product,
+            captions: Vec::new(),
         }
     }
 }
@@ -70,6 +84,22 @@ pub struct TextItem {
     pub rotation: f64,
     pub mirror: bool,
     pub knockout: bool,
+    pub bold: bool,
+    /// Narrow glyphs (75 % width) so short pin names fit 2 mm cells.
+    pub condensed: bool,
+    pub purpose: String,
+}
+
+/// A silkscreen line or a rounded frame (corner radius > 0 draws a rounded
+/// rectangle from `a` to `b`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphicItem {
+    pub layer: String,
+    pub a: (f64, f64),
+    pub b: (f64, f64),
+    pub frame: bool,
+    pub radius: f64,
+    pub width: f64,
     pub purpose: String,
 }
 
@@ -83,6 +113,7 @@ pub struct ZoneItem {
 #[derive(Debug, Clone, Default)]
 pub struct PolishPlan {
     pub texts: Vec<TextItem>,
+    pub graphics: Vec<GraphicItem>,
     pub vias: Vec<(String, (f64, f64))>,
     pub zones: Vec<ZoneItem>,
     pub references: Vec<super::silk::RefPlacement>,
@@ -127,7 +158,14 @@ impl Space<'_> {
             }
         }
         for f in &self.board.footprints {
-            if Some(f.reference.as_str()) == own || f.back != back || f.is_mechanical() {
+            if Some(f.reference.as_str()) == own {
+                // A part's own body outline still blocks its labels.
+                if f.back == back && f.silk.iter().any(|s| rects_overlap(r, *s, 0.1)) {
+                    return false;
+                }
+                continue;
+            }
+            if f.back != back || f.is_mechanical() {
                 continue;
             }
             if rects_overlap(r, f.courtyard, 0.1) {
@@ -165,9 +203,23 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
             outline.3 - 0.3,
         ),
     };
+    space.taken.extend(
+        board
+            .art
+            .iter()
+            .map(|(layer, r)| (*r, layer.starts_with("B."))),
+    );
 
+    let mut done: Vec<String> = Vec::new();
+    if opts.labels && opts.style == LabelStyle::Product {
+        done = product_labels(board, &mut space, opts, outline, &mut out);
+    }
     if opts.labels {
-        for f in board.footprints.iter().filter(|f| f.is_connector()) {
+        for f in board
+            .footprints
+            .iter()
+            .filter(|f| f.is_connector() && !done.contains(&f.reference))
+        {
             let pads: Vec<&super::model::Pad> = f.pads.iter().map(|&i| &board.pads[i]).collect();
             if pads.is_empty() {
                 continue;
@@ -238,6 +290,8 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                             rotation,
                             mirror: false,
                             knockout: false,
+                            bold: false,
+                            condensed: false,
                             purpose: format!("{} pin {} label", f.reference, p.number),
                         });
                         space.taken.push((r, false));
@@ -250,6 +304,8 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                                 rotation,
                                 mirror: true,
                                 knockout: false,
+                                bold: false,
+                                condensed: false,
                                 purpose: format!("{} pin {} label (bottom)", f.reference, p.number),
                             });
                             space.taken.push((r, true));
@@ -298,6 +354,8 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                         rotation: 0.0,
                         mirror: false,
                         knockout: opts.knockout_title,
+                        bold: true,
+                        condensed: false,
                         purpose: "product name and version".into(),
                     });
                 }
@@ -321,6 +379,8 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
                         rotation: 0.0,
                         mirror: true,
                         knockout: false,
+                        bold: true,
+                        condensed: false,
                         purpose: "bottom-side brand line".into(),
                     });
                 }
@@ -481,6 +541,552 @@ pub fn plan(board: &Board, project: &str, opts: &PolishOptions) -> anyhow::Resul
     Ok(out)
 }
 
+/// One row of pins (or test points) to label as a framed strip.
+struct Row {
+    owner: String,
+    caption: Option<String>,
+    /// Pin positions and their labels, sorted along the row.
+    pins: Vec<((f64, f64), String)>,
+    vertical: bool,
+    through_hole: bool,
+    /// Extent the strip must stay clear of (the part's courtyard or pads).
+    body: Rect,
+    pads_only: Rect,
+}
+
+const FRAME_W: f64 = 0.15;
+const FRAME_R: f64 = 0.35;
+
+/// Product-style labels: for every single-row connector and every row of test
+/// points, a rounded strip with one cell per pin lined up with the pins, and a
+/// rounded caption badge (from `captions`) beyond it. Returns the references
+/// it labelled.
+fn product_labels(
+    board: &Board,
+    space: &mut Space<'_>,
+    opts: &PolishOptions,
+    outline: Rect,
+    out: &mut PolishPlan,
+) -> Vec<String> {
+    let caption_of = |r: &str| {
+        opts.captions
+            .iter()
+            .find(|(k, _)| k == r)
+            .map(|(_, v)| v.to_uppercase())
+    };
+    let mut rows: Vec<Row> = Vec::new();
+    let mut odd: Vec<&super::model::Footprint> = Vec::new();
+    for f in board.footprints.iter().filter(|f| f.is_connector()) {
+        let pads: Vec<&super::model::Pad> = f
+            .pads
+            .iter()
+            .map(|&i| &board.pads[i])
+            .filter(|p| p.net.as_deref().is_some_and(|n| !is_unnamed(n)))
+            .collect();
+        if pads.len() < 2 {
+            continue;
+        }
+        let labelled = pads
+            .iter()
+            .filter(|p| {
+                let label = pin_label(p.net.as_deref().unwrap_or_default());
+                board
+                    .texts
+                    .iter()
+                    .any(|t| t.text == label && dist(t.at, p.at) < 4.0)
+                    || board
+                        .art
+                        .iter()
+                        .any(|(_, r)| super::model::rect_distance(*r, p.at) < 3.0)
+            })
+            .count();
+        if labelled * 2 >= pads.len() {
+            continue;
+        }
+        let mut pins: Vec<((f64, f64), String)> = Vec::new();
+        for p in &pads {
+            if !pins.iter().any(|(at, _)| dist(*at, p.at) < 0.05) {
+                pins.push((p.at, pin_label(p.net.as_deref().unwrap_or_default())));
+            }
+        }
+        let pads_only = pads
+            .iter()
+            .fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |r, p| {
+                let b = p.bbox();
+                (r.0.min(b.0), r.1.min(b.1), r.2.max(b.2), r.3.max(b.3))
+            });
+        if let Some(row) = make_row(
+            &f.reference,
+            caption_of(&f.reference),
+            pins,
+            pads.iter().any(|p| p.through_hole),
+            f.courtyard,
+            pads_only,
+        ) {
+            rows.push(row);
+        } else {
+            odd.push(f);
+        }
+    }
+    // Test points in a line share one framed row of their net names.
+    let tps: Vec<&super::model::Footprint> = board
+        .footprints
+        .iter()
+        .filter(|f| f.prefix() == "TP" && f.pads.len() == 1)
+        .collect();
+    let mut used = vec![false; tps.len()];
+    for i in 0..tps.len() {
+        if used[i] {
+            continue;
+        }
+        let mut group = vec![i];
+        for j in i + 1..tps.len() {
+            let (a, b) = (tps[i].at, tps[j].at);
+            if !used[j] && ((a.1 - b.1).abs() < 0.3 || (a.0 - b.0).abs() < 0.3) {
+                group.push(j);
+            }
+        }
+        if group.len() < 2 {
+            continue;
+        }
+        let pins: Vec<((f64, f64), String)> = group
+            .iter()
+            .filter_map(|&k| {
+                let p = &board.pads[tps[k].pads[0]];
+                Some((p.at, pin_label(p.net.as_deref()?)))
+            })
+            .collect();
+        let body = group
+            .iter()
+            .fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |r, &k| {
+                let c = tps[k].courtyard;
+                (r.0.min(c.0), r.1.min(c.1), r.2.max(c.2), r.3.max(c.3))
+            });
+        if let Some(row) = make_row("TP", Some("TEST POINTS".into()), pins, false, body, body) {
+            for &k in &group {
+                used[k] = true;
+            }
+            rows.push(row);
+        }
+    }
+
+    let centre = ((outline.0 + outline.2) / 2.0, (outline.1 + outline.3) / 2.0);
+    let mut done = Vec::new();
+    // USB, barrel and two-row connectors: a caption badge says what they are;
+    // USB pins are never labelled one by one on a product board.
+    for f in odd {
+        let mid = (
+            (f.courtyard.0 + f.courtyard.2) / 2.0,
+            (f.courtyard.1 + f.courtyard.3) / 2.0,
+        );
+        let inward = if mid.1 > centre.1 { -1.0 } else { 1.0 };
+        if let Some(c) = caption_of(&f.reference) {
+            place_badge(space, out, &f.reference, &c, f.courtyard, inward, false);
+        }
+        let usb = f.library.to_ascii_uppercase().contains("USB")
+            || f.pads.iter().any(|&i| {
+                board.pads[i].net.as_deref().is_some_and(|n| {
+                    matches!(short_net(n).to_ascii_uppercase().as_str(), "CC1" | "CC2")
+                })
+            });
+        if usb || caption_of(&f.reference).is_some() {
+            done.push(f.reference.clone());
+        }
+    }
+    // Captions for parts that are not connectors (a button, an LED).
+    for (r, c) in &opts.captions {
+        if let Some(f) = board.footprint(r).filter(|f| !f.is_connector()) {
+            let mid = (
+                (f.courtyard.0 + f.courtyard.2) / 2.0,
+                (f.courtyard.1 + f.courtyard.3) / 2.0,
+            );
+            let inward = if mid.1 > centre.1 { -1.0 } else { 1.0 };
+            place_badge(space, out, r, &c.to_uppercase(), f.courtyard, inward, false);
+        }
+    }
+    for row in rows {
+        let mid = (
+            (row.body.0 + row.body.2) / 2.0,
+            (row.body.1 + row.body.3) / 2.0,
+        );
+        // Inward first: labels face the middle of the board.
+        let inward = if row.vertical {
+            if mid.0 > centre.0 {
+                -1.0
+            } else {
+                1.0
+            }
+        } else if mid.1 > centre.1 {
+            -1.0
+        } else {
+            1.0
+        };
+        let size = opts.label_size.max(0.8);
+        let fits = |space: &Space<'_>, side: f64, back: bool, caption: bool| {
+            strip_plan(&row, side, size, back, caption).is_some_and(|plan| {
+                plan.iter()
+                    .all(|(r, _)| space.free(*r, back, Some(&row.owner)))
+            })
+        };
+        let mut placed = false;
+        for side in [inward, -inward] {
+            if fits(space, side, false, true) {
+                commit_strip(&row, side, size, false, true, space, out);
+                if row.through_hole && opts.both_sides && fits(space, side, true, false) {
+                    commit_strip(&row, side, size, true, false, space, out);
+                }
+                placed = true;
+                break;
+            }
+        }
+        // No room on top: the strip goes on the bottom (under through-hole
+        // leads, or behind a surface-mount connector) and the top keeps only
+        // the caption, the way Scribe and Mini UPS print their pin legends.
+        if !placed && opts.both_sides {
+            for side in [inward, -inward] {
+                if fits(space, side, true, false) {
+                    commit_strip(&row, side, size, true, false, space, out);
+                    if let Some(c) = &row.caption {
+                        place_badge(space, out, &row.owner, c, row.body, inward, row.vertical);
+                    }
+                    placed = true;
+                    break;
+                }
+            }
+        }
+        if !placed {
+            for side in [inward, -inward] {
+                if fits(space, side, false, false) {
+                    commit_strip(&row, side, size, false, false, space, out);
+                    if let Some(c) = &row.caption {
+                        place_badge(space, out, &row.owner, c, row.body, inward, row.vertical);
+                    }
+                    placed = true;
+                    break;
+                }
+            }
+        }
+        if !placed {
+            if let Some(c) = &row.caption {
+                place_badge(space, out, &row.owner, c, row.body, inward, row.vertical);
+            }
+        }
+        if let Some(c) = &row.caption {
+            if !out
+                .texts
+                .iter()
+                .any(|t| &t.text == c && t.purpose.starts_with(&row.owner))
+            {
+                out.notes.push(format!(
+                    "{}: no room for the \"{c}\" caption; leave a {:.1} mm lane beside it (smart_place label_lane)",
+                    row.owner, 2.6
+                ));
+            }
+        }
+        if placed {
+            done.push(row.owner.clone());
+        } else if row.owner != "TP" {
+            out.notes.push(format!(
+                "{}: no room for a framed pin strip; plain labels used instead",
+                row.owner
+            ));
+        }
+    }
+    done
+}
+
+fn make_row(
+    owner: &str,
+    caption: Option<String>,
+    mut pins: Vec<((f64, f64), String)>,
+    through_hole: bool,
+    body: Rect,
+    pads_only: Rect,
+) -> Option<Row> {
+    let (xs, ys): (Vec<f64>, Vec<f64>) = pins.iter().map(|(p, _)| *p).unzip();
+    let spread = |v: &[f64]| {
+        v.iter().cloned().fold(f64::MIN, f64::max) - v.iter().cloned().fold(f64::MAX, f64::min)
+    };
+    let vertical = spread(&ys) > spread(&xs);
+    // A single straight row only: two-row headers and odd connectors keep
+    // plain labels.
+    let off_axis = if vertical { spread(&xs) } else { spread(&ys) };
+    if off_axis > 0.3 {
+        return None;
+    }
+    pins.sort_by(|a, b| {
+        let (ka, kb) = if vertical {
+            (a.0 .1, b.0 .1)
+        } else {
+            (a.0 .0, b.0 .0)
+        };
+        ka.partial_cmp(&kb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    shorten_labels(&mut pins);
+    Some(Row {
+        owner: owner.to_string(),
+        caption,
+        pins,
+        vertical,
+        through_hole,
+        body,
+        pads_only,
+    })
+}
+
+/// Drops a prefix that several pins share up to an underscore, so MA_1A,
+/// MA_2A, MA_1B print as 1A, 2A, 1B; power and ground names stay whole.
+fn shorten_labels(pins: &mut [((f64, f64), String)]) {
+    let prefix = |l: &str| l.find('_').map(|i| l[..=i].to_string());
+    let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+    for (_, l) in pins.iter() {
+        if let Some(p) = prefix(l) {
+            *counts.entry(p).or_default() += 1;
+        }
+    }
+    for (_, l) in pins.iter_mut() {
+        if let Some(p) = prefix(l).filter(|p| counts.get(p).copied().unwrap_or(0) >= 2) {
+            let rest = &l[p.len()..];
+            if !rest.is_empty() {
+                *l = rest.to_string();
+            }
+        }
+    }
+}
+
+/// A rounded caption badge beside a part, trying the inward side first.
+fn place_badge(
+    space: &mut Space<'_>,
+    out: &mut PolishPlan,
+    owner: &str,
+    caption: &str,
+    body: Rect,
+    inward: f64,
+    vertical: bool,
+) -> bool {
+    let size = 1.0;
+    let tb = text_box(caption, (0.0, 0.0), size, 0.0);
+    let (w, h) = (tb.2 - tb.0 + 0.6, tb.3 - tb.1 + 0.3);
+    let (cx, cy) = ((body.0 + body.2) / 2.0, (body.1 + body.3) / 2.0);
+    let gap = 0.4;
+    let below = (cx - w / 2.0, body.3 + gap, cx + w / 2.0, body.3 + gap + h);
+    let above = (cx - w / 2.0, body.1 - gap - h, cx + w / 2.0, body.1 - gap);
+    let right = (body.2 + gap, cy - h / 2.0, body.2 + gap + w, cy + h / 2.0);
+    let left = (body.0 - gap - w, cy - h / 2.0, body.0 - gap, cy + h / 2.0);
+    let order = match (vertical, inward > 0.0) {
+        (false, true) => [below, above, right, left],
+        (false, false) => [above, below, right, left],
+        (true, true) => [right, left, below, above],
+        (true, false) => [left, right, below, above],
+    };
+    for r in order {
+        if space.free(r, false, Some(owner)) {
+            out.graphics.push(GraphicItem {
+                layer: "F.SilkS".into(),
+                a: (r.0, r.1),
+                b: (r.2, r.3),
+                frame: true,
+                radius: FRAME_R,
+                width: FRAME_W,
+                purpose: format!("{owner} caption badge"),
+            });
+            out.texts.push(TextItem {
+                layer: "F.SilkS".into(),
+                text: caption.to_uppercase(),
+                at: ((r.0 + r.2) / 2.0, (r.1 + r.3) / 2.0),
+                size,
+                rotation: 0.0,
+                mirror: false,
+                knockout: false,
+                bold: true,
+                condensed: false,
+                purpose: format!("{owner} caption"),
+            });
+            space.taken.push((r, false));
+            return true;
+        }
+    }
+    false
+}
+
+/// Cell edges along the row: midway between pins, half a pitch past the ends.
+fn cell_edges(row: &Row) -> Vec<f64> {
+    let t: Vec<f64> = row
+        .pins
+        .iter()
+        .map(|(p, _)| if row.vertical { p.1 } else { p.0 })
+        .collect();
+    let first_pitch = t.get(1).map(|x| x - t[0]).unwrap_or(2.54);
+    let last_pitch = if t.len() > 1 {
+        t[t.len() - 1] - t[t.len() - 2]
+    } else {
+        2.54
+    };
+    let mut e = vec![t[0] - first_pitch / 2.0];
+    for w in t.windows(2) {
+        e.push((w[0] + w[1]) / 2.0);
+    }
+    e.push(t[t.len() - 1] + last_pitch / 2.0);
+    e
+}
+
+/// The strip and caption boxes for one side, and each label's size and
+/// rotation: (box, (text size, text rotation)). The first entry is the strip.
+fn strip_plan(
+    row: &Row,
+    side: f64,
+    size: f64,
+    back: bool,
+    caption: bool,
+) -> Option<Vec<(Rect, (f64, f64))>> {
+    let edges = cell_edges(row);
+    let narrowest = edges
+        .windows(2)
+        .map(|w| w[1] - w[0])
+        .fold(f64::MAX, f64::min);
+    let longest = row
+        .pins
+        .iter()
+        .map(|(_, l)| l.chars().count() as f64 * size * 0.64 + size * 0.3)
+        .fold(0.0, f64::max);
+    // Text runs across the strip when it fits a cell, otherwise along it.
+    let (depth, rotation) = if row.vertical {
+        (longest + 0.5, 0.0)
+    } else if longest + 0.2 <= narrowest {
+        (size * 1.3 + 0.4, 0.0)
+    } else if size * 1.3 + 0.3 <= narrowest {
+        (longest + 0.5, 90.0)
+    } else {
+        return None;
+    };
+    let base = if back { row.pads_only } else { row.body };
+    let gap = 0.3;
+    let near = if row.vertical {
+        if side > 0.0 {
+            base.2 + gap
+        } else {
+            base.0 - gap
+        }
+    } else if side > 0.0 {
+        base.3 + gap
+    } else {
+        base.1 - gap
+    };
+    let far = near + side * depth;
+    let (lo, hi) = (near.min(far), near.max(far));
+    let (a0, a1) = (edges[0], edges[edges.len() - 1]);
+    let strip: Rect = if row.vertical {
+        (lo, a0, hi, a1)
+    } else {
+        (a0, lo, a1, hi)
+    };
+    let mut plan = vec![(strip, (size, rotation))];
+    if let Some(c) = row.caption.as_ref().filter(|_| caption) {
+        let csize = 1.0;
+        let tb = text_box(c, (0.0, 0.0), csize, 0.0);
+        let (w, h) = (tb.2 - tb.0 + 0.6, tb.3 - tb.1 + 0.3);
+        let along = (a0 + a1) / 2.0;
+        let start = far + side * 0.4;
+        let end = start + side * if row.vertical { w } else { h };
+        let (c0, c1) = (start.min(end), start.max(end));
+        let badge: Rect = if row.vertical {
+            (c0, along - h / 2.0, c1, along + h / 2.0)
+        } else {
+            (along - w / 2.0, c0, along + w / 2.0, c1)
+        };
+        plan.push((badge, (csize, 0.0)));
+    }
+    Some(plan)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn commit_strip(
+    row: &Row,
+    side: f64,
+    size: f64,
+    back: bool,
+    caption: bool,
+    space: &mut Space<'_>,
+    out: &mut PolishPlan,
+) {
+    let Some(plan) = strip_plan(row, side, size, back, caption) else {
+        return;
+    };
+    let layer = if back { "B.SilkS" } else { "F.SilkS" };
+    let (strip, (tsize, rotation)) = plan[0];
+    out.graphics.push(GraphicItem {
+        layer: layer.into(),
+        a: (strip.0, strip.1),
+        b: (strip.2, strip.3),
+        frame: true,
+        radius: FRAME_R,
+        width: FRAME_W,
+        purpose: format!("{} pin strip", row.owner),
+    });
+    let edges = cell_edges(row);
+    for e in &edges[1..edges.len() - 1] {
+        let (a, b) = if row.vertical {
+            ((strip.0, *e), (strip.2, *e))
+        } else {
+            ((*e, strip.1), (*e, strip.3))
+        };
+        out.graphics.push(GraphicItem {
+            layer: layer.into(),
+            a,
+            b,
+            frame: false,
+            radius: 0.0,
+            width: FRAME_W,
+            purpose: format!("{} pin divider", row.owner),
+        });
+    }
+    for (i, (_, label)) in row.pins.iter().enumerate() {
+        let c = (edges[i] + edges[i + 1]) / 2.0;
+        let at = if row.vertical {
+            ((strip.0 + strip.2) / 2.0, c)
+        } else {
+            (c, (strip.1 + strip.3) / 2.0)
+        };
+        out.texts.push(TextItem {
+            layer: layer.into(),
+            text: label.clone(),
+            at,
+            size: tsize,
+            rotation,
+            mirror: back,
+            knockout: false,
+            bold: true,
+            condensed: true,
+            purpose: format!("{} pin {} label", row.owner, i + 1),
+        });
+    }
+    space.taken.push((strip, back));
+    if let (Some(caption), Some((badge, (csize, _)))) = (&row.caption, plan.get(1)) {
+        out.graphics.push(GraphicItem {
+            layer: layer.into(),
+            a: (badge.0, badge.1),
+            b: (badge.2, badge.3),
+            frame: true,
+            radius: FRAME_R,
+            width: FRAME_W,
+            purpose: format!("{} caption badge", row.owner),
+        });
+        out.texts.push(TextItem {
+            layer: layer.into(),
+            text: caption.clone(),
+            at: ((badge.0 + badge.2) / 2.0, (badge.1 + badge.3) / 2.0),
+            size: *csize,
+            rotation: 0.0,
+            mirror: back,
+            knockout: false,
+            bold: true,
+            condensed: false,
+            purpose: format!("{} caption", row.owner),
+        });
+        space.taken.push((*badge, back));
+    }
+}
+
 fn find_spot(
     space: &Space<'_>,
     text: &str,
@@ -515,6 +1121,104 @@ fn find_spot(
 mod tests {
     use super::super::model::{fixture, Board};
     use super::*;
+
+    /// Prints a polish plan as JSON: VOLTARIS_POLISH_PREVIEW="board.kicad_pcb"
+    /// and optional VOLTARIS_POLISH_CAPTIONS="J2=MOTOR A,J3=MOTOR B".
+    #[test]
+    #[ignore = "needs VOLTARIS_POLISH_PREVIEW"]
+    fn polish_preview() {
+        let Ok(path) = std::env::var("VOLTARIS_POLISH_PREVIEW") else {
+            return;
+        };
+        let b = Board::from_text(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let captions = std::env::var("VOLTARIS_POLISH_CAPTIONS")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let p = plan(
+            &b,
+            "preview",
+            &PolishOptions {
+                captions,
+                stitch: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let texts: Vec<serde_json::Value> = p
+            .texts
+            .iter()
+            .map(|t| {
+                serde_json::json!([t.layer, t.text, t.at.0, t.at.1, t.size, t.rotation, t.knockout])
+            })
+            .collect();
+        let graphics: Vec<serde_json::Value> = p
+            .graphics
+            .iter()
+            .map(|g| serde_json::json!([g.layer, g.a.0, g.a.1, g.b.0, g.b.1, g.frame]))
+            .collect();
+        println!(
+            "PREVIEW {}",
+            serde_json::json!({"texts": texts, "graphics": graphics, "notes": p.notes})
+        );
+    }
+
+    #[test]
+    fn frames_a_connector_row_and_captions_it() {
+        let body = fixture::header("J1", 112.0, 106.0, &["+5V", "GND", "SIG"]);
+        let b = Board::from_text(&fixture::board(&body)).unwrap();
+        let opts = PolishOptions {
+            captions: vec![("J1".into(), "Sensor".into())],
+            ..Default::default()
+        };
+        let p = plan(&b, "x", &opts).unwrap();
+        let frames = p
+            .graphics
+            .iter()
+            .filter(|g| g.frame && g.layer == "F.SilkS")
+            .count();
+        let dividers = p
+            .graphics
+            .iter()
+            .filter(|g| !g.frame && g.layer == "F.SilkS")
+            .count();
+        assert_eq!(frames, 2, "pin strip and caption badge");
+        assert_eq!(dividers, 2, "three cells");
+        assert!(p.texts.iter().any(|t| t.text == "SENSOR" && t.bold));
+        for t in p.texts.iter().filter(|t| t.condensed) {
+            for q in &b.pads {
+                assert!(!rects_overlap(
+                    text_box(&t.text, t.at, t.size * 0.75, t.rotation),
+                    q.bbox(),
+                    0.0
+                ));
+            }
+        }
+        let plain = plan(
+            &b,
+            "x",
+            &PolishOptions {
+                style: LabelStyle::Plain,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(plain.graphics.is_empty());
+    }
+
+    #[test]
+    fn shortens_shared_pin_prefixes() {
+        let mut pins = vec![
+            ((0.0, 0.0), "MA_1A".to_string()),
+            ((2.0, 0.0), "MA_2A".to_string()),
+            ((4.0, 0.0), "GND".to_string()),
+        ];
+        shorten_labels(&mut pins);
+        let names: Vec<&str> = pins.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(names, ["1A", "2A", "GND"]);
+    }
 
     #[test]
     fn labels_header_pins_on_both_sides_and_adds_a_title() {

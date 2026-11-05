@@ -542,6 +542,30 @@ pub fn board_rectangle(
     )
 }
 
+/// Build an unfilled BoardGraphicShape rectangle with rounded corners.
+#[allow(clippy::too_many_arguments)]
+pub fn board_round_rect(
+    layer: &str,
+    width_mm: f64,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    radius_mm: f64,
+) -> kiapi::board::types::BoardGraphicShape {
+    board_shape(
+        layer,
+        attrs(width_mm, false),
+        kiapi::common::types::graphic_shape::Geometry::Rectangle(
+            kiapi::common::types::GraphicRectangleAttributes {
+                top_left: Some(vec2(x1, y1)),
+                bottom_right: Some(vec2(x2, y2)),
+                corner_radius: Some(distance(radius_mm)),
+            },
+        ),
+    )
+}
+
 /// Build a BoardGraphicShape circle at (cx,cy) with radius r_mm.
 pub fn board_circle(
     layer: &str,

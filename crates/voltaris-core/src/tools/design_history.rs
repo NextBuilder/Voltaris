@@ -410,6 +410,7 @@ pub async fn take_snapshot(
     project: &Project,
     label: &str,
     kicad_cli: &str,
+    live_board: Option<&str>,
 ) -> anyhow::Result<Value> {
     let (stamp, iso) = utc_stamp();
     let slug = crate::tools::design_checks::slug(label);
@@ -431,6 +432,14 @@ pub async fn take_snapshot(
         std::fs::create_dir_all(dst.parent().unwrap())?;
         std::fs::copy(project.dir.join(rel), dst)?;
     }
+    // A board open in KiCad may hold work that is not saved yet: the snapshot
+    // takes the live board, so it can really restore what the user saw.
+    let board_file = format!("{}.kicad_pcb", project.name);
+    if let Some(content) = live_board {
+        let dst = dir.join("files").join(&board_file);
+        std::fs::create_dir_all(dst.parent().unwrap())?;
+        std::fs::write(dst, content)?;
+    }
     let design = if project.sch().is_file() {
         Some(design_model::load(&project.sch(), kicad_cli).await?)
     } else {
@@ -445,6 +454,7 @@ pub async fn take_snapshot(
         "parts": design.as_ref().map(|d| d.components.len()),
         "nets": design.as_ref().map(|d| d.nets.len()),
         "design_source": design.as_ref().map(|d| d.source.clone()),
+        "board_source": if live_board.is_some() { "live KiCad board" } else { "saved file" },
     });
     std::fs::write(
         dir.join("snapshot.json"),
@@ -453,13 +463,24 @@ pub async fn take_snapshot(
     Ok(meta)
 }
 
+/// The board as KiCad holds it right now, when it is open there.
+async fn live_board(ctx: &ToolContext, project: &Project) -> Option<String> {
+    crate::tools::with_board_ipc_classified(ctx, &project.pcb(), |client, document| {
+        client.save_document_to_string_in(document)
+    })
+    .await
+    .ok()?
+    .ok()
+}
+
 async fn handle_snapshot(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToolResult> {
     let project = match project_arg(args) {
         Ok(p) => p,
         Err(e) => return Ok(e),
     };
     let label = opt_str(args, "label").unwrap_or("");
-    let meta = take_snapshot(&project, label, &ctx.config.kicad_cli).await?;
+    let live = live_board(ctx, &project).await;
+    let meta = take_snapshot(&project, label, &ctx.config.kicad_cli, live.as_deref()).await?;
     Ok(CallToolResult::json(&meta))
 }
 
@@ -627,6 +648,7 @@ async fn handle_restore(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallT
         &project,
         &format!("before restore of {id}"),
         &ctx.config.kicad_cli,
+        None,
     )
     .await?;
     let files: Vec<String> = meta["files"]
@@ -762,11 +784,21 @@ mod tests {
             .unwrap();
         let p = Project::locate(dir.to_str().unwrap()).unwrap();
         let meta = rt
-            .block_on(take_snapshot(&p, "before autoroute", "kicad-cli-missing"))
+            .block_on(take_snapshot(
+                &p,
+                "before autoroute",
+                "kicad-cli-missing",
+                None,
+            ))
             .unwrap();
         assert!(meta["id"].as_str().unwrap().ends_with("-before-autoroute"));
         let again = rt
-            .block_on(take_snapshot(&p, "before autoroute", "kicad-cli-missing"))
+            .block_on(take_snapshot(
+                &p,
+                "before autoroute",
+                "kicad-cli-missing",
+                None,
+            ))
             .unwrap();
         assert_ne!(meta["id"], again["id"]);
         assert_eq!(snapshots(&p).len(), 2);

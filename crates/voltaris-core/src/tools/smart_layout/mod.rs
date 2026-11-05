@@ -101,7 +101,8 @@ pub fn tools() -> Vec<ToolDef> {
                     "only": { "type": "array", "items": { "type": "string" }, "description": "Place only these references" },
                     "rotate": { "type": "boolean", "default": true },
                     "mode": { "type": "string", "enum": ["improve", "replace", "respect"], "default": "improve", "description": "improve: refine the current layout; replace: full re-placement; respect: place only what is missing" },
-                    "max_shift": { "type": "number", "default": 5.0, "description": "improve mode: furthest a part may move, in mm" }
+                    "max_shift": { "type": "number", "default": 5.0, "description": "improve mode: furthest a part may move, in mm" },
+                    "label_lane": { "type": "number", "default": 2.6, "description": "Strip (mm) kept free on the board side of every connector for its pin strip and caption badge; 0 disables" }
                 },
                 "required": ["board"]
             }),
@@ -109,8 +110,11 @@ pub fn tools() -> Vec<ToolDef> {
         ),
         tool!(
             "polish_board",
-            "Give the board a finished, maker-brand look in one call: silkscreen labels beside \
-             every named connector pin (top, and mirrored on the bottom for through-hole pins), \
+            "Give the board a finished, maker-brand look in one call: product-style silkscreen \
+             (style 'product', default) — a rounded strip of pin names divided into cells lined \
+             up with the pins of every single-row connector and test-point row, and a rounded \
+             caption badge from 'captions' (e.g. J2 = MOTOR A); plain per-pin labels for other \
+             connectors (top, and mirrored on the bottom for through-hole pins), \
              every reference designator tidied to one legible size (1.0 mm, 0.8 mm minimum), \
              upright, beside its part and off pads, vias, bodies and other silkscreen (hidden when \
              there is no clean spot; references 'keep' or 'hide' to change that), a \
@@ -138,6 +142,8 @@ pub fn tools() -> Vec<ToolDef> {
                     "via_drill": { "type": "number", "default": 0.3 },
                     "mirror_pours": { "type": "boolean", "default": true },
                     "references": { "type": "string", "enum": ["tidy", "keep", "hide"], "default": "tidy", "description": "Reference designators: tidy (one size, beside each part, off copper), keep, or hide all" },
+                    "style": { "type": "string", "enum": ["product", "plain"], "default": "product", "description": "product: a rounded, divided strip of pin names lined up with each single-row connector and test-point row, plus a caption badge; plain: one text label per pin" },
+                    "captions": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Function caption per part, printed on the connector strip or in a rounded badge beside the part: {\"J2\": \"MOTOR A\", \"SW1\": \"USER\"}" },
                     "ref_size": { "type": "number", "default": 1.0, "description": "Designator height in mm (0.8 minimum)" }
                 },
                 "required": ["board"]
@@ -512,6 +518,7 @@ async fn handle_place(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallToo
         },
         max_shift: f64_arg(args, "max_shift", 5.0),
         iterations: 0,
+        label_lane: f64_arg(args, "label_lane", 2.6).max(0.0),
     };
     let plan = match tokio::task::spawn_blocking(move || placer::plan(&board, &opts)).await? {
         Ok(p) => p,
@@ -611,6 +618,19 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
             _ => return Ok(invalid_arg("references", "use tidy, keep or hide")),
         },
         ref_size: f64_arg(args, "ref_size", 1.0).max(0.8),
+        style: match opt_str(args, "style").unwrap_or("product") {
+            "product" => polish::LabelStyle::Product,
+            "plain" => polish::LabelStyle::Plain,
+            _ => return Ok(invalid_arg("style", "use product or plain")),
+        },
+        captions: args["captions"]
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default(),
         ..Default::default()
     };
     let plan = match polish::plan(&board, &project, &opts) {
@@ -625,6 +645,7 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
             "layer": t.layer, "text": t.text, "x": round3(t.at.0), "y": round3(t.at.1),
             "size": t.size, "rotation": t.rotation, "knockout": t.knockout, "purpose": t.purpose
         })).collect::<Vec<_>>(),
+        "frames_and_dividers": plan.graphics.len(),
         "zones": plan.zones.iter().map(|z| json!({"net": z.net, "layer": z.layer, "points": z.points.len()})).collect::<Vec<_>>(),
         "stitching_vias": plan.vias.len(),
         "references": {
@@ -648,6 +669,7 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
         return Ok(refusal);
     }
     let texts = plan.texts.clone();
+    let graphics = plan.graphics.clone();
     let vias = plan.vias.clone();
     let zones = plan.zones.clone();
     let refs: Vec<voltaris_ipc::client::ReferenceTextEdit> = plan
@@ -674,7 +696,26 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
                     &t.layer, &t.text, t.at.0, t.at.1, t.size, t.rotation, t.mirror,
                 );
                 bt.knockout = t.knockout;
+                if let Some(a) = bt.text.as_mut().and_then(|x| x.attributes.as_mut()) {
+                    a.bold = t.bold;
+                    if t.condensed {
+                        a.size = Some(builders::vec2(t.size * 0.75, t.size));
+                    }
+                }
                 items.push(builders::pack_any(&bt, "kiapi.board.types.BoardText"));
+            }
+            for g in &graphics {
+                let shape = if g.frame {
+                    builders::board_round_rect(
+                        &g.layer, g.width, g.a.0, g.a.1, g.b.0, g.b.1, g.radius,
+                    )
+                } else {
+                    builders::board_segment(&g.layer, g.width, g.a.0, g.a.1, g.b.0, g.b.1)
+                };
+                items.push(builders::pack_any(
+                    &shape,
+                    "kiapi.board.types.BoardGraphicShape",
+                ));
             }
             let mut codes: BTreeMap<String, i32> = BTreeMap::new();
             for (net, at) in &vias {

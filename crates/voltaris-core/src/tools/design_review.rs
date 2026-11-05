@@ -463,6 +463,110 @@ async fn handle_audit_power_rails_file(
         }
     }
 
+    // Option links: two fitted 0 Ω links that land on one net join the two
+    // nets they come from (Mini UPS V2 rev A tied its two outputs this way).
+    let dnp: HashSet<String> = tree
+        .find_all("symbol")
+        .into_iter()
+        .filter(|n| n.find_str("dnp") == Some("yes"))
+        .filter_map(|n| {
+            n.find_all("property")
+                .into_iter()
+                .find(|p| p.get(1).and_then(|v| v.as_str()) == Some("Reference"))
+                .and_then(|p| p.get(2).and_then(|v| v.as_str()).map(str::to_string))
+        })
+        .collect();
+    let zero_ohm = |v: &str| {
+        let v = v.trim().to_uppercase().replace(' ', "");
+        matches!(v.as_str(), "0" | "0R" | "0Ω" | "0OHM" | "0E" | "0R0")
+    };
+    let mut links: Vec<(String, NetRoot, NetRoot)> = Vec::new();
+    for (inst, pins) in &placed {
+        if !inst.reference.starts_with('R')
+            || !zero_ohm(&inst.value)
+            || dnp.contains(&inst.reference)
+        {
+            continue;
+        }
+        let roots: Vec<NetRoot> = pins
+            .iter()
+            .map(|(pin, t)| {
+                let (px, py) = pin_endpoint(pin, *t);
+                graph.root_at(px, py)
+            })
+            .collect();
+        if let [a, b] = roots.as_slice() {
+            if a != b {
+                links.push((inst.reference.clone(), *a, *b));
+            }
+        }
+    }
+    for i in 0..links.len() {
+        for j in i + 1..links.len() {
+            let (ra, a1, a2) = &links[i];
+            let (rb, b1, b2) = &links[j];
+            let shared = [
+                (a1, a2, b1, b2),
+                (a1, a2, b2, b1),
+                (a2, a1, b1, b2),
+                (a2, a1, b2, b1),
+            ]
+            .into_iter()
+            .find(|(x, _, y, _)| x == y);
+            if let Some((mid, from_a, _, from_b)) = shared {
+                if from_a == from_b {
+                    continue;
+                }
+                let name = |r: &NetRoot| {
+                    graph
+                        .name_of_root(*r)
+                        .unwrap_or_else(|| "an unnamed net".into())
+                };
+                findings.push(AuditFinding {
+                    severity: "error",
+                    category: "power",
+                    component: Some(format!("{ra}, {rb}")),
+                    issue: format!(
+                        "0 Ω links {ra} and {rb} are both fitted and meet on {}, so {} and {} are joined",
+                        name(mid),
+                        name(from_a),
+                        name(from_b)
+                    ),
+                    recommendation: "Mark the unused option link DNP (Do Not Populate), or replace it with copper if it is not an option".into(),
+                });
+            }
+        }
+    }
+
+    // Presentation: rails drawn as power symbols and short wires read far
+    // better than a sheet of net labels on every pin.
+    let power_symbols = placed
+        .iter()
+        .filter(|(inst, _)| inst.lib_id.starts_with("power:"))
+        .count();
+    if labels.len() >= 40 && labels.len() > wires.len() {
+        findings.push(AuditFinding {
+            severity: "info",
+            category: "presentation",
+            component: None,
+            issue: format!(
+                "{} net labels but only {} wires: the sheet is labels on every pin, hard to read",
+                labels.len(),
+                wires.len()
+            ),
+            recommendation: "Wire parts that sit together, use power symbols for rails, and keep labels for signals that leave a block".into(),
+        });
+    }
+    if power_symbols == 0 && rails.len() >= 2 {
+        findings.push(AuditFinding {
+            severity: "info",
+            category: "presentation",
+            component: None,
+            issue: "No power symbols: every rail is drawn with labels".into(),
+            recommendation: "Use GND, +3V3, +5V … power symbols at each part's power pins".into(),
+        });
+    }
+
     // Check for test points on power rails
     let test_point_roots = test_point_nets(&mut graph, &placed);
     for rail in &rails {

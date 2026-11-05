@@ -48,10 +48,6 @@ fn required_phrases() -> Vec<(&'static str, String)> {
     let total = registered + meta;
     vec![
         (
-            "README.md",
-            format!("**{registered} tools across {toolsets} on-demand toolsets.**"),
-        ),
-        (
             "docs/dev/DEVELOPMENT.md",
             format!("**{toolsets} toolsets, {registered} tools** + {meta} meta-tools"),
         ),

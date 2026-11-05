@@ -203,7 +203,8 @@ mod tests {
                         "copy_routing_pattern/properties/net_map" |
                         "apply_template/properties/net_mappings" |
                         "generate_enclosure/properties/component_heights" |
-                        "route_board/properties/net_widths"
+                        "route_board/properties/net_widths" |
+                        "polish_board/properties/captions"
                     ),
                         "unreviewed open input record: {path}"
                     );

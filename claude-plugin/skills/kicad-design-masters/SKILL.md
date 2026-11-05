@@ -15,6 +15,8 @@ description: |
 Each section states a rule as its teachers give it (paraphrased), the number that makes it
 usable, and the Voltaris tool that checks it. The [world corpus](references/world-corpus.md)
 lists the open boards these rules were checked against and what each one does best.
+[Standards and sources](references/standards-and-sources.md) says which source wins when two
+disagree, which IPC/IEC standard covers a question, and the documents a finished project has.
 
 ```
 load_toolset('engineering')      # calc_impedance calc_trace_width calc_via list_stackups

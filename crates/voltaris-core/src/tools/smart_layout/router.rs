@@ -1346,32 +1346,31 @@ fn connectivity(board: &Board, net: &str, pads: &[usize]) -> Vec<Vec<usize>> {
     // Copper pours connect what lies inside them on their layers.
     let base = pads.len() + segs.len() + vias.len();
     for (zi, z) in zones.iter().enumerate() {
-        let inside = |p: (f64, f64)| super::model::point_in_polygon(p, &z.points);
         let on = |layer: &str| z.layers.iter().any(|l| l == layer);
+        // Copper reaching the pour: within `reach` of its outline or inside it.
+        let near = |a: (f64, f64), b: (f64, f64), reach: f64| {
+            super::model::point_in_polygon(a, &z.points)
+                || super::model::polygon_segment_distance(&z.points, a, b) <= reach + 1e-6
+        };
         for (pi, &pad) in pads.iter().enumerate() {
             let p = &board.pads[pad];
             let r = p.bbox();
-            let touches = inside(p.at)
-                || [(r.0, r.1), (r.2, r.1), (r.2, r.3), (r.0, r.3)]
-                    .into_iter()
-                    .any(inside);
+            let corners = [(r.0, r.1), (r.2, r.1), (r.2, r.3), (r.0, r.3)];
+            let touches = (0..4).any(|i| near(corners[i], corners[(i + 1) % 4], 0.0))
+                || z.points
+                    .iter()
+                    .any(|q| q.0 >= r.0 && q.0 <= r.2 && q.1 >= r.1 && q.1 <= r.3);
             if (p.through_hole || z.layers.iter().any(|l| p.on_layer(l))) && touches {
                 union(&mut parent, pi, base + zi);
             }
         }
-        let round = |c: (f64, f64), r: f64| {
-            inside(c)
-                || [(r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)]
-                    .into_iter()
-                    .any(|(dx, dy)| inside((c.0 + dx, c.1 + dy)))
-        };
         for (si, sg) in segs.iter().enumerate() {
-            if on(&sg.layer) && (round(sg.a, sg.width / 2.0) || round(sg.b, sg.width / 2.0)) {
+            if on(&sg.layer) && near(sg.a, sg.b, sg.width / 2.0) {
                 union(&mut parent, pads.len() + si, base + zi);
             }
         }
         for (vi, v) in vias.iter().enumerate() {
-            if round(v.at, v.size / 2.0) {
+            if near(v.at, v.at, v.size / 2.0) {
                 union(&mut parent, pads.len() + segs.len() + vi, base + zi);
             }
         }

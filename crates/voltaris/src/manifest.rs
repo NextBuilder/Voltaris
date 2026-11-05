@@ -112,6 +112,10 @@ pub const SKILLS: &[SkillManifest] = &[
                 include_str!("../assets/skills/kicad-pro-workflow/references/expert-checklist.md"),
             ),
             (
+                "first-time-right.md",
+                include_str!("../assets/skills/kicad-pro-workflow/references/first-time-right.md"),
+            ),
+            (
                 "bringup-plan.md",
                 include_str!("../assets/skills/kicad-pro-workflow/references/bringup-plan.md"),
             ),
@@ -236,10 +240,18 @@ pub const SKILLS: &[SkillManifest] = &[
     SkillManifest {
         name: "kicad-design-masters",
         content: include_str!("../assets/skills/kicad-design-masters/SKILL.md"),
-        references: &[(
-            "world-corpus.md",
-            include_str!("../assets/skills/kicad-design-masters/references/world-corpus.md"),
-        )],
+        references: &[
+            (
+                "world-corpus.md",
+                include_str!("../assets/skills/kicad-design-masters/references/world-corpus.md"),
+            ),
+            (
+                "standards-and-sources.md",
+                include_str!(
+                    "../assets/skills/kicad-design-masters/references/standards-and-sources.md"
+                ),
+            ),
+        ],
     },
 ];
 
