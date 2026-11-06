@@ -83,7 +83,9 @@ def build(out):
             dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     (out / "agents").mkdir()
     for a in agents:
-        (out / "agents" / a.name).write_text(front_matter(a.read_text(encoding="utf-8"), drop=AGENT_DROP), encoding="utf-8")
+        text = front_matter(a.read_text(encoding="utf-8"), drop=AGENT_DROP)
+        text = re.sub(r"^  - ([a-z0-9-]+)$", r"  - voltaris:\1", text, flags=re.M)
+        (out / "agents" / a.name).write_text(text, encoding="utf-8")
 
 
 def snapshot(d):

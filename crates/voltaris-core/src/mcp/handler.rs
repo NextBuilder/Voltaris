@@ -34,6 +34,7 @@ pub struct McpHandler {
     /// Meta-tools bypass the domain router, so their advertised schemas are
     /// compiled here once and enforced at the same dispatch boundary.
     meta_input_validators: Arc<HashMap<String, Arc<jsonschema::Validator>>>,
+    guide: Arc<super::guide::Guide>,
 }
 
 /// MCP clients known to cache the first `tools/list` and ignore
@@ -107,6 +108,7 @@ impl McpHandler {
             notif_sinks: Arc::new(RwLock::new(Vec::new())),
             observer,
             meta_input_validators: Arc::new(meta_input_validators),
+            guide: Arc::default(),
         })
     }
 
@@ -223,7 +225,9 @@ impl McpHandler {
                     .guidance
                     .get()
                     .and_then(|probe| probe.take_notice());
-                let result = McpServerState::build_initialize_result(notice);
+                let result = McpServerState::build_initialize_result(Some(
+                    super::guide::instructions(notice),
+                ));
                 Ok(Some(serde_json::to_value(result)?))
             }
             "notifications/initialized" => Ok(None),
@@ -294,7 +298,12 @@ impl McpHandler {
             "tool_call_start"
         );
 
-        let (result, status, error_kind) = self.dispatch_tool(&params.name, &args).await;
+        let (mut result, status, error_kind) = self.dispatch_tool(&params.name, &args).await;
+        if !result.is_error {
+            if let Some(text) = self.guide.note(&params.name, toolset.as_deref(), &args) {
+                result.content.push(ToolContent::Text { text });
+            }
+        }
 
         let dur_ms = started.elapsed().as_millis() as u64;
         let result_bytes = result_content_bytes(&result);
@@ -2420,24 +2429,27 @@ mod client_adaptation_tests {
             .expect("initialize returns a result")
     }
 
-    /// Drift reaches the model through `instructions` (#728); with nothing
-    /// to report, or no probe at all, the field is absent rather than empty.
     #[tokio::test]
-    async fn initialize_carries_a_guidance_notice_only_when_there_is_one() {
+    async fn initialize_carries_the_stage_guide_and_any_drift_notice() {
         let bare = lazy_handler().await;
-        assert!(initialize_result(&bare).await.get("instructions").is_none());
+        assert_eq!(
+            initialize_result(&bare).await["instructions"],
+            super::super::guide::INSTRUCTIONS
+        );
 
         let quiet = lazy_handler().await;
         quiet.set_guidance_probe(Arc::new(FixedProbe(None)));
-        assert!(initialize_result(&quiet)
-            .await
-            .get("instructions")
-            .is_none());
+        assert_eq!(
+            initialize_result(&quiet).await["instructions"],
+            super::super::guide::INSTRUCTIONS
+        );
 
         let drifted = lazy_handler().await;
         drifted.set_guidance_probe(Arc::new(FixedProbe(Some("run voltaris init"))));
         let result = initialize_result(&drifted).await;
-        assert_eq!(result["instructions"], "run voltaris init");
+        assert!(result["instructions"]
+            .as_str()
+            .is_some_and(|t| t.starts_with("run voltaris init")));
         assert_eq!(result["serverInfo"]["name"], "voltaris");
     }
 

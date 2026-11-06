@@ -10,6 +10,13 @@ Canonical reference for every MCP tool exposed by Voltaris. Generated from the R
 Compatibility notes for removed or narrowed arguments are recorded in
 [`docs/dev/API_MIGRATIONS.md`](dev/API_MIGRATIONS.md).
 
+**Stage guide.** The server's `initialize` instructions map every design stage to the skill to
+load first and the agent that reviews it. A successful tool call appends one `[voltaris]` line
+when it starts a stage (the skill to load, once per session) or ends one (the review agent to
+run: `kicad-design-review-agent` after `run_erc`, `kicad-pro-review-agent` after an applied
+`route_board` or `polish_board` and after `run_drc`, `kicad-manufacture-agent` after
+`export_manufacturing_package`). Source: `crates/voltaris-core/src/mcp/guide.rs`.
+
 ## Overview
 
 - **33 toolsets** organized into 14 categories

@@ -805,7 +805,12 @@ fn a_legacy_guidance_marker_is_reported_on_the_first_start_only() {
         "{instructions}"
     );
     assert!(instructions.contains("`voltaris init`"), "{instructions}");
-    assert_eq!(instructions.lines().count(), 1, "Codex was never installed");
+    let notice = instructions.split("\n\n").next().unwrap();
+    assert_eq!(notice.lines().count(), 1, "Codex was never installed");
+    assert!(
+        instructions.contains("kicad-pro-review-agent"),
+        "{instructions}"
+    );
 
     let result = p.call_tool("get_installation_info", json!({}));
     let body = McpProcess::tool_body(&result);
@@ -824,7 +829,8 @@ fn a_legacy_guidance_marker_is_reported_on_the_first_start_only() {
 
     let mut p = McpProcess::spawn_configured(Some(tmp.path()), true);
     let init = &p.initialized["result"];
-    assert!(init.get("instructions").is_none(), "{init}");
+    let quiet = init["instructions"].as_str().unwrap();
+    assert!(quiet.starts_with("Voltaris works stage by stage"), "{init}");
     let result = p.call_tool("get_installation_info", json!({}));
     let guidance = &McpProcess::tool_body(&result)["guidance"];
     assert_eq!(guidance["claude"]["state"], "out_of_sync");

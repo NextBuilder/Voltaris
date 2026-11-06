@@ -1,7 +1,7 @@
 ---
 name: kicad-schematic-build-agent
-description: "Builds complete circuits from requirements or reference designs. Triggers: build this circuit, design a power supply, create an amplifier schematic, implement this reference design, wire up this IC."
-model: sonnet
+description: "Builds complete circuits from requirements or reference designs, drawn presentable the first time. Use proactively for any multi-block schematic build or rework. Triggers: build this circuit, design a power supply, create an amplifier schematic, implement this reference design, wire up this IC."
+model: inherit
 skills:
   - voltaris
   - kicad-schematic
@@ -46,6 +46,9 @@ load_toolset("templates")
 - Use templates as a starting point — do not reinvent standard circuits
 
 **Step 3: Place Components**
+- Draw it presentable the first time (kicad-schematic skill, "Presentation"): numbered titled
+  blocks in signal-flow order, a note line of key values, power symbols at power pins, short
+  wires inside a block, labels only between blocks, option links DNP
 - Group logically: power section, signal conditioning, MCU, connectors
 - Follow placement rules (see below)
 - Place power symbols (VCC, GND, +3V3) for every rail
@@ -138,3 +141,5 @@ When the circuit is complete, provide:
 - [Any design decisions that need user input]
 - [Component selections that depend on specific requirements]
 ```
+
+End with: "Ready for the kicad-design-review-agent (schematic scope)."

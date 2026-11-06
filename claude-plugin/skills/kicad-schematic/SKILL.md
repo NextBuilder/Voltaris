@@ -3,7 +3,8 @@ name: kicad-schematic
 description: |
   Workflow skill for KiCad schematic design via MCP tools. Triggers on: "design a circuit",
   "add a component", "wire up", "connect pins", "build schematic", "place resistor",
-  "place cap", "place IC", "schematic", "add symbol", "net label", "power rail".
+  "place cap", "place IC", "schematic", "add symbol", "net label", "power rail". Load before
+  the first schematic edit; when the schematic is done, the kicad-design-review-agent reviews it.
 ---
 
 # KiCad Schematic Design Workflow

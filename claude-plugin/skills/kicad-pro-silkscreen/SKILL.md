@@ -7,7 +7,8 @@ description: |
   bottom info block, within JLCPCB's printing limits. Triggers on: "silkscreen", "silk",
   "designators", "reference designators", "labels", "pin labels", "polarity marks", "pin 1",
   "logo", "product look", "clean board", "professional silkscreen", "like Waveshare",
-  "like Arduino", "like Seeed", "like DFRobot", "like Adafruit", "like SparkFun".
+  "like Arduino", "like Seeed", "like DFRobot", "like Adafruit", "like SparkFun". Load before
+  polish_board or any board text.
 ---
 
 # Professional Product Silkscreen

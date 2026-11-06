@@ -1,6 +1,6 @@
 ---
 name: voltaris
-description: "Mandatory operating rules for ANY task involving KiCad projects. Loaded when the user mentions KiCad, schematics, PCBs, or any .kicad_* file. Prevents file corruption by routing all changes through Voltaris MCP tools."
+description: "Mandatory operating rules for ANY task involving KiCad projects. Load first when the user mentions KiCad, schematics, PCBs, or any .kicad_* file. Prevents file corruption by routing all changes through Voltaris MCP tools, and maps every design stage to the skill to load and the agent that reviews it."
 ---
 
 # Voltaris — Operating Rules
@@ -132,26 +132,38 @@ unload_toolset("name")  → Remove a toolset when done
 | Simulation | simulation |
 | Manufacturing | manufacturing |
 
-## Agent Routing and Mutation Ownership
+## Stages: skill first, review agent last
 
-Use one design owner at a time. Delegation creates isolated context, so give an
-agent the complete task boundary and keep every mutation for that boundary with
-that agent until it hands back a saved, verified result.
+Every stage runs the same loop, and it is not optional:
 
-- Delegate a complete multi-block schematic build or substantial schematic
-  rework to `kicad-schematic-build-agent`. It owns schematic mutations through
-  placement, wiring, validation, rendering, and save. The caller does not make
-  concurrent schematic edits.
-- Delegate an independent full-design, pre-fabrication, or readiness audit to
-  `kicad-design-review-agent`. It gathers and reports evidence without mutating
-  the design. Return fixes to the current design owner, then run a fresh review.
-- For a whole new board, follow the kicad-pro-workflow skill's gates, and at
-  its Gate 6 delegate to `kicad-pro-review-agent` — an independent reviewer
-  that did not design the board. It reports evidence and fixes without
-  mutating the design.
-- Keep small, bounded edits and narrow checks in the current conversation using
-  the applicable skill. Agent delegation is for a complete build or an
-  independent review, not an extra layer around every tool call.
+1. **Before** the first tool call of a stage, load its skill and follow it.
+2. **When** the stage is complete, hand it to its review agent. It has a fresh context and did
+   not do the work, so the work is not grading itself.
+3. **Fix** every finding the way the skill says — the real fix, never an exclusion, a
+   workaround or a note — then send it back for review. Move on only when the review is clean.
+
+| Stage | Load this skill first | Then this agent reviews it |
+|---|---|---|
+| New board, end to end | kicad-pro-workflow | each stage's agent below |
+| Requirements, parts, power tree | kicad-part-sourcing, kicad-power-design, kicad-mcu-design or kicad-esp32 | — (checked in the schematic review) |
+| Schematic | kicad-schematic | `kicad-design-review-agent` (schematic scope) |
+| Board setup, placement, routing | kicad-pro-layout, plus kicad-multilayer, kicad-high-speed-rf or kicad-power-electronics when they apply | `kicad-pro-review-agent` |
+| Silkscreen and product look | kicad-pro-silkscreen, kicad-board-craft | `kicad-pro-review-agent` |
+| Manufacturing files | kicad-manufacture | `kicad-manufacture-agent` |
+| Simulation | kicad-simulation | — |
+
+Delegating the work itself:
+
+- A complete multi-block schematic build or rework → `kicad-schematic-build-agent`.
+- A complete layout (setup, placement, routing, pours, silkscreen) → `kicad-layout-agent`.
+- One design owner at a time: the agent owns every mutation for its task until it hands back a
+  saved, self-checked result. Review agents never mutate; their fixes return to the owner.
+- Small, bounded edits stay in the conversation with the stage's skill loaded.
+
+In Claude the names carry the plugin prefix (`voltaris:kicad-pro-layout`,
+`voltaris:kicad-pro-review-agent`). A client without subagents runs the agent's checklist
+itself, as a separate pass after the work. Voltaris tool results add a short `[voltaris]` line
+when a stage starts or ends — act on it.
 
 ## Design Rules Quick Reference
 

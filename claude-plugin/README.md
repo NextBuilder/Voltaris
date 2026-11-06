@@ -10,7 +10,7 @@ ESP32, RP2040/RP2350, STM32 and nRF52. It works with your normal Claude plan —
 
 It adds 20 skills (a gated professional design workflow plus specialists for power,
 ESP32 and other microcontrollers, high-speed/RF, part sourcing, simulation, schematic, PCB,
-libraries, review and manufacturing), 3 agents, and the Voltaris MCP server
+libraries, review and manufacturing), 5 agents, and the Voltaris MCP server
 with 257 tools loaded on demand.
 
 ## Requirements

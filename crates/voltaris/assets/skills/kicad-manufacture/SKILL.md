@@ -4,6 +4,7 @@ description: |
   Manufacturing and fabrication workflow for KiCad projects via MCP tools. Triggers on: "send to fab",
   "order boards", "gerbers", "JLCPCB", "manufacturing", "export for production", "pick and place",
   "assembly files", "generate fabrication outputs", "BOM for fab", "production files", "fab house".
+  Load before any export; the kicad-manufacture-agent checks the package afterwards.
 argument-hint: "[fab house or export task]"
 ---
 

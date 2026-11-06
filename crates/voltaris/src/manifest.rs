@@ -270,6 +270,14 @@ pub const AGENTS: &[AgentManifest] = &[
         filename: "kicad-pro-review-agent.md",
         content: include_str!("../assets/agents/kicad-pro-review-agent.md"),
     },
+    AgentManifest {
+        filename: "kicad-layout-agent.md",
+        content: include_str!("../assets/agents/kicad-layout-agent.md"),
+    },
+    AgentManifest {
+        filename: "kicad-manufacture-agent.md",
+        content: include_str!("../assets/agents/kicad-manufacture-agent.md"),
+    },
 ];
 
 // ─── Hook Skills ─────────────────────────────────────────────────────────────

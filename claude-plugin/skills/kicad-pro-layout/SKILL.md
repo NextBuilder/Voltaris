@@ -7,7 +7,9 @@ description: |
   and a layout review. Triggers on: "route like a pro", "professional routing", "clean
   routing", "placement", "floor plan", "ground plane", "return path", "2-layer board",
   "4-layer board", "autoroute", "Freerouting", "noise", "EMI", "power routing", "high current",
-  "layout review", "make the layout better".
+  "layout review", "make the layout better". Load before the first board-setup, placement or
+  routing call (smart_place, route_board); when the layout is done, the kicad-pro-review-agent
+  reviews it.
 ---
 
 # Professional Layout and Routing

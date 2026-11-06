@@ -4,6 +4,7 @@ description: |
   Design review and validation workflow for KiCad projects via MCP tools. Triggers on: "review my design",
   "check for errors", "audit", "DRC", "ERC", "find problems", "design review", "is this ready",
   "validate", "check my schematic", "check my PCB", "what's wrong", "run checks", "pre-fab review".
+  Load at the end of every stage, with that stage's review agent.
 argument-hint: "[what to review]"
 ---
 

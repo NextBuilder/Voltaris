@@ -5,7 +5,8 @@ description: |
   part selection → datasheet rules → schematic → board setup → placement → routing → independent
   review → manufacturing files, enclosure and firmware bring-up. Triggers on: "design a board",
   "design a PCB for", "make me a PCB", "from scratch", "full design", "professional PCB",
-  "Flux-style", "end to end", "ready to manufacture", "production ready".
+  "Flux-style", "end to end", "ready to manufacture", "production ready". Load first for any new
+  board; it names the skill and the review agent for every gate.
 ---
 
 # Voltaris — Professional Design Workflow
@@ -132,6 +133,9 @@ load_toolset('firmware')         # generate_firmware_kit
      each warning is accepted by the user
    - `generate_block_diagram`: matches the Gate 1 architecture; no rail without a source
    - `audit_power_rails`: no fitted 0 Ω links joining two sources, no presentation findings
+5. **Gate 2 review:** hand the schematic to the **kicad-design-review-agent** (schematic
+   scope). Fix every finding in the schematic, then review again. No board work starts on a
+   schematic with open findings.
 
 ## Gate 3 — Board setup
 
@@ -155,6 +159,9 @@ load_toolset('engineering')      # calc_impedance list_stackups calc_trace_width
 
 ## Gate 4 — Placement
 
+Load the kicad-pro-layout skill first. A whole layout (Gates 3–5) can go to the
+**kicad-layout-agent**, which owns the board until it hands back a self-audited result.
+
 ```
 load_toolset('placement')        # score_placement place_decoupling_caps
 load_toolset('pcb_components')   # move_component rotate_component align_components
@@ -171,7 +178,7 @@ holes) → RF module with its antenna over the edge/keep-out → MCU → power s
 loop tight → decoupling beside the pins it serves (`place_decoupling_caps` with the capacitor
 references you chose) → everything else grouped by function, sensors away from heat.
 
-**Gate 4 exit:** `score_placement` has no hard failures, `audit_layout` shows no courtyard
+**Gate 4 exit** (with kicad-pro-layout loaded): `score_placement` has no hard failures, `audit_layout` shows no courtyard
 overlaps (it ignores DRC exclusions — never exclude an overlap, move the part), every
 switching IC has its loop capacitors at its pins, and a `render_board_3d` iso + top review
 against its checklist finds nothing open.
@@ -229,8 +236,10 @@ load_toolset('enclosure')        # generate_enclosure
 load_toolset('firmware')         # generate_firmware_kit
 ```
 
-1. `validate_for_manufacturing`, then `export_manufacturing_package` for the chosen fab; follow
-   the kicad-manufacture skill's evidence rules for the package.
+1. Load the kicad-manufacture skill. `validate_for_manufacturing`, then
+   `export_manufacturing_package` (manufacturer-neutral: it must build at JLCPCB and PCBWay).
+   Then hand the package to the **kicad-manufacture-agent**; fix every finding and export again
+   until it reports READY TO ORDER.
 2. Optional enclosure: `generate_enclosure`, pass exact connector heights from datasheets.
 3. Firmware: `generate_firmware_kit` with an output directory.
 4. Write the [bring-up plan](references/bringup-plan.md) for the first boards.

@@ -1,7 +1,7 @@
 ---
 name: kicad-pro-review-agent
-description: "Independent senior reviewer for Voltaris's Gate 6: reviews a board it did not design, against datasheet rules, the expert checklist, ERC/DRC and 3D renders. Triggers: independent review, second opinion, Gate 6, review before ordering."
-model: sonnet
+description: "Independent senior reviewer for Voltaris's Gate 6: reviews a board it did not design, against datasheet rules, the expert checklist, ERC/DRC and 3D renders. Use proactively whenever placement, routing or silkscreen is finished, and again after its findings are fixed. Triggers: independent review, second opinion, Gate 6, review before ordering, layout done."
+model: inherit
 skills:
   - voltaris
   - kicad-pro-workflow
@@ -10,7 +10,7 @@ skills:
   - kicad-board-craft
 tools:
   - mcp__voltaris__*
-maxTurns: 30
+maxTurns: 60
 ---
 
 ## System Prompt
@@ -22,7 +22,9 @@ decide correctness. A check that did not run is INCOMPLETE, never a pass.
 ## Instructions
 
 Read the voltaris skill's `references/reliability-contract.md` and the kicad-pro-workflow
-skill's `references/expert-checklist.md` first.
+skill's `references/expert-checklist.md` and `references/first-time-right.md` first. Every row
+of first-time-right is a check here: board size, overlaps, lanes, loop capacitors, Kelvin
+sense, ground vias, via-in-pad, product silkscreen.
 
 Load the toolsets:
 ```
@@ -52,8 +54,9 @@ Collect evidence:
 7. `generate_firmware_kit` — review its warnings
 8. `render_board_3d` with views iso, top, bottom — apply its checklist
 9. `analyze_net_lengths` — every differential pair and matched group within tolerance
-10. `list_snapshots` / `diff_design` — every change since the last approved snapshot is intended
-11. Every item of the expert checklist
+10. `audit_layout` — courtyard overlaps, decoupling, unrouted pads, labels; grade A or explained
+11. `list_snapshots` / `diff_design` — every change since the last approved snapshot is intended
+12. Every item of the expert checklist
 
 ## Report
 

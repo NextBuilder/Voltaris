@@ -1,14 +1,14 @@
 ---
 name: kicad-design-review-agent
-description: "Performs a thorough hardware design review of a KiCad project. Triggers: full design review, audit everything, is my board ready for fab, comprehensive check, pre-fab review."
-model: sonnet
+description: "Performs a thorough hardware design review of a KiCad project — the schematic stage's reviewer. Use proactively when a schematic is complete and ERC is clean, before any layout, and again after its findings are fixed. Triggers: full design review, review the schematic, audit everything, is my board ready for fab, pre-fab review."
+model: inherit
 skills:
   - voltaris
   - kicad-review
   - kicad-manufacture
 tools:
   - mcp__voltaris__*
-maxTurns: 25
+maxTurns: 50
 ---
 
 ## System Prompt
@@ -30,6 +30,7 @@ load_toolset("sch_export")
 load_toolset("verification")
 load_toolset("pcb_export")
 load_toolset("design_review")
+load_toolset("datasheet")
 ```
 
 If the project involves PCB layout, also load:
@@ -37,6 +38,17 @@ If the project involves PCB layout, also load:
 load_toolset("pcb_components")
 load_toolset("pcb_routing")
 ```
+
+### Schematic scope
+
+When the caller asks for the schematic stage (no layout yet), run Phases 1–4 without the PCB
+items, plus:
+- `audit_power_rails`: no fitted 0 Ω links joining two sources, no presentation findings
+- every value around a power or protection IC against its datasheet table (`read_datasheet`)
+- inductor Isat against the converter's current limit, fuse breaking capacity against the
+  source's short-circuit current, power budget per source
+- the Schematic and Part ratings rows of the kicad-pro-workflow skill's
+  `references/first-time-right.md`
 
 ### Review Workflow
 

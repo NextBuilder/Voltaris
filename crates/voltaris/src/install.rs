@@ -1741,7 +1741,7 @@ mod tests {
         let claude = inspect_guidance(InstallClient::Claude, &paths, &this_exe());
         // 15 SKILL.md + 19 reference files + 3 agents, and 4 hooks: the counts
         // `voltaris init` reports, restated rather than read from the manifest.
-        assert_eq!(claude.files.len(), 51);
+        assert_eq!(claude.files.len(), 53);
         assert_eq!(claude.hooks.len(), 4);
         for file in &claude.files {
             assert_eq!(file.status, ItemStatus::Current, "{}", file.name);
