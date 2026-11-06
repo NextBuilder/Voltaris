@@ -31,6 +31,9 @@ Solve every controlled trace with `calc_impedance` and store the widths and gaps
 
 ## Interfaces
 
+TI's measured limits per interface (impedance, skew, via count, stubs, ESD grouping) are in the
+kicad-design-masters skill's `references/sourced-rules.md`.
+
 | Interface | Target | Rules |
 |---|---|---|
 | USB 2.0 Full/High Speed | 90 Ω differential | length-match within a fraction of a millimetre, no stubs, ESD next to the connector, series resistors (if fitted) next to the MCU |

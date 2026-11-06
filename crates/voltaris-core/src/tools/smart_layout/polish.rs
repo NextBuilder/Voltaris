@@ -54,7 +54,7 @@ impl Default for PolishOptions {
         Self {
             labels: true,
             both_sides: true,
-            label_size: 0.8,
+            label_size: 1.0,
             stitch: true,
             stitch_pitch: 5.0,
             via_size: 0.6,

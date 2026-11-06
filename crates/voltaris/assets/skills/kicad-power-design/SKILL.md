@@ -71,6 +71,9 @@ current pulse (see the kicad-simulation skill).
 
 ## 6. Layout rules for power
 
+The placement order, EMI filter, decoupling and ferrite-bead rules read from TI and ADI's own
+notes are in the kicad-design-masters skill's `references/sourced-rules.md`.
+
 - Buck: the input capacitor–switch–ground loop is the hot loop: make it as small as possible,
   on one layer, with the input capacitor next to the IC. Keep the switch node small. Route the
   feedback trace away from the inductor and switch node, from the output capacitor's terminal.

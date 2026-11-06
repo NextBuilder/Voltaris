@@ -16,6 +16,9 @@ argument-hint: "[the board or the question]"
 Each section states a rule as its teachers give it (paraphrased), the number that makes it
 usable, and the Voltaris tool that checks it. The [world corpus](references/world-corpus.md)
 lists the open boards these rules were checked against and what each one does best.
+[Sourced rules](references/sourced-rules.md) holds the exact rules read from ADI, TI and the
+fabs' own documents — converter layout, EMI filters, decoupling, beads, grounding, thermal pads,
+high-speed pairs, ESD and the fab limits that build at both JLCPCB and PCBWay.
 [Standards and sources](references/standards-and-sources.md) says which source wins when two
 disagree, which IPC/IEC standard covers a question, and the documents a finished project has.
 

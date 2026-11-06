@@ -246,6 +246,10 @@ pub const SKILLS: &[SkillManifest] = &[
                 include_str!("../assets/skills/kicad-design-masters/references/world-corpus.md"),
             ),
             (
+                "sourced-rules.md",
+                include_str!("../assets/skills/kicad-design-masters/references/sourced-rules.md"),
+            ),
+            (
                 "standards-and-sources.md",
                 include_str!(
                     "../assets/skills/kicad-design-masters/references/standards-and-sources.md"

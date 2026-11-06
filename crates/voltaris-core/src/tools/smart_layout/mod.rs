@@ -135,7 +135,7 @@ pub fn tools() -> Vec<ToolDef> {
                     "back_text": { "type": "string", "description": "Brand or URL line for the bottom side" },
                     "labels": { "type": "boolean", "default": true },
                     "both_sides": { "type": "boolean", "default": true },
-                    "label_size": { "type": "number", "default": 0.8 },
+                    "label_size": { "type": "number", "default": 1.0, "description": "Pin label height in mm: 1.0 builds at every fab (JLCPCB minimum); 0.8 minimum, PCBWay only" },
                     "stitch": { "type": "boolean", "default": true },
                     "stitch_pitch": { "type": "number", "default": 5.0 },
                     "via_size": { "type": "number", "default": 0.6 },
@@ -144,7 +144,7 @@ pub fn tools() -> Vec<ToolDef> {
                     "references": { "type": "string", "enum": ["tidy", "keep", "hide"], "default": "tidy", "description": "Reference designators: tidy (one size, beside each part, off copper), keep, or hide all" },
                     "style": { "type": "string", "enum": ["product", "plain"], "default": "product", "description": "product: a rounded, divided strip of pin names lined up with each single-row connector and test-point row, plus a caption badge; plain: one text label per pin" },
                     "captions": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Function caption per part, printed on the connector strip or in a rounded badge beside the part: {\"J2\": \"MOTOR A\", \"SW1\": \"USER\"}" },
-                    "ref_size": { "type": "number", "default": 1.0, "description": "Designator height in mm (0.8 minimum)" }
+                    "ref_size": { "type": "number", "default": 1.0, "description": "Designator height in mm: 1.0 builds at every fab (JLCPCB minimum); 0.8 minimum, PCBWay only" }
                 },
                 "required": ["board"]
             }),
@@ -601,7 +601,7 @@ async fn handle_polish(args: &Value, ctx: &ToolContext) -> anyhow::Result<CallTo
     let opts = polish::PolishOptions {
         labels: args["labels"].as_bool().unwrap_or(true),
         both_sides: args["both_sides"].as_bool().unwrap_or(true),
-        label_size: f64_arg(args, "label_size", 0.8).max(0.8),
+        label_size: f64_arg(args, "label_size", 1.0).max(0.8),
         stitch: args["stitch"].as_bool().unwrap_or(true),
         stitch_pitch: f64_arg(args, "stitch_pitch", 5.0),
         via_size: f64_arg(args, "via_size", 0.6),

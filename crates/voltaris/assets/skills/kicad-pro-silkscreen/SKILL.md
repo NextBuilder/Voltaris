@@ -41,7 +41,7 @@ load_toolset('verification')     # run_drc
    the top has no room the strip goes on the bottom behind the connector and the top keeps
    the badge (the Scribe and Mini UPS layout). USB connectors get a badge, never per-pin labels.
    With the default `references` of tidy it puts every reference designator at one size
-   (1.0 mm, 0.8 mm where space is tight), upright, beside its own part, off pads, vias, other
+   (1.0 mm, the size every fab prints; 0.8 mm only for a PCBWay-only order), upright, beside its own part, off pads, vias, other
    parts' bodies and other silkscreen; rows and columns of identical parts get their
    designators on the same side; a designator with no clean spot is hidden (it stays in the BOM
    and the assembly drawing) and named in the notes. It also adds connector pin labels on both
@@ -78,7 +78,7 @@ product except to name a module's maker in documentation.
 
 | | Minimum | Use |
 |---|---|---|
-| Text height | 0.8 mm | 1.0 mm designators and pin labels, 1.2–2.5 mm product name |
+| Text height | 1.0 mm (JLCPCB; PCBWay allows 0.8 mm) | 1.0 mm designators and pin labels, 1.2–2.5 mm product name |
 | Stroke (line) width | 0.15 mm | height ÷ 6, never under 0.15 mm |
 | Width-to-height ratio | 1:5 | 1:6 |
 | Gap to pads / mask openings | 0.15 mm (trimmed by the fab inside this) | 0.2 mm or more |

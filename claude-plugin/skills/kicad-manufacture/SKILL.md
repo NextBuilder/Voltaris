@@ -43,6 +43,9 @@ Call `get_active_toolsets()` before loading more.
 
 ## 1. Capture the order contract
 
+Design to the limits that build at both JLCPCB and PCBWay (kicad-design-masters skill,
+`references/sourced-rules.md`, last table); the files must not depend on one fab.
+
 Before checking or exporting, record the selected fabricator, service tier,
 stackup, copper weight, finish, assembly sides, stencil requirement, quantity,
 and any controlled-impedance service. Record the source and retrieval date for
