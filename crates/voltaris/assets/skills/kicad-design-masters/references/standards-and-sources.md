@@ -20,6 +20,12 @@ generic rule. Record the datasheet page behind each decision in `.voltaris/proje
 Revisions change and documents get superseded. Name a standard in fab notes only after checking
 its current revision with IPC or IEC; quote the class or clause, not just the number.
 
+They answer different questions, and passing one stage proves nothing about the next: design
+standards (IPC-2221/2222, 2152, 7351) say how to draw the board, performance standards
+(IPC-6012) what the made board must achieve, process standards (J-STD-001) how it is soldered,
+acceptance standards (IPC-A-600 bare board, IPC-A-610 assembled) how it is inspected, and IEC
+test standards how the finished product is tested.
+
 | Question | Standard | Voltaris check |
 |---|---|---|
 | General design rules, conductor spacing by voltage (bare board) | IPC-2221 (generic), IPC-2222 (rigid) | `set_design_rules`, `check_clearance` |
@@ -33,9 +39,10 @@ its current revision with IPC or IEC; quote the class or clause, not just the nu
 | Via filling and capping (type VII for via-in-pad) | IPC-4761 | `audit_layout` via-in-pad check |
 | Bare-board and assembly acceptance; soldering | IPC-A-600, IPC-A-610, J-STD-001 | — |
 | Intelligent manufacturing data | IPC-2581, ODB++ | `export_ipc2581`, `export_odb` |
-| Creepage and clearance for mains or high voltage | IEC 60664-1 with the product standard (IEC 62368-1 for ICT and AV) — not the IPC-2221 table | kicad-power-electronics |
+| Creepage and clearance for mains or high voltage | IEC 60664-1 (up to 1000 V AC / 1500 V DC) with the product standard (IEC 62368-1 for ICT and AV) — not the IPC-2221 table. Inputs: working voltage, insulation function (basic or reinforced), overvoltage category, pollution degree, material group, altitude | kicad-power-electronics |
 | ESD, burst, surge, conducted and radiated immunity | IEC 61000-4-2 / -4 / -5 / -6 / -3 | ESD at the connector, `run_design_review` |
 | Emissions and immunity of multimedia equipment | CISPR 32, CISPR 35 | kicad-design-masters sections 5–7 |
+| Cold, heat, vibration, shock, humidity | IEC 60068-2-1, -2-2, -2-6, -2-27, -2-14, -2-30, -2-78 — chosen from the real operating and storage environment | Gate 0 brief |
 | Lithium batteries: portable, industrial, transport | IEC 62133-2, IEC 62619, UN 38.3 | `audit_power_rails`, Gate 6 |
 | Military and space | MIL-PRF-31032, MIL-STD-883 / 202, NASA workmanship, ECSS-Q-ST-70 | only when a contract invokes them |
 | ESD control during handling | ANSI/ESD S20.20 | — |
@@ -87,12 +94,14 @@ evaluation board's layout files, then app notes — in that order.
 | Requirements and power budget | Gate 0 brief, `.voltaris/project.json` |
 | Architecture and block diagram | `generate_block_diagram` |
 | Part selection with datasheet pages | Gate 1–2 notes, `read_datasheet` |
+| Footprint validation (pads, pin numbers, paste against the package drawing) | kicad-library skill, `get_footprint_info` |
 | Schematic | `export_schematic_pdf` |
 | Stackup specification | `get_board_stackup` |
 | Layout evidence | `render_board_3d`, `audit_layout`, `score_placement` |
 | Simulation results | `simulate_circuit` reports |
 | ERC and DRC reports | `run_erc`, `run_drc` |
-| Fabrication and assembly package | `export_manufacturing_package` |
+| Fabrication and assembly package, with the IPC-6012 class in the fab notes | `export_manufacturing_package` |
+| Bare-board and assembly inspection records (IPC-A-600, IPC-A-610) | bring-up guide |
 | Bring-up and validation plan | `generate_firmware_kit`, the Gate 7 bring-up guide |
 | Changes after testing | `diff_design` between snapshots, release notes |
 
